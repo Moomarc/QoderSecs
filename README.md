@@ -65,6 +65,11 @@ dotnet test  QoderSecs.sln --configuration Release --no-build
 
 这个项目推荐用 AI Agent 来写、来读：提需求、读代码、改代码、跑测试、查协议行为都可以直接交给它。仓库也是按这个标准组织的——核心逻辑不碰 WPF、测试一条命令跑完、模块职责单一，Agent 拿到一句话需求就能定位到该改的地方。
 
+## 致谢
+
+- SecsExpress —— 日常测试中一直在用的 SECS/GEM 模拟器。本项目的消息库格式、命令组织和使用习惯都重点参考了它。
+- [Secs4Net](https://github.com/mkjeff/secs4net)（MIT）—— SECS/GEM 协议实现。
+
 ## 许可证
 
 MIT，见 [LICENSE](LICENSE)。
