@@ -13,6 +13,12 @@ namespace QoderSecs.Core.Connection;
 /// </summary>
 public sealed class HsmsLink : IAsyncDisposable
 {
+    /// <summary>
+    /// 发送成功的状态文本一律以这个词开头，其余（超时、发送失败）都是坏消息。
+    /// 界面靠它决定状态栏要不要标红，所以措辞要改就改这一处，别两边各写一遍。
+    /// </summary>
+    public const string SentPrefix = "已发出";
+
     private readonly object _gate = new();
     private readonly SemaphoreSlim _sendGate = new(1, 1);
 
@@ -313,13 +319,13 @@ public sealed class HsmsLink : IAsyncDisposable
 
             if (reply is null)
             {
-                return $"已发出 {header.Signature}。";
+                return $"{SentPrefix} {header.Signature}。";
             }
 
             using (reply)
             {
                 var replyHeader = new SecsHeader(reply.S, reply.F, reply.ReplyExpected);
-                return $"已发出 {header.Signature}，收到 {replyHeader.Signature}。";
+                return $"{SentPrefix} {header.Signature}，收到 {replyHeader.Signature}。";
             }
         }
         finally

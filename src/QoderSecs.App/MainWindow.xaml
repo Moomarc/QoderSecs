@@ -431,7 +431,7 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Menu Margin="2,4,0,0" Background="Transparent">
-                                    <MenuItem Header="＋ 子项" ItemsSource="{Binding ItemTypeOptions}">
+                                    <MenuItem Header="添加子项" ItemsSource="{Binding ItemTypeOptions}">
                                         <MenuItem.ItemContainerStyle>
                                             <Style TargetType="MenuItem">
                                                 <Setter Property="Header" Value="{Binding Header}" />
@@ -441,7 +441,7 @@
                                             </Style>
                                         </MenuItem.ItemContainerStyle>
                                     </MenuItem>
-                                    <MenuItem Header="＋ 同级" ItemsSource="{Binding ItemTypeOptions}">
+                                    <MenuItem Header="添加同级" ItemsSource="{Binding ItemTypeOptions}">
                                         <MenuItem.ItemContainerStyle>
                                             <Style TargetType="MenuItem">
                                                 <Setter Property="Header" Value="{Binding Header}" />
@@ -676,6 +676,7 @@
                                          AcceptsReturn="True"
                                          AutomationProperties.Name="SML 预览"
                                          FontFamily="Cascadia Mono"
+                                         HorizontalScrollBarVisibility="Auto"
                                          TextWrapping="NoWrap"
                                          Text="{Binding SmlPreviewText, Mode=OneWay}"
                                          VerticalScrollBarVisibility="Auto">
@@ -697,6 +698,7 @@
                                          AcceptsReturn="True"
                                          AutomationProperties.Name="粘贴 SML"
                                          FontFamily="Cascadia Mono"
+                                         HorizontalScrollBarVisibility="Auto"
                                          TextWrapping="NoWrap"
                                          Text="{Binding PasteSmlText, UpdateSourceTrigger=PropertyChanged}"
                                          VerticalScrollBarVisibility="Auto" />
@@ -743,14 +745,21 @@
                                 <ListView.View>
                                     <GridView>
                                         <GridViewColumn Header="时间"
-                                                        Width="88"
+                                                        Width="104"
                                                         DisplayMemberBinding="{Binding TimeText}" />
                                         <GridViewColumn Header="方向"
                                                         Width="46"
                                                         DisplayMemberBinding="{Binding DirectionText}" />
-                                        <GridViewColumn Header="消息"
-                                                        Width="140"
-                                                        DisplayMemberBinding="{Binding MessageText}" />
+                                        <!-- 名称长了会裁，裁了必须能悬停看全，不然只能去翻日志。 -->
+                                        <GridViewColumn Header="消息" Width="140">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding MessageText}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding MessageText}" />
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
                                         <GridViewColumn Header="SystemBytes"
                                                         Width="92"
                                                         DisplayMemberBinding="{Binding SystemBytesText}" />
@@ -790,6 +799,7 @@
                                  IsReadOnly="True"
                                  AcceptsReturn="True"
                                  FontFamily="Cascadia Mono"
+                                 HorizontalScrollBarVisibility="Auto"
                                  MouseDoubleClick="ToggleDetailExpand"
                                  Text="{Binding RecordDetail, Mode=OneWay}"
                                  TextWrapping="NoWrap"
@@ -805,9 +815,12 @@
                 Background="White"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,1,0,0">
+            <!-- 出错时变红：状态栏一句话要能区分「刚才那句是报错了」还是「已保存」这类提示。 -->
             <TextBlock AutomationProperties.AutomationId="StatusBar"
-                       Foreground="{StaticResource MutedBrush}"
-                       Text="{Binding StatusMessage}" />
+                       Foreground="{Binding StatusBrush}"
+                       Text="{Binding StatusMessage}"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding StatusMessage}" />
         </Border>
     </Grid>
 </Window>

@@ -197,12 +197,19 @@ public partial class MainWindow : Window
         }
 
         e.Cancel = true;
-        IsEnabled = false;
 
         if (DataContext is MainViewModel viewModel)
         {
+            // 落盘加断开大约要一秒，这期间整窗是禁用的，看着就像卡死。
+            // 先在状态栏写一句，再禁用；禁用只灰掉可交互控件，状态栏那行字还看得清。
+            viewModel.ShowShutdownNotice();
+            IsEnabled = false;
             await viewModel.ShutdownAsync();
             viewModel.Dispose();
+        }
+        else
+        {
+            IsEnabled = false;
         }
 
         _canClose = true;

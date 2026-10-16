@@ -37,6 +37,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static readonly Brush BusyBrush = Frozen("#D97706");
     private static readonly Brush OfflineBrush = Frozen("#9CA3AF");
 
+    /// <summary>状态栏两种颜色：平时和 XAML 里的 MutedBrush 一致，报错用红。</summary>
+    private static readonly Brush StatusMutedBrush = Frozen("#667085");
+    private static readonly Brush StatusErrorBrush = Frozen("#DC2626");
+
     private readonly ConnectionSettingsStore _settingsStore;
     private readonly HsmsLink _link = new();
     private bool _isLinkBusy;
@@ -76,6 +80,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _linkTestIntervalSeconds;
     private bool _isConfigPanelOpen;
     private string _statusMessage = "正在读取连接参数…";
+    private bool _statusIsError;
 
     public MainViewModel(ConnectionSettingsStore settingsStore)
     {
@@ -452,14 +457,45 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string StatusMessage
     {
         get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
+        private set
+        {
+            // 写进任何一句新的话，都算上一条错误已经被读掉了，红色跟着退。
+            _statusIsError = false;
+            SetProperty(ref _statusMessage, value);
+            OnPropertyChanged(nameof(StatusIsError));
+            OnPropertyChanged(nameof(StatusBrush));
+        }
     }
+
+    /// <summary>状态栏这句是不是在报错。</summary>
+    public bool StatusIsError => _statusIsError;
+
+    /// <summary>状态栏前景色：平时和 XAML 的 MutedBrush 一致，报错转红。</summary>
+    public Brush StatusBrush => _statusIsError ? StatusErrorBrush : StatusMutedBrush;
 
     /// <summary>
     /// 启动阶段的一次性交代，比如老目录改名结果。
     /// 只能在 InitializeAsync 之后调，否则会被初始化那条状态盖掉。
     /// </summary>
     public void ShowStartupNotice(string notice) => StatusMessage = notice;
+
+    /// <summary>
+    /// 关窗口时程序要落盘再断开，这期间整窗是禁用的。
+    /// 不写一句，用户看到的就是一秒钟的灰窗，和卡死分不出来。
+    /// </summary>
+    public void ShowShutdownNotice() => StatusMessage = "正在保存日志并断开连接，稍等…";
+
+    /// <summary>
+    /// 失败要说清楚，而且不能被随后到来的连接状态变化冲掉——
+    /// 报错之后紧接着一次 PeerLost 或 Retrying，原因就没了，只剩一句无关的话。
+    /// </summary>
+    private void Fail(string message)
+    {
+        StatusMessage = message;
+        _statusIsError = true;
+        OnPropertyChanged(nameof(StatusIsError));
+        OnPropertyChanged(nameof(StatusBrush));
+    }
 
     public string LibraryHeader
     {
@@ -582,7 +618,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _profile = loaded.Profile;
         LoadEditor(_profile);
-        StatusMessage = loaded.Problem ?? "连接参数已就绪，点「连接」开始。";
+
+        // 参数文件读不出来、内容坏了或参数越界，程序会退回默认值继续用。
+        // 这是要让人看见的事，标红；但不拦住使用。
+        if (loaded.Problem is { } problem)
+        {
+            Fail(problem);
+        }
+        else
+        {
+            StatusMessage = "连接参数已就绪，点「连接」开始。";
+        }
     }
 
     public async Task FlushAsync()
@@ -625,7 +671,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             CancelScheduledSave();
             if (!TryBuildProfile(out var profile, out var error))
             {
-                StatusMessage = error;
+                Fail(error);
                 return;
             }
 
@@ -640,7 +686,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }
             catch (InvalidOperationException exception)
             {
-                StatusMessage = exception.Message;
+                Fail(exception.Message);
                 return;
             }
 
@@ -672,6 +718,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             Phase = phase;
 
+            // 刚报过错就别盖掉：连接状态胶囊自己会用颜色和文字说清楚现在是什么阶段，
+            // 状态栏留着那句失败原因更有用，否则用户只看到一句无关的话，错在哪查不到。
+            if (_statusIsError)
+            {
+                return;
+            }
+
             // 胶囊变了，旁边那句状态栏也得跟着变，不然连上以后还一直写着「正在连接」。
             // Offline 不在这里说话：断开是命令发起的，那边已经写了「已断开。」，别盖掉。
             StatusMessage = phase switch
@@ -698,17 +751,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (!SmlConverter.TryToMessage(entry, out var message, out var error))
         {
-            StatusMessage = error;
+            Fail(error);
             return;
         }
 
         try
         {
-            StatusMessage = await _link.SendAsync(message);
+            var outcome = await _link.SendAsync(message);
+
+            // 发出去了和没发出去（T3 超时、发送失败）都是这一句返回值，靠开头那个词分开。
+            if (outcome.StartsWith(HsmsLink.SentPrefix, StringComparison.Ordinal))
+            {
+                StatusMessage = outcome;
+            }
+            else
+            {
+                Fail(outcome);
+            }
         }
         catch (InvalidOperationException exception)
         {
-            StatusMessage = exception.Message;
+            Fail(exception.Message);
         }
         finally
         {
@@ -779,7 +842,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         new(execute, canExecute, OnCommandFailed);
 
     private void OnCommandFailed(Exception exception) =>
-        StatusMessage = $"操作失败（{exception.GetType().Name}）：{exception.Message}";
+        Fail($"操作失败（{exception.GetType().Name}）：{exception.Message}");
 
     private void SetLinkBusy(bool value)
     {
@@ -835,7 +898,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or XmlException or FormatException)
         {
-            StatusMessage = $"导入失败：{exception.Message}";
+            Fail($"导入失败：{exception.Message}");
         }
     }
 
@@ -863,7 +926,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            StatusMessage = $"导出失败：{exception.Message}";
+            Fail($"导出失败：{exception.Message}");
         }
     }
 
@@ -907,7 +970,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException)
         {
-            StatusMessage = $"新建消息失败：{exception.Message}";
+            Fail($"新建消息失败：{exception.Message}");
         }
     }
 
@@ -975,7 +1038,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var added = StructureEditor.AddChild(node.Element, type);
         if (added is null)
         {
-            StatusMessage = "这个位置不能加子项。";
+            Fail("这个位置不能加子项。");
             return;
         }
 
@@ -1001,7 +1064,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var added = StructureEditor.AddSibling(node.Element, type);
         if (added is null)
         {
-            StatusMessage = "这个位置不能加同级。";
+            Fail("这个位置不能加同级。");
             return;
         }
 
@@ -1027,7 +1090,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var parentElement = node.Element.Parent;
         if (!StructureEditor.Delete(node.Element))
         {
-            StatusMessage = "这个节点删不掉。";
+            Fail("这个节点删不掉。");
             return;
         }
 
@@ -1050,7 +1113,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (!SmlParser.TryParse(PasteSmlText, out var parsed, out var error) || parsed is null)
         {
-            StatusMessage = $"SML 解析失败：{error}";
+            Fail($"SML 解析失败：{error}");
             return;
         }
 
@@ -1216,7 +1279,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (!TryParseHeaderField(StreamText, out var stream) || !TryParseHeaderField(FunctionText, out var function))
         {
-            StatusMessage = "S 和 F 必须是 1 到 255 之间的整数，已改回原值。";
+            Fail("S 和 F 必须是 1 到 255 之间的整数，已改回原值。");
             SyncMessageEditor();
             return;
         }
@@ -1235,7 +1298,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (ArgumentOutOfRangeException exception)
         {
-            StatusMessage = $"改消息头失败：{exception.Message}";
+            Fail($"改消息头失败：{exception.Message}");
             SyncMessageEditor();
         }
     }
@@ -1370,7 +1433,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (!TryBuildProfile(out var profile, out var error))
         {
-            StatusMessage = error;
+            Fail(error);
             return;
         }
 
@@ -1430,7 +1493,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            StatusMessage = $"连接参数没能存下来：{exception.Message}";
+            Fail($"连接参数没能存下来：{exception.Message}");
         }
     }
 }
