@@ -104,7 +104,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         });
         AddChildCommand = new RelayCommand<SecsItemType>(
             AddChild,
-            () => SelectedNode is not null && StructureEditor.CanAddChild(SelectedNode.Element));
+            () => SelectedNode is not null
+                ? StructureEditor.CanAddChild(SelectedNode.Element)
+                // 空结构没有可选中的节点，加的是根节点；判断借 Core 的 CanAddChild，
+                // 和 AddChild 返回 null 与否必须是同一条，否则界面显示能点、点下去没反应。
+                : SelectedMessage?.Structure is { } structure && StructureEditor.CanAddChild(structure));
         AddSiblingCommand = new RelayCommand<SecsItemType>(
             AddSibling,
             () => SelectedNode is not null && StructureEditor.CanAddSibling(SelectedNode.Element));
@@ -187,7 +191,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string StructureHint => SelectedMessage is null
         ? "选择或新建消息后编辑结构"
         : StructureRootItems.Count == 0
-            ? "这条消息没有消息体，用「＋ 子项」添加根节点"
+            ? "这条消息没有消息体，用「添加子项」添加根节点"
             : string.Empty;
 
     /// <summary>
@@ -1029,28 +1033,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void AddChild(SecsItemType type)
     {
-        var node = SelectedNode;
-        if (node is null)
+        // 空结构没有可选中的节点，加的是这条消息的根元素：Core 的 AddChild 对空 <Structure>
+        // 就是这个语义，提示语让点的也是这一步，不能在这里断掉。
+        var parent = SelectedNode?.Element ?? SelectedMessage?.Structure;
+        if (parent is null)
         {
             return;
         }
 
-        var added = StructureEditor.AddChild(node.Element, type);
+        var isRoot = SelectedNode is null;
+        var added = StructureEditor.AddChild(parent, type);
         if (added is null)
         {
-            Fail("这个位置不能加子项。");
+            Fail(isRoot ? "这条消息已经有消息体了。" : "这个位置不能加子项。");
             return;
         }
 
         RefreshStructure();
         var addedNode = FindStructureNode(added);
-        if (addedNode?.Parent is { } parent)
+        if (addedNode?.Parent is { } parentNode)
         {
-            parent.IsExpanded = true;
+            parentNode.IsExpanded = true;
         }
 
         SelectedNode = addedNode;
-        StatusMessage = $"已添加子项 {SecsItemTypes.ElementName(type)}。";
+        StatusMessage = isRoot
+            ? $"已添加根节点 {SecsItemTypes.ElementName(type)}。"
+            : $"已添加子项 {SecsItemTypes.ElementName(type)}。";
     }
 
     private void AddSibling(SecsItemType type)
