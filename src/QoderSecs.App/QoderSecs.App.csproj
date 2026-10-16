@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\QoderSecs.Core\QoderSecs.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 样本消息库编进 exe。启动时发现 exe 旁没有这个文件就解出来一份，之后归用户，
+         所以发布目录只需要一个 exe，不再单独带 samples 出去。
+         解出来不等于加载：自动回复仍然默认不开，程序仍然不内置规则。 -->
+    <EmbeddedResource Include="..\..\samples\common-commands.sxml"
+                      Link="samples\common-commands.sxml" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+
+    <!-- 资源管理器、快捷方式和任务栏用的就是这个图标。
+         16/24/32/48 是无压缩的位图条目，256 是 PNG 条目，缺了哪一档系统在对应尺寸上就会模糊。 -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+</Project>

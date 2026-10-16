@@ -1,0 +1,352 @@
+<div id="qs-mock">
+<style>
+#qs-mock{--bg:light-dark(#eef0f3,#181a1e);--pn:light-dark(#ffffff,#222529);--pn2:light-dark(#f6f7f9,#2a2d32);--bd:light-dark(#d8dbe0,#3a3e45);--fg:light-dark(#1f2328,#e6e8eb);--mu:light-dark(#6b7280,#9aa1ab);--ac:light-dark(#2563eb,#6b9cff);--acb:light-dark(#e6eeff,#243352);--ok:light-dark(#15803d,#4ade80);--okb:light-dark(#e3f6e9,#1c3326);--wa:light-dark(#b45309,#fbbf24);--wab:light-dark(#fdf1df,#3a2f17);--er:light-dark(#b91c1c,#f87171);--erb:light-dark(#fde7e7,#3d1f1f);--in:light-dark(#7c3aed,#b69cff);
+--icl:light-dark(#d9a520,#c99a2e);--ica:light-dark(#16a34a,#2f9e5b);--icb:light-dark(#ea580c,#d9733a);--icn:light-dark(#2563eb,#4c7fe0);--icf:light-dark(#9333ea,#9b6be0);--ico:light-dark(#0d9488,#2a9d92);font:13px var(--font-sans);color:var(--fg)}
+#qs-mock *{box-sizing:border-box}
+#qs-mock .app{background:var(--bg);border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+#qs-mock .title{display:flex;justify-content:space-between;gap:8px;padding:6px 12px;background:var(--pn);border-bottom:1px solid var(--bd);font-size:12px;color:var(--mu)}
+#qs-mock .title b{color:var(--fg);font-weight:500}
+#qs-mock .conn{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 12px;background:var(--pn);border-bottom:1px solid var(--bd)}
+#qs-mock label.f{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--mu)}
+#qs-mock input,#qs-mock select,#qs-mock textarea{font:12px var(--font-sans);color:var(--fg);background:var(--pn2);border:1px solid var(--bd);border-radius:4px;padding:4px 6px;min-height:28px}
+#qs-mock textarea{font-family:var(--font-code);resize:vertical;width:100%}
+#qs-mock input:disabled,#qs-mock select:disabled,#qs-mock button:disabled{opacity:.5;cursor:default}
+#qs-mock button{font:12px var(--font-sans);color:var(--fg);background:var(--pn2);border:1px solid var(--bd);border-radius:4px;padding:4px 10px;min-height:28px;cursor:pointer}
+#qs-mock button.pri{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:500}
+#qs-mock .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:500}
+#qs-mock .pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+#qs-mock .s-off{color:var(--mu);background:var(--pn2)}#qs-mock .s-ing{color:var(--wa);background:var(--wab)}#qs-mock .s-ok{color:var(--ok);background:var(--okb)}
+#qs-mock .timers{display:none;flex-direction:column;gap:8px;padding:8px 12px 10px;background:var(--pn2);border-bottom:1px solid var(--bd)}
+#qs-mock .timers.open{display:flex}
+#qs-mock .pg{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+#qs-mock .pgt{font-size:12px;font-weight:500;width:72px}
+#qs-mock .text-mu{font-size:12px;color:var(--mu)}
+#qs-mock .sum{font-size:12px;color:var(--mu)}
+#qs-mock .sp{flex:1}
+#qs-mock .w4{width:52px}#qs-mock .w8{width:110px}
+#qs-mock .body{display:grid;grid-template-columns:minmax(220px,.85fr) minmax(300px,1.2fr) minmax(340px,1.5fr);gap:1px;background:var(--bd);height:680px}
+#qs-mock .pnl{background:var(--pn);display:flex;flex-direction:column;min-height:0;min-width:0;position:relative}
+#qs-mock .ph{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 10px;border-bottom:1px solid var(--bd);font-weight:500;flex-wrap:wrap}
+#qs-mock .ph .tools{display:flex;gap:4px;flex-wrap:wrap;font-weight:400;align-items:center}
+#qs-mock .ph .tools button{padding:2px 8px;min-height:28px}
+#qs-mock .scroll{overflow:auto;flex:1;min-height:0}
+#qs-mock .search{margin:8px 10px;display:flex}
+#qs-mock .search input{flex:1}
+#qs-mock .hint{font-size:12px;color:var(--mu);padding:0 10px 6px}
+#qs-mock .grp{font-size:12px;color:var(--mu);padding:6px 10px 2px;background:var(--pn2);position:sticky;top:0}
+#qs-mock .li{display:grid;grid-template-columns:52px 16px 1fr;gap:2px 6px;width:100%;text-align:left;border:0;border-radius:0;background:none;padding:5px 10px;min-height:32px}
+#qs-mock .li:hover{background:var(--pn2)}
+#qs-mock .li.sel{background:var(--acb)}
+#qs-mock .sf{font-family:var(--font-code);font-size:12px;color:var(--ac)}
+#qs-mock .wb{font-family:var(--font-code);font-size:12px;color:var(--wa)}
+#qs-mock .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#qs-mock .ar{grid-column:3;font-size:12px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#qs-mock .ar.bad{color:var(--er)}
+#qs-mock .ed{padding:8px 10px;display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;border-bottom:1px solid var(--bd)}
+#qs-mock .ed .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#qs-mock .ed .k{font-size:12px;color:var(--mu)}
+#qs-mock .tabs{display:flex;gap:2px;padding:4px 10px 0;border-bottom:1px solid var(--bd);align-items:flex-end;flex-wrap:wrap}
+#qs-mock .tabs [role=tab]{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--mu)}
+#qs-mock .tabs [role=tab][aria-selected=true]{color:var(--fg);border-bottom-color:var(--ac)}
+#qs-mock .ttools{margin-left:auto;display:flex;gap:4px;padding-bottom:4px;flex-wrap:wrap}
+#qs-mock .ttools button{padding:2px 8px;min-height:28px}
+#qs-mock .tree{padding:6px 4px}
+#qs-mock .tv{display:flex;align-items:center;gap:2px}
+#qs-mock .tg{width:22px;min-height:28px;padding:0;border:0;background:none;color:var(--mu);flex:none;display:inline-flex;align-items:center;justify-content:center}
+#qs-mock .nb{flex:1;min-width:0;display:flex;align-items:center;gap:6px;border:1px solid transparent;background:none;text-align:left;padding:2px 6px;font:12px var(--font-code)}
+#qs-mock .nb:hover{background:var(--pn2)}
+#qs-mock .nb.sel{background:var(--acb);border-color:var(--ac)}
+#qs-mock .ic{display:inline-flex;justify-content:center;align-items:center;min-width:42px;height:20px;padding:0 4px;border-radius:4px;color:#fff;font:500 11px var(--font-code);flex:none}
+#qs-mock .f-l{background:var(--icl)}#qs-mock .f-a{background:var(--ica)}#qs-mock .f-b{background:var(--icb)}#qs-mock .f-n{background:var(--icn)}#qs-mock .f-f{background:var(--icf)}#qs-mock .f-o{background:var(--ico)}
+#qs-mock .cnt{color:var(--mu)}
+#qs-mock .inm{color:var(--in)}
+#qs-mock .val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#qs-mock .pe{border-top:1px solid var(--bd);padding:8px 10px;display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;background:var(--pn2)}
+#qs-mock .pe .k{font-size:12px;color:var(--mu)}
+#qs-mock .pe .err{grid-column:1/-1;color:var(--er);font-size:12px}
+#qs-mock .pop{position:absolute;z-index:6;background:var(--pn);border:1px solid var(--bd);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.2);padding:4px}
+#qs-mock .pop[hidden]{display:none}
+#qs-mock .tp{display:grid;grid-template-columns:repeat(4,auto);gap:4px;padding:6px}
+#qs-mock .tp .tph{grid-column:1/-1;font-size:12px;color:var(--mu);padding:0 2px 2px}
+#qs-mock .tp button{border:0;background:none;padding:2px}
+#qs-mock .cm{display:flex;flex-direction:column;min-width:170px}
+#qs-mock .cm button,#qs-mock .menu button{border:0;background:none;text-align:left;min-height:32px;display:flex;justify-content:space-between;gap:16px}
+#qs-mock .cm button:hover,#qs-mock .menu button:hover,#qs-mock .tp button:hover{background:var(--pn2)}
+#qs-mock .kb{color:var(--mu);font-size:12px}
+#qs-mock .actions{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid var(--bd)}
+#qs-mock pre{margin:0;padding:8px 10px;font:12px var(--font-code);white-space:pre-wrap;word-break:break-all}
+#qs-mock .right{display:grid;grid-template-rows:1.15fr 1fr;gap:1px;background:var(--bd);min-height:0;min-width:0}
+#qs-mock .lr,#qs-mock .lh{display:grid;grid-template-columns:86px 16px 62px minmax(80px,1fr) 76px 112px;gap:6px;align-items:center;padding:4px 10px;font-size:12px}
+#qs-mock .lr{width:100%;text-align:left;border:0;border-radius:0;background:none;min-height:30px}
+#qs-mock .lr:hover{background:var(--pn2)}
+#qs-mock .lr.sel{background:var(--acb)}
+#qs-mock .lr.pair{box-shadow:inset 3px 0 0 var(--ac)}
+#qs-mock .lr.sys{color:var(--mu)}
+#qs-mock .lr.ctrl{display:none;color:var(--mu)}
+#qs-mock .showctrl .lr.ctrl{display:grid}
+#qs-mock .lh{color:var(--mu);border-bottom:1px solid var(--bd);position:sticky;top:0;background:var(--pn)}
+#qs-mock .mono{font-family:var(--font-code)}
+#qs-mock .o{color:var(--ac)}#qs-mock .i{color:var(--in)}
+#qs-mock .st{font-size:12px;padding:1px 6px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#qs-mock .st.ok{color:var(--ok)}#qs-mock .st.wa{color:var(--wa);background:var(--wab)}#qs-mock .st.er{color:var(--er);background:var(--erb)}#qs-mock .st.mu{color:var(--mu)}
+#qs-mock .meta{font-size:12px;color:var(--mu);padding:6px 10px;border-bottom:1px solid var(--bd);display:flex;flex-wrap:wrap;gap:4px 14px}
+#qs-mock .meta .mono{color:var(--fg)}
+#qs-mock .status{display:flex;flex-wrap:wrap;gap:4px 16px;padding:5px 12px;background:var(--pn);border-top:1px solid var(--bd);font-size:12px;color:var(--mu)}
+#qs-mock .ann{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:10px;font-size:12px;color:var(--mu)}
+#qs-mock .ann b{color:var(--fg);font-weight:500}
+@media (max-width:900px){#qs-mock .body{grid-template-columns:1fr;height:auto}#qs-mock .pnl{height:460px}#qs-mock .right{grid-template-rows:420px 360px}}
+@media (max-width:560px){#qs-mock .lr,#qs-mock .lh{grid-template-columns:70px 14px 56px 1fr}#qs-mock .lr>:nth-child(5),#qs-mock .lr>:nth-child(6),#qs-mock .lh>:nth-child(5),#qs-mock .lh>:nth-child(6){display:none}}
+</style>
+<div class="app">
+  <div class="title"><span><b>QoderSecs</b> · 配置 <span id="t-prof">HOST-测试</span> · 消息库 s6800.sxml <span id="t-dirty">*</span></span><span>一个窗口 = 一条连接</span></div>
+  <div class="conn">
+    <label class="f">配置 <select id="c-prof"><option>HOST-测试</option><option>EQP-模拟</option><option disabled>EQP-机台B（另一实例使用中）</option><option>＋ 新建配置…</option></select></label>
+    <span class="sum mono" id="c-sum"></span>
+    <button id="c-tm" class="lk" aria-expanded="false">编辑参数 ▸</button>
+    <span class="sp"></span>
+    <span class="pill s-off" id="c-st" aria-live="polite">未连接</span>
+    <button class="pri" id="c-go">连接</button>
+  </div>
+  <div class="timers" id="timers">
+    <div class="pg"><span class="pgt">连接</span>
+      <label class="f">角色 <select class="lk" id="p-role"><option>Host</option><option>Equipment</option></select></label>
+      <label class="f">连接方式 <select class="lk" id="p-mode"><option>Active</option><option>Passive</option></select></label>
+      <label class="f">IP <input class="lk w8" id="p-ip" value="127.0.0.1"></label>
+      <label class="f">Port <input class="lk w4" id="p-port" value="5000"></label>
+      <label class="f">Device ID <input class="lk w4" id="p-dev" value="0"></label></div>
+    <div class="pg"><span class="pgt">计时器 (s)</span>
+      <label class="f">T3 <input class="lk w4" id="p-t3" value="45"></label>
+      <label class="f">T5 <input class="lk w4" value="10"></label>
+      <label class="f">T6 <input class="lk w4" value="5"></label>
+      <label class="f">T7 <input class="lk w4" value="10"></label>
+      <label class="f">T8 <input class="lk w4" value="5"></label>
+      <label class="f"><input type="checkbox" class="lk" checked style="min-height:0"> Linktest (CA) <input class="lk w4" value="30"></label></div>
+    <div class="pg"><span class="text-mu">修改即保存到当前配置；连接期间锁定。</span><button class="lk">另存为新配置…</button><button class="lk">删除此配置</button></div>
+  </div>
+  <div class="body">
+    <section class="pnl" aria-label="消息库">
+      <div class="ph"><span>消息库 <span class="cnt" id="l-cnt"></span></span><span class="tools"><button class="pri" id="l-new">＋ 新消息</button><button id="l-more" data-open aria-expanded="false" aria-haspopup="menu">文件 ▾</button></span></div>
+      <div class="pop menu cm" id="l-menu" role="menu" hidden style="right:10px;top:40px"><button role="menuitem" data-m="导入">导入 .sxml…</button><button role="menuitem" data-m="导出">导出 .sxml…</button><button role="menuitem" data-m="清空" style="color:var(--er);border-top:1px solid var(--bd)">清空消息库…</button></div>
+      <div class="search"><input id="q" placeholder="搜索：10 3 · s6 · 名称" aria-label="搜索消息"></div>
+      <div class="hint">"10 3"/"s10f3" 精确匹配 S10F3；"s6" = Stream 6；其它按名称包含</div>
+      <div class="scroll" id="lib"></div>
+    </section>
+    <section class="pnl" id="mid" aria-label="消息编辑">
+      <div class="ph"><span>消息编辑</span></div>
+      <div class="ed">
+        <span class="k">名称</span><input id="e-name">
+        <span class="k">头</span><span class="row"><span class="k">S</span><input id="e-s" class="w4"><span class="k">F</span><input id="e-f" class="w4"><label class="f"><input type="checkbox" id="e-w" style="min-height:0"> W</label></span>
+        <span class="k">自动回复</span><select id="e-ar"></select>
+      </div>
+      <div class="tabs"><span role="tablist" style="display:flex"><button role="tab" aria-selected="true" data-t="tree">结构</button><button role="tab" aria-selected="false" data-t="sml">SML</button></span>
+        <span class="ttools" id="ttools"><button data-open data-a="child" title="添加子项 (Ctrl+Insert)">＋子项 ▾</button><button data-open data-a="sib" title="在下方添加同级 (Insert)">＋同级 ▾</button><button data-a="del" title="删除 (Delete)">删除</button><button data-a="up" title="上移 (Alt+↑)" aria-label="上移">↑</button><button data-a="down" title="下移 (Alt+↓)" aria-label="下移">↓</button></span></div>
+      <div class="scroll"><div class="tree" id="e-tree" role="tree"></div><pre id="e-sml" hidden></pre></div>
+      <div class="pe" id="e-prop"></div>
+      <div class="actions"><button class="pri" id="e-send">发送 (Ctrl+Enter)</button><button id="e-reply">回复 ← S10F1 #00000023</button></div>
+      <div class="pop tp" id="tp" hidden></div>
+      <div class="pop cm" id="cm" role="menu" hidden>
+        <button role="menuitem" data-c="child">添加子项…<span class="kb">Ctrl+Ins</span></button>
+        <button role="menuitem" data-c="sib">添加同级…<span class="kb">Ins</span></button>
+        <button role="menuitem" data-c="dup">复制此节点<span class="kb">Ctrl+D</span></button>
+        <button role="menuitem" data-c="up">上移<span class="kb">Alt+↑</span></button>
+        <button role="menuitem" data-c="down">下移<span class="kb">Alt+↓</span></button>
+        <button role="menuitem" data-c="del" style="color:var(--er)">删除<span class="kb">Del</span></button>
+      </div>
+    </section>
+    <div class="right">
+      <section class="pnl" aria-label="通讯记录">
+        <div class="ph"><span>通讯记录</span><span class="tools"><label class="f"><input type="checkbox" checked style="min-height:0"> 自动回复</label><label class="f"><input type="checkbox" id="x-ctrl" style="min-height:0"> 显示控制消息</label><button>清空</button></span></div>
+        <div class="scroll" id="logwrap"><div class="lh"><span>时间</span><span></span><span>消息</span><span>名称</span><span>SysBytes</span><span>状态</span></div><div id="log"></div></div>
+      </section>
+      <section class="pnl" aria-label="详情">
+        <div class="ph"><span>详情</span></div>
+        <div class="scroll" id="detailwrap"><pre id="d-sml"></pre></div>
+      </section>
+    </div>
+  </div>
+  <div class="status" aria-live="polite"><span id="sb-st">● 未连接</span><span id="sb-sum"></span><span>日志 Log\HOST-测试\</span><span id="sb-msg">消息库 64 条，有未导出修改</span></div>
+</div>
+<div class="ann">
+  <div><b>树怎么操作</b> — 单击节点选中（色块 = 类型）；▸/▾ 展开折叠；工具栏或右键菜单对选中节点添加子项/同级、复制、上下移、删除；双击直接跳到值输入框。</div>
+  <div><b>属性区</b> — 选中节点后在树下方改类型、名称、值；非法值（如 U1 填 300、B 填 ZZ）立即标红，发送前会拦截。</div>
+  <div><b>不会被误改的地方</b> — 通讯记录里的历史消息是独立副本，改库不影响已发出的记录；改动只在内存，导出才落盘。</div>
+</div>
+<script>
+(function(){
+const R=document.getElementById('qs-mock');
+const $=id=>R.querySelector('#'+id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RAW=[[1,1,1,'S1F1_Are You There','S1F2_Online Data'],[1,2,0,'S1F2_Online Data'],[1,3,1,'Query Strip'],[1,3,1,'S1F3_QueryCurrentStatus','S1F4_Query_Initial_Rck'],[1,4,0,'S1F4 controlstate'],[1,4,0,'S1F4_Query_Control_Rck'],[1,4,0,'S1F4_Query_Process_Rck'],[1,4,0,'s1f4,state'],[1,11,1,'namelist'],[1,13,1,'S1F13_Establish Communications Request','S1F14_Establish Communications Ack'],[1,14,0,'S1F14_Establish Communications Ack'],[1,15,1,'S1F15_Request Offline','S1F16_Request Offline_Reply'],[1,16,0,'S1F16_Request Offline_Reply'],[1,17,1,'S1F17_Request Online','S1F18_Request_Online_Ack'],[1,18,0,'S1F18_Request_Online_Ack'],[2,13,1,'ask_EC'],[2,17,1,'S2F17_Date and Time Request','S2F18_Date and Time Request_Reply'],[2,18,0,'S2F18_Date and Time Request_Reply'],[2,29,1,'ec_list'],[2,33,1,'S2F33_Disable'],[2,33,1,'S2F33_Enable'],[2,35,1,'S2F35_Disable'],[2,35,1,'S2F35_Enable'],[2,37,1,'S2F37_Disable_Event','S2F38'],[2,37,1,'S2F37_Enable'],[2,41,1,'PP_SELECT'],[2,41,1,'STOP/START'],[2,42,0,'S2F42_Ack'],[2,49,1,'ADD_LOT'],[3,17,0,'A-Loadport'],[3,17,0,'B-Loadport'],[3,18,0,'s3f18'],[5,1,1,'S5F1_Alarm Report','S5F2_Alarm Report Ack'],[5,2,0,'S5F2_Alarm Report Ack'],[5,3,1,'S5F3','S5F4'],[5,5,1,'s5f5'],[6,11,0,'30006'],[6,11,0,'30013carrier arrived'],[6,11,0,'30023'],[6,11,0,'30024'],[6,11,0,'start'],[6,12,0,'S6F12__EventReportAck'],[7,1,1,'S7F1_ProcessProgramLoadInquire','S7F2_ProcessProgramLoadGrant'],[7,2,0,'S7F2_ProcessProgramLoadGrant'],[7,3,1,'S7F3_ProcessProgramSend','S7F4_ProcessProgram_Ack'],[7,4,0,'S7F4_ProcessProgram_Ack'],[7,5,1,'S7F5_ProcessProgramRequest','S7F6_Process program data'],[7,6,0,'S7F6_Process program data'],[7,17,1,'S7F17_DeleteProcessProgram','S7F18_DeleteProcessProgram_Ack'],[7,18,0,'S7F18_DeleteProcessProgram_Ack'],[7,19,1,'S7F19_CurrentEPPDRequest','S7F20_CurrentEPPD_Ack'],[7,20,0,'S7F20_CurrentEPPD_Ack'],[7,21,1,'formate_PP'],[7,23,1,'format_PP'],[7,25,1,'format PP'],[7,26,0,'S7F26'],[10,3,1,'S10F3_TerminalDisplaySingle','S10F4_TerminalDisplay_Ack'],[10,4,0,'S10F4_TerminalDisplay_Ack'],[14,9,0,'Cjob-A'],[14,9,0,'Cjob-B'],[14,10,0,'c'],[16,11,0,'Pjob-A'],[16,11,0,'Pjob-B'],[16,12,0,'p']];
+const L=(c,n)=>['L',n||'',null,c];
+const ST={
+'S1F1_Are You There':null,
+'S1F13_Establish Communications Request':L([]),
+'S1F14_Establish Communications Ack':L([['B','COMMACK','00'],L([['A','','D180'],['A','','.0_065']])]),
+'Query Strip':L([['U4','ValidateStripID','3105'],['U4','ValidateStripLot','3106'],['U4','LoadedStripID','3006'],['U4','LoadStripLot','3007'],['U4','RejectedStripID','3008'],['U4','RejectedStripLot','3009'],['U4','RejectedStripReason','3010'],['U4','ProcessedStripID','3018'],['U4','ProcessedStripLot','3019'],['U4','ProcesedStripBinCodeMap','3079']]),
+'PP_SELECT':L([['A','','PP_SELECT'],L([L([['A','','PP_NAME'],['A','','1234']])])]),
+'STOP/START':L([['A','','START'],L([])]),
+'S2F42_Ack':L([['B','HCACK','00'],L([])]),
+'S5F1_Alarm Report':L([]),
+'S5F2_Alarm Report Ack':['B','',''],
+'30013carrier arrived':L([['U4','','476'],['U4','','30013'],L([L([['U4','','3001'],L([['U1','','2']])]),L([['U4','','3061'],L([['A','','CarA']])]),L([['U4','','3067'],L([['U1','','1']])])])]),
+'S6F12__EventReportAck':['B','ACKC6','00'],
+'S7F1_ProcessProgramLoadInquire':L([['A','PPID','testy'],['U4','LENGTH','348']]),
+'S7F2_ProcessProgramLoadGrant':['B','','00'],
+'S7F3_ProcessProgramSend':L([['A','','testy'],['A','','[TrayParam1]\n…\n[Editor]\nName=gys',18277]]),
+'S7F4_ProcessProgram_Ack':['B','','00'],
+'S7F5_ProcessProgramRequest':['A','PPID','1234'],
+'S7F6_Process program data':L([['A','','12-SB150-01'],['B','','20 20 20 20 20 20 20 20 … 00 00 00 0C 00 00 03 07 …',348]])
+};
+function conv(a){if(a==null)return null;if(a[0]==='L')return {t:'L',n:a[1]||'',c:a[3].map(conv),open:true};return {t:a[0],n:a[1]||'',v:a[2],big:a[3]==null?null:a[3],fold:!!a[4]}}
+const LIB=RAW.map((r,i)=>({i,s:r[0],f:r[1],w:!!r[2],name:r[3],ar:r[4]||''})).sort((a,b)=>a.s-b.s||a.f-b.f||a.i-b.i);
+LIB.forEach(m=>{m.known=m.name in ST;m.body=m.known?conv(ST[m.name]):null});
+const TYPES=['L','A','B','Boolean','U1','U2','U4','U8','I1','I2','I4','I8','F4','F8'];
+const DEF={A:'',B:'00',Boolean:'True',F4:'0',F8:'0'};
+const fam=t=>t==='L'?'f-l':t==='A'?'f-a':t==='B'?'f-b':t==='Boolean'?'f-o':t[0]==='F'?'f-f':'f-n';
+function cnt(n){if(n.t==='L')return n.c.length;if(n.big!=null)return n.big;if(n.t==='A')return n.v.length;if(n.t==='B')return n.v.trim()?n.v.trim().split(/\s+/).length:0;return n.v===''?0:1}
+function show(n){let v=n.v;if(n.t==='A'){const ml=v.includes('\n');v="'"+v.split('\n')[0]+(ml?' …':'')+"'"}return v.length>60?v.slice(0,60)+'…':v}
+function sml(n,d){const p='  '.repeat(d);if(n.t==='L'){if(!n.c.length)return p+'<L [0]>';return p+'<L ['+n.c.length+']\n'+n.c.map(c=>sml(c,d+1)).join('\n')+'\n'+p+'>'}
+ let v=n.v;if(n.t==='A')v='"'+(n.big!=null?v.split('\n')[0]+' …':v)+'"';else if(n.t==='B')v=v?v.split(/\s+/).map(x=>/^[0-9A-F]{1,2}$/i.test(x)?'0x'+x.toUpperCase().padStart(2,'0'):x).join(' '):'';
+ let s=p+'<'+n.t+' ['+cnt(n).toLocaleString()+']'+(v!==''?' '+v:'')+'>';if(n.fold)s+='\n'+p+'  ⋯ 已折叠，共 '+cnt(n).toLocaleString()+' 字节  [展开] [另存为 .bin]';return s}
+function msgSml(sf,w,n){return sf+(w?' W':'')+'\n'+(n?sml(n,0)+'\n':'')+'.'}
+function err(n){const v=n.v.trim();if(n.t==='B')return /^([0-9a-f]{1,2}(\s+|$))*$/i.test(v)?'':'B 的值是空格分隔的十六进制字节，如 00 1A FF';
+ if(n.t[0]==='U'||n.t[0]==='I'){const bits={1:8,2:16,4:32,8:64}[n.t.slice(1)];if(!/^-?\d+$/.test(v))return n.t+' 需要整数';const x=BigInt(v);const lo=n.t[0]==='U'?0n:-(1n<<BigInt(bits-1)),hi=n.t[0]==='U'?(1n<<BigInt(bits))-1n:(1n<<BigInt(bits-1))-1n;return x<lo||x>hi?n.t+' 取值范围 '+lo+' ~ '+hi:''}
+ if(n.t[0]==='F')return v!==''&&isFinite(Number(v))?'':n.t+' 需要数值';return ''}
+let cur=LIB.find(m=>m.name==='S1F14_Establish Communications Ack'),tab='tree',selN=cur.body.c[0],flat=[];
+function matcher(q){q=q.trim();if(!q)return()=>true;let m=q.match(/^s?\s*(\d+)\s*(?:f|[\s,\/])\s*f?\s*(\d+)$/i);if(m){const s=+m[1],f=+m[2];return x=>x.s===s&&x.f===f}m=q.match(/^s(\d+)$/i);if(m){const s=+m[1];return x=>x.s===s}const t=q.toLowerCase();return x=>x.name.toLowerCase().includes(t)}
+function renderLib(){const names=new Set(LIB.map(m=>m.name));const list=LIB.filter(matcher($('q').value));$('l-cnt').textContent='('+list.length+'/'+LIB.length+')';let h='',last=-1;
+ list.forEach(m=>{if(m.s!==last){last=m.s;h+='<div class="grp">Stream '+m.s+'</div>'}const bad=m.ar&&!names.has(m.ar);
+ h+='<button class="li'+(m===cur?' sel':'')+'" data-i="'+m.i+'"><span class="sf">S'+m.s+'F'+m.f+'</span><span class="wb">'+(m.w?'W':'')+'</span><span class="nm">'+esc(m.name)+'</span>'+(m.ar?'<span class="ar'+(bad?' bad':'')+'">'+(bad?'⚠ 回复目标不存在：':'↩ ')+esc(m.ar)+'</span>':'')+'</button>'});
+ $('lib').innerHTML=h||'<div class="hint" style="padding:10px">无匹配消息</div>'}
+function parentOf(n){function f(x){if(!x||x.t!=='L')return null;for(const c of x.c){if(c===n)return x;const r=f(c);if(r)return r}return null}return f(cur.body)}
+function walk(n,d,out){const k=flat.length;flat.push(n);const isL=n.t==='L';
+ out.push('<div class="tv" role="treeitem" aria-selected="'+(n===selN)+'"'+(isL?' aria-expanded="'+n.open+'"':'')+' style="padding-left:'+(d*18)+'px">'+(isL?'<button class="tg" data-tg="'+k+'" aria-label="'+(n.open?'折叠':'展开')+'">'+(n.open?'▾':'▸')+'</button>':'<span class="tg"></span>')+
+ '<button class="nb'+(n===selN?' sel':'')+'" data-k="'+k+'"><span class="ic '+fam(n.t)+'">'+n.t+'</span><span class="cnt">['+cnt(n).toLocaleString()+']</span>'+(n.n?'<span class="inm">'+esc(n.n)+'</span>':'')+(isL?'':'<span class="val">'+esc(show(n))+'</span>')+'</button></div>');
+ if(isL&&n.open)n.c.forEach(c=>walk(c,d+1,out))}
+function renderTree(keepProp){flat=[];const out=[];
+ if(!cur.known)out.push('<div class="hint" style="padding:6px">示意稿未带这条消息的结构 — 用「＋子项」新建根节点</div>');
+ else if(!cur.body)out.push('<div class="hint" style="padding:6px">Header Only（无消息体）— 用「＋子项」添加根节点</div>');
+ else walk(cur.body,0,out);
+ $('e-tree').innerHTML=out.join('');$('e-sml').textContent=msgSml('S'+cur.s+'F'+cur.f,cur.w,cur.body)+'\n\n// SML 不含 item 名称；粘贴 SML 生成结构时名称为空';
+ $('e-tree').hidden=tab!=='tree';$('e-sml').hidden=tab!=='sml';$('e-prop').hidden=tab!=='tree';$('ttools').style.visibility=tab==='tree'?'visible':'hidden';
+ updTools();if(!keepProp)renderProp()}
+function updTools(){const p=selN&&parentOf(selN),i=p?p.c.indexOf(selN):-1;const t=$('ttools');
+ t.querySelector('[data-a=child]').disabled=!(!cur.body||(selN&&selN.t==='L'));
+ t.querySelector('[data-a=sib]').disabled=!p;t.querySelector('[data-a=del]').disabled=!selN;
+ t.querySelector('[data-a=up]').disabled=!(p&&i>0);t.querySelector('[data-a=down]').disabled=!(p&&i<p.c.length-1)}
+function renderProp(){const n=selN,P=$('e-prop');if(!n){P.innerHTML='<span class="k" style="grid-column:1/-1">选中一个节点后，在这里改类型、名称、值</span>';return}
+ const lock=n.t==='L'&&n.c.length>0;
+ let h='<span class="k">类型</span><span style="display:flex;gap:8px;align-items:center"><select id="pp-t"'+(lock?' disabled title="先删除子项才能改类型"':'')+'>'+TYPES.map(t=>'<option'+(t===n.t?' selected':'')+'>'+t+'</option>').join('')+'</select>'+(lock?'<span class="k">含子项，类型锁定</span>':'')+'</span>';
+ h+='<span class="k">名称</span><input id="pp-n" value="'+esc(n.n)+'" placeholder="可选，如 PPID / COMMACK">';
+ if(n.t==='L')h+='<span class="k">值</span><span class="k">子项 '+n.c.length+' 个</span>';
+ else if(n.t==='Boolean')h+='<span class="k">值</span><select id="pp-v"><option'+(n.v==='True'?' selected':'')+'>True</option><option'+(n.v==='False'?' selected':'')+'>False</option></select>';
+ else if(n.t==='A')h+='<span class="k">值</span><textarea id="pp-v" rows="2">'+esc(n.v)+'</textarea>';
+ else h+='<span class="k">值</span><input id="pp-v" class="mono" value="'+esc(n.v)+'">';
+ h+='<span class="err" id="pp-e" role="alert"></span>';P.innerHTML=h;chk()}
+function chk(){const e=$('pp-e');if(e)e.textContent=selN&&selN.t!=='L'?err(selN):''}
+function newNode(t){return t==='L'?{t,n:'',c:[],open:true}:{t,n:'',v:DEF[t]!=null?DEF[t]:'0',big:null,fold:false}}
+function clone(n){return n.t==='L'?{t:'L',n:n.n,c:n.c.map(clone),open:n.open}:Object.assign({},n)}
+function focusSel(){const b=R.querySelector('.nb.sel');if(b)b.focus()}
+function act(a,t){const p=selN&&parentOf(selN);
+ if(a==='child'){const nn=newNode(t);if(!cur.body){cur.body=nn;cur.known=true}else{selN.c.push(nn);selN.open=true}selN=nn}
+ else if(a==='sib'){if(!p)return;const nn=newNode(t);p.c.splice(p.c.indexOf(selN)+1,0,nn);selN=nn}
+ else if(a==='dup'){if(!p)return;const nn=clone(selN);p.c.splice(p.c.indexOf(selN)+1,0,nn);selN=nn}
+ else if(a==='del'){if(!selN)return;if(!p){cur.body=null;selN=null}else{const i=p.c.indexOf(selN);p.c.splice(i,1);selN=p.c[i]||p.c[i-1]||p}}
+ else if(a==='up'||a==='down'){if(!p)return;const i=p.c.indexOf(selN),j=i+(a==='up'?-1:1);if(j<0||j>=p.c.length)return;[p.c[i],p.c[j]]=[p.c[j],p.c[i]]}
+ renderTree();focusSel()}
+function hidePops(){['tp','cm','l-menu'].forEach(id=>$(id).hidden=true);$('l-more').setAttribute('aria-expanded','false')}
+function openPicker(mode,x,y){hidePops();const tp=$('tp');tp.dataset.mode=mode;
+ tp.innerHTML='<span class="tph">'+(mode==='child'?'添加子项':'添加同级')+' — 选择类型</span>'+TYPES.map(t=>'<button data-t="'+t+'"><span class="ic '+fam(t)+'">'+t+'</span></button>').join('');
+ tp.style.left=x+'px';tp.style.top=y+'px';tp.hidden=false;tp.querySelector('button').focus()}
+function posIn(el){const r=el.getBoundingClientRect(),m=$('mid').getBoundingClientRect();return [Math.max(4,Math.min(r.left-m.left,m.width-230)),r.bottom-m.top+4]}
+function renderEd(){$('e-name').value=cur.name;$('e-s').value=cur.s;$('e-f').value=cur.f;$('e-w').checked=cur.w;
+ const opts=['（无）'].concat(LIB.filter(x=>x.s===cur.s&&x.f===cur.f+1).map(x=>x.name));if(cur.ar&&!opts.includes(cur.ar))opts.push(cur.ar+'（不存在）');
+ $('e-ar').innerHTML=opts.map(o=>'<option'+((o===cur.ar||o===cur.ar+'（不存在）')?' selected':'')+'>'+esc(o)+'</option>').join('');renderTree()}
+// tree events
+$('e-tree').addEventListener('click',e=>{const g=e.target.closest('[data-tg]');if(g){const n=flat[+g.dataset.tg];n.open=!n.open;renderTree(true);return}
+ const b=e.target.closest('.nb');if(!b)return;selN=flat[+b.dataset.k];renderTree();focusSel()});
+$('e-tree').addEventListener('dblclick',e=>{if(e.target.closest('.nb')){const v=$('pp-v');if(v)v.focus()}});
+$('e-tree').addEventListener('contextmenu',e=>{const b=e.target.closest('.nb');if(!b)return;e.preventDefault();selN=flat[+b.dataset.k];renderTree();
+ const m=$('mid').getBoundingClientRect(),cm=$('cm');hidePops();const p=parentOf(selN);
+ cm.querySelector('[data-c=child]').disabled=selN.t!=='L';['sib','dup'].forEach(k=>cm.querySelector('[data-c='+k+']').disabled=!p);
+ cm.querySelector('[data-c=up]').disabled=!(p&&p.c.indexOf(selN)>0);cm.querySelector('[data-c=down]').disabled=!(p&&p.c.indexOf(selN)<p.c.length-1);
+ cm.style.left=Math.min(e.clientX-m.left,m.width-180)+'px';cm.style.top=(e.clientY-m.top)+'px';cm.hidden=false;cm.dataset.x=Math.min(e.clientX-m.left,m.width-230);cm.dataset.y=e.clientY-m.top});
+$('e-tree').addEventListener('keydown',e=>{if(!selN)return;
+ if(e.key==='Delete'){e.preventDefault();act('del')}else if(e.altKey&&e.key==='ArrowUp'){e.preventDefault();act('up')}else if(e.altKey&&e.key==='ArrowDown'){e.preventDefault();act('down')}
+ else if(e.ctrlKey&&(e.key==='d'||e.key==='D')){e.preventDefault();act('dup')}
+ else if(e.key==='Insert'){e.preventDefault();const b=R.querySelector('.nb.sel');const [x,y]=posIn(b);openPicker(e.ctrlKey?'child':'sib',x,y)}});
+$('ttools').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const a=b.dataset.a;
+ if(a==='child'||a==='sib'){const [x,y]=posIn(b);openPicker(a,x,y)}else act(a)});
+$('tp').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;const mode=$('tp').dataset.mode;hidePops();act(mode,b.dataset.t)});
+$('cm').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b||b.disabled)return;const c=b.dataset.c,cm=$('cm');
+ if(c==='child'||c==='sib')openPicker(c,+cm.dataset.x,+cm.dataset.y);else{hidePops();act(c)}});
+$('e-prop').addEventListener('input',e=>{if(!selN)return;if(e.target.id==='pp-n')selN.n=e.target.value;else if(e.target.id==='pp-v'){selN.v=e.target.value;selN.big=null;selN.fold=false}else return;chk();renderTree(true)});
+$('e-prop').addEventListener('change',e=>{if(!selN)return;if(e.target.id==='pp-v'&&selN.t==='Boolean'){selN.v=e.target.value;renderTree(true)}
+ if(e.target.id==='pp-t'){const t=e.target.value;if(t==='L'){delete selN.v;selN.t='L';selN.c=[];selN.open=true}else{const wasL=selN.t==='L';selN.t=t;if(wasL)delete selN.c;selN.v=DEF[t]!=null?DEF[t]:'0';selN.big=null;selN.fold=false}renderTree()}});
+R.addEventListener('click',e=>{if(e.target.closest('.pop,[data-open]'))return;hidePops()});
+R.addEventListener('keydown',e=>{if(e.key==='Escape')hidePops()});
+$('e-name').addEventListener('change',e=>{cur.name=e.target.value;renderLib()});
+R.querySelector('[role=tablist]').addEventListener('click',e=>{const b=e.target.closest('[role=tab]');if(!b)return;tab=b.dataset.t;R.querySelectorAll('[role=tab]').forEach(x=>x.setAttribute('aria-selected',x===b));hidePops();renderTree()});
+$('lib').addEventListener('click',e=>{const b=e.target.closest('.li');if(!b)return;cur=LIB.find(m=>m.i===+b.dataset.i);selN=cur.body;renderLib();renderEd()});
+$('q').addEventListener('input',renderLib);
+// log
+const RX={
+s1f14:L([['B','','00'],L([['A','','D180'],['A','','.0_065']])]),
+s2f42:L([['B','','00'],L([])]),
+s5f1:L([['B','','84'],['U4','','1203'],['A','','DOOR OPEN']]),
+s10f1:L([['B','','00'],['A','','Need operator']]),
+s7f6:L([['A','','12-SB150-01'],['B','','20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 20 …',1048576,1]]),
+s1f4:L([['U4','','1'],['U4','','0']])};
+const hx=(sb,s,f,w)=>{const h=v=>v.toString(16).padStart(2,'0').toUpperCase();const b=parseInt(sb,16);return ['00','00',h((w?0x80:0)|s),h(f),'00','00',h(b>>>24&255),h(b>>>16&255),h(b>>>8&255),h(b&255)].join(' ')};
+const C=a=>conv(a);
+const LOG=[
+{t:'10:21:03.112',k:'sys',txt:'TCP 已连接 127.0.0.1:5000'},
+{t:'10:21:03.115',k:'ctrl',d:'o',sf:'Select.req',sb:'00000001',st:['mu','']},
+{t:'10:21:03.121',k:'ctrl',d:'i',sf:'Select.rsp',sb:'00000001',st:['ok','SelectStatus 0']},
+{t:'10:21:03.121',k:'sys',txt:'状态 → Selected'},
+{t:'10:21:05.430',d:'o',s:1,f:13,w:1,nm:'S1F13_Establish Communications Request',sb:'00000BCB',src:'手动',st:['ok','✓ 18 ms'],b:C(ST['S1F13_Establish Communications Request'])},
+{t:'10:21:05.448',d:'i',s:1,f:14,sb:'00000BCB',st:['ok','回复 #0BCB'],b:C(RX.s1f14)},
+{t:'10:21:12.001',d:'o',s:2,f:41,w:1,nm:'PP_SELECT',sb:'00000BCC',src:'手动',st:['ok','✓ 19 ms'],b:C(ST.PP_SELECT)},
+{t:'10:21:12.020',d:'i',s:2,f:42,sb:'00000BCC',st:['ok','回复 #0BCC'],b:C(RX.s2f42)},
+{t:'10:21:30.551',d:'i',s:6,f:11,w:1,sb:'00000021',st:['ok','已自动回复'],b:C(ST['30013carrier arrived'])},
+{t:'10:21:30.553',d:'o',s:6,f:12,nm:'S6F12__EventReportAck',sb:'00000021',src:'自动 · SxF(y+1)',st:['ok','自动 · SxF(y+1)'],b:C(ST['S6F12__EventReportAck'])},
+{t:'10:22:01.300',d:'i',s:5,f:1,w:1,sb:'00000022',st:['ok','已自动回复'],b:C(RX.s5f1)},
+{t:'10:22:01.302',d:'o',s:5,f:2,nm:'S5F2_Alarm Report Ack',sb:'00000022',src:'自动 · AutoReply',st:['ok','自动 · AutoReply'],b:C(ST['S5F2_Alarm Report Ack'])},
+{t:'10:22:03.000',k:'ctrl',d:'o',sf:'Linktest.req',sb:'00000BD0',st:['mu','']},
+{t:'10:22:03.004',k:'ctrl',d:'i',sf:'Linktest.rsp',sb:'00000BD0',st:['ok','4 ms']},
+{t:'10:22:40.010',d:'i',s:10,f:1,w:1,sb:'00000023',st:['wa','待回复'],b:C(RX.s10f1)},
+{t:'10:23:05.120',d:'o',s:7,f:5,w:1,nm:'S7F5_ProcessProgramRequest',sb:'00000BCD',src:'手动',st:['ok','✓ 86 ms'],b:C(ST['S7F5_ProcessProgramRequest'])},
+{t:'10:23:05.206',d:'i',s:7,f:6,sb:'00000BCD',st:['ok','回复 · 1.0 MB'],b:C(RX.s7f6),size:'1,048,602 字节'},
+{t:'10:24:00.000',d:'o',s:1,f:3,w:1,nm:'Query Strip',sb:'00000BCE',src:'手动',st:['er','✗ T3 超时 45.0 s'],b:C(ST['Query Strip'])},
+{t:'10:24:46.310',d:'i',s:1,f:4,sb:'00000BCE',st:['er','无匹配请求（迟到）'],b:C(RX.s1f4)}
+];
+let sel=16;
+const AUTO_SCROLL={log:true,detail:true};
+function bindAutoScroll(id,key){const el=$(id);el.addEventListener('wheel',e=>{if(e.deltaY<0)AUTO_SCROLL[key]=false},{passive:true});el.addEventListener('scroll',()=>{if(el.scrollHeight-el.scrollTop-el.clientHeight<2)AUTO_SCROLL[key]=true})}
+function scrollLatest(id,key){if(AUTO_SCROLL[key])requestAnimationFrame(()=>{const el=$(id);el.scrollTop=el.scrollHeight})}
+bindAutoScroll('logwrap','log');bindAutoScroll('detailwrap','detail');
+function renderLog(){$('log').innerHTML=LOG.map((r,i)=>{if(r.k==='sys')return '<button class="lr sys" data-r="'+i+'"><span class="mono">'+r.t+'</span><span>·</span><span></span><span class="nm">'+esc(r.txt)+'</span><span></span><span></span></button>';
+ const sf=r.sf||('S'+r.s+'F'+r.f+(r.w?' W':''));const s0=LOG[sel];const pair=s0&&s0.sb&&s0.sb===r.sb&&i!==sel&&(!s0.k)===(!r.k);
+ return '<button class="lr'+(r.k==='ctrl'?' ctrl':'')+(i===sel?' sel':'')+(pair?' pair':'')+'" data-r="'+i+'"><span class="mono">'+r.t+'</span><span class="'+r.d+'">'+(r.d==='o'?'→':'←')+'</span><span class="mono">'+sf+'</span><span class="nm">'+esc(r.nm||'')+'</span><span class="mono">'+r.sb+'</span><span class="st '+r.st[0]+'">'+esc(r.st[1])+'</span></button>'}).join('');renderDet();scrollLatest('logwrap','log')}
+function renderDet(){const r=LOG[sel];if(r.k){$('d-sml').textContent=r.t+'  '+(r.txt||r.sf);scrollLatest('detailwrap','detail');return}
+ $('d-sml').textContent=r.t+'\n'+msgSml('S'+r.s+'F'+r.f,r.w,r.b);scrollLatest('detailwrap','detail')}
+$('log').addEventListener('click',e=>{const b=e.target.closest('.lr');if(!b)return;sel=+b.dataset.r;renderLog()});
+$('x-ctrl').addEventListener('change',e=>$('logwrap').classList.toggle('showctrl',e.target.checked));
+// connection
+$('c-tm').addEventListener('click',e=>{const o=$('timers').classList.toggle('open');e.target.textContent=o?'编辑参数 ▾':'编辑参数 ▸';e.target.setAttribute('aria-expanded',o)});
+function sum(){const s=$('p-role').value+' · '+$('p-mode').value+($('p-mode').value==='Active'?' → ':' 监听 ')+$('p-ip').value+':'+$('p-port').value+' · Dev '+$('p-dev').value;$('c-sum').textContent=s+' · T3 '+$('p-t3').value+'s';$('sb-sum').textContent=s}
+$('timers').addEventListener('input',sum);$('timers').addEventListener('change',sum);
+const PROF={'HOST-测试':['Host','Active','127.0.0.1','5000'],'EQP-模拟':['Equipment','Passive','0.0.0.0','5000']};
+$('c-prof').addEventListener('change',e=>{const p=PROF[e.target.value];if(!p){$('sb-msg').textContent='新建配置：复制当前参数并命名（示意）';return}$('p-role').value=p[0];$('p-mode').value=p[1];$('p-ip').value=p[2];$('p-port').value=p[3];$('t-prof').textContent=e.target.value;sum()});
+let state=0;
+function setState(s){state=s;const lab=['未连接','连接中…','Selected'][s];$('c-st').className='pill '+['s-off','s-ing','s-ok'][s];$('c-st').textContent=lab;$('sb-st').textContent='● '+lab;$('c-go').textContent=s?'断开':'连接';R.querySelectorAll('.lk,#c-prof').forEach(x=>x.disabled=s!==0)}
+$('c-go').addEventListener('click',()=>{if(state){setState(0);return}setState(1);setTimeout(()=>{if(state===1)setState(2)},800)});
+$('l-more').addEventListener('click',e=>{const m=$('l-menu'),open=m.hidden;hidePops();m.hidden=!open;e.currentTarget.setAttribute('aria-expanded',open)});
+$('l-menu').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;hidePops();$('sb-msg').textContent=b.dataset.m==='清空'?'确认：清空消息库？有未导出的修改（示意）':b.dataset.m+'（示意）'});
+$('l-new').addEventListener('click',()=>{$('sb-msg').textContent='新消息：默认取当前选中消息的 SxFy（示意）'});
+$('e-send').addEventListener('click',()=>{const bad=[];(function f(n){if(!n)return;if(n.t==='L')n.c.forEach(f);else if(err(n))bad.push(n)})(cur.body);
+ $('sb-msg').textContent=bad.length?'有 '+bad.length+' 个非法值，已阻止发送':state===2?'已发送 '+cur.name+'（示意）':'未连接，无法发送'});
+sum();renderLib();renderEd();renderLog();
+})();
+</script>
+</div>

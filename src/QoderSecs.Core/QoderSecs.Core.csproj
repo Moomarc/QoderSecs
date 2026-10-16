@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Secs4Net" Version="3.1.0" />
+    <PackageReference Include="Secs4Net.Sml" Version="3.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 日志序号这类字段只由连接层写，测试要直接摆出折叠态。 -->
+    <InternalsVisibleTo Include="QoderSecs.Tests" />
+  </ItemGroup>
+
+</Project>

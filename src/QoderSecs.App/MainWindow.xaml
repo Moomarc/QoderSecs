@@ -1,0 +1,813 @@
+<Window x:Class="QoderSecs.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QoderSecs"
+        Width="1360"
+        Height="860"
+        MinWidth="860"
+        MinHeight="680"
+        Background="#F3F4F6"
+        FontFamily="Segoe UI"
+        FontSize="13">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#D8DEE8" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#667085" />
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#2563EB" />
+        <Style TargetType="Button">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Margin" Value="3" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="7,4" />
+            <Setter Property="Margin" Value="0,4,8,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Margin" Value="0,4,8,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="PanelStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+        </Style>
+        <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style x:Key="TopBarButtonStyle" TargetType="ToggleButton">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Margin" Value="3" />
+        </Style>
+        <!-- 左栏「文件」是 Menu，默认比旁边的 Button 矮一截也窄一截，按 Button 的尺寸对齐。
+             必须 BasedOn 主题默认样式：MenuItem 靠 Role 触发器换模板，覆盖掉就展不开子菜单了。 -->
+        <Style x:Key="ToolbarMenuStyle"
+               BasedOn="{StaticResource {x:Type MenuItem}}"
+               TargetType="MenuItem">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <!-- 挂在 TreeViewItem 上而不是行内容上：整行（含展开箭头）右键都能出菜单。
+             共享实例，DataContext 由 PlacementTarget 继承，所以绑定照旧走节点 VM。
+             两个添加项按节点类型收掉：非列表元素加不了子项、根元素没有同级，
+             留着只会让人点下去看状态栏报错。 -->
+        <ContextMenu x:Key="NodeContextMenu">
+            <MenuItem Header="添加子项"
+                      Visibility="{Binding AddChildVisibility}"
+                      ItemsSource="{Binding Owner.ItemTypeOptions}">
+                <MenuItem.ItemContainerStyle>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="{Binding Header}" />
+                        <Setter Property="Command"
+                                Value="{Binding DataContext.Owner.AddChildCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                        <Setter Property="CommandParameter" Value="{Binding Type}" />
+                    </Style>
+                </MenuItem.ItemContainerStyle>
+            </MenuItem>
+            <MenuItem Header="添加同级"
+                      Visibility="{Binding AddSiblingVisibility}"
+                      ItemsSource="{Binding Owner.ItemTypeOptions}">
+                <MenuItem.ItemContainerStyle>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Header" Value="{Binding Header}" />
+                        <Setter Property="Command"
+                                Value="{Binding DataContext.Owner.AddSiblingCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                        <Setter Property="CommandParameter" Value="{Binding Type}" />
+                    </Style>
+                </MenuItem.ItemContainerStyle>
+            </MenuItem>
+            <Separator Visibility="{Binding AddSeparatorVisibility}" />
+            <MenuItem Header="删除" Command="{Binding Owner.DeleteNodeCommand}" />
+        </ContextMenu>
+    </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Command="{Binding CloseConfigPanelCommand}" Key="Escape" />
+    </Window.InputBindings>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border x:Name="TopBar"
+                Grid.Row="0"
+                Padding="12,9"
+                Background="White"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Margin="0,0,18,0"
+                           VerticalAlignment="Center"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Text="QoderSecs" />
+
+                <TextBlock Grid.Column="1"
+                           Margin="0,0,12,0"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="{Binding ConfigurationSummary}" />
+
+                <ToggleButton x:Name="ConfigPanelToggle"
+                              Grid.Column="2"
+                              IsChecked="{Binding IsConfigPanelOpen, Mode=TwoWay}"
+                              Style="{StaticResource TopBarButtonStyle}"
+                              Content="连接参数 ▾" />
+
+                <Border Grid.Column="3"
+                        Margin="8,0"
+                        Padding="10,5"
+                        VerticalAlignment="Center"
+                        Background="#F2F4F7"
+                        CornerRadius="12">
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse Width="8"
+                                 Height="8"
+                                 VerticalAlignment="Center"
+                                 Fill="{Binding PhaseBrush}" />
+                        <TextBlock x:Name="PhasePill"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   Text="{Binding PhaseText}" />
+                    </StackPanel>
+                </Border>
+
+                <Button x:Name="ConnectButton"
+                        Grid.Column="4"
+                        MinWidth="88"
+                        Command="{Binding ConnectCommand}"
+                        Content="{Binding ConnectButtonText}" />
+
+                <Popup AllowsTransparency="True"
+                       HorizontalOffset="12"
+                       IsOpen="{Binding IsConfigPanelOpen, Mode=TwoWay}"
+                       Placement="Bottom"
+                       PlacementTarget="{Binding ElementName=TopBar}"
+                       StaysOpen="True"
+                       VerticalOffset="8">
+                    <Border MaxWidth="940"
+                            Margin="14,6,14,16"
+                            Padding="14"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="16"
+                                              Opacity="0.22"
+                                              ShadowDepth="2" />
+                        </Border.Effect>
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,10">
+                                <TextBlock Style="{StaticResource SectionTitleStyle}"
+                                           Text="连接参数" />
+                                <Button Width="26"
+                                        Height="26"
+                                        Margin="0"
+                                        Padding="0"
+                                        HorizontalAlignment="Right"
+                                        Command="{Binding CloseConfigPanelCommand}"
+                                        Content="✕"
+                                        ToolTip="关闭 (Esc)" />
+                            </DockPanel>
+                            <WrapPanel IsEnabled="{Binding AreParametersEditable}">
+                                <StackPanel Width="145">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="角色" />
+                                    <ComboBox ItemsSource="{Binding EndpointRoles}"
+                                              SelectedItem="{Binding Role}" />
+                                </StackPanel>
+                                <StackPanel Width="145">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="模式" />
+                                    <ComboBox ItemsSource="{Binding ConnectionModes}"
+                                              SelectedItem="{Binding Mode}" />
+                                </StackPanel>
+                                <StackPanel Width="180">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="IP 地址" />
+                                    <TextBox Text="{Binding IpAddress, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                                <StackPanel Width="105">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Port" />
+                                    <TextBox Text="{Binding Port}" />
+                                </StackPanel>
+                                <StackPanel Width="105">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device ID" />
+                                    <TextBox Text="{Binding DeviceId}" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,8,0,0"
+                                       IsEnabled="{Binding AreParametersEditable}">
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T3 (s)" />
+                                    <TextBox Text="{Binding T3Seconds}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T5 (s)" />
+                                    <TextBox Text="{Binding T5Seconds}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T6 (s)" />
+                                    <TextBox Text="{Binding T6Seconds}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T7 (s)" />
+                                    <TextBox Text="{Binding T7Seconds}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T8 (s)" />
+                                    <TextBox Text="{Binding T8Seconds}" />
+                                </StackPanel>
+                                <StackPanel Width="190" Margin="12,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Linktest" />
+                                    <StackPanel Margin="0,5,0,0" Orientation="Horizontal">
+                                        <CheckBox Margin="0,0,10,0"
+                                                  VerticalAlignment="Center"
+                                                  Content="启用"
+                                                  IsChecked="{Binding LinkTestEnabled}" />
+                                        <TextBox Width="70"
+                                                 IsEnabled="{Binding LinkTestEnabled}"
+                                                 Text="{Binding LinkTestIntervalSeconds}" />
+                                        <TextBlock VerticalAlignment="Center" Text="秒" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="10,8,10,8">
+            <Grid.ColumnDefinitions>
+                <!-- 三栏下限之和加上两条分隔条，就是窗口 MinWidth 的下界；
+                     想让窗口能更窄，必须先降这里，只改 MinWidth 是拖不动的。
+                     中栏不能低于 300：名称框 170 和 S/F/W 组 160 都要放得下，
+                     扣掉发送按钮 98 之后只剩压盖，不会换行。
+                     左栏不能低于 230：标题是 DockPanel 的填充项，
+                     右边「文件 + ＋新消息」占掉 150，再窄标题就被挤成 0 宽直接消失。 -->
+                <ColumnDefinition Width="2*" MinWidth="230" />
+                <ColumnDefinition Width="5" />
+                <ColumnDefinition Width="3*" MinWidth="300" />
+                <ColumnDefinition Width="5" />
+                <ColumnDefinition Width="4*" MinWidth="300" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource PanelStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <DockPanel Margin="10,8">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Menu Margin="3" Background="Transparent">
+                                <MenuItem Header="文件" Style="{StaticResource ToolbarMenuStyle}">
+                                    <MenuItem Command="{Binding ImportLibraryCommand}" Header="导入 .sxml…" />
+                                    <MenuItem Command="{Binding ExportLibraryCommand}" Header="导出 .sxml…" />
+                                    <Separator />
+                                    <MenuItem Command="{Binding ClearLibraryCommand}" Header="清空消息库…" />
+                                </MenuItem>
+                            </Menu>
+                            <Button Command="{Binding NewMessageCommand}" Content="＋ 新消息" />
+                        </StackPanel>
+                        <TextBlock Margin="0,0,8,0"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Text="{Binding LibraryHeader}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding LibraryHeader}" />
+                    </DockPanel>
+                    <TextBox Grid.Row="1"
+                             Margin="10,0,10,8"
+                             AutomationProperties.Name="搜索消息"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="按名称过滤，或直接输入 SxFy，例如 S10F3" />
+                    <ListBox x:Name="MessageList"
+                             Grid.Row="2"
+                             Margin="6,0,6,6"
+                             BorderThickness="0"
+                             ItemsSource="{Binding Messages}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             SelectedItem="{Binding SelectedMessage, Mode=TwoWay}">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <!-- 不加这个，行的 UIA 名字就是 MessageEntry 的 ToString()，
+                                     读屏软件会把整段 XML 念一遍，自动化测试也没法精确断言。 -->
+                                <Setter Property="AutomationProperties.Name">
+                                    <Setter.Value>
+                                        <MultiBinding StringFormat="{}{0} {1}">
+                                            <Binding Path="Signature" />
+                                            <Binding Path="Name" />
+                                        </MultiBinding>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Width="60"
+                                               Margin="0,0,6,0"
+                                               FontFamily="Cascadia Mono"
+                                               Foreground="{StaticResource PrimaryBrush}"
+                                               Text="{Binding Signature}" />
+                                    <TextBlock Text="{Binding Name}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Grid.Row="2"
+                               Margin="14"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="{Binding EmptyHint}"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasMessages}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          HorizontalAlignment="Stretch"
+                          Background="Transparent" />
+
+            <Border Grid.Column="2" Style="{StaticResource PanelStyle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Margin="10,4,8,4"
+                               Style="{StaticResource SectionTitleStyle}"
+                               Text="消息编辑" />
+                    <DockPanel Grid.Row="1" Margin="10,0,8,8">
+                        <!-- 发送跟着编辑字段走：填完名称和 SxFy，右手边就是发送。 -->
+                        <Button Width="90"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Bottom"
+                                DockPanel.Dock="Right"
+                                Command="{Binding SendCommand}"
+                                Content="发送" />
+                        <WrapPanel IsEnabled="{Binding HasSelectedMessage}">
+                            <StackPanel Width="170">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" />
+                                <TextBox AutomationProperties.Name="消息名称"
+                                         KeyDown="CommitOnEnter"
+                                         Text="{Binding MessageName, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                            <!-- S、F、W 当成一个整体：WrapPanel 只按直接子元素折行，
+                                 包一层横向 StackPanel 后，中栏再窄也只能整组换到下一行，
+                                 不会把它们仨拆到上下两行去。 -->
+                            <StackPanel Margin="8,0,0,0" Orientation="Horizontal">
+                                <StackPanel Width="56">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="S" />
+                                    <TextBox AutomationProperties.Name="消息 Stream"
+                                             KeyDown="CommitOnEnter"
+                                             Text="{Binding StreamText, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                                <StackPanel Width="56" Margin="8,0,0,0">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="F" />
+                                    <TextBox AutomationProperties.Name="消息 Function"
+                                             KeyDown="CommitOnEnter"
+                                             Text="{Binding FunctionText, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                                <CheckBox Margin="10,17,0,0"
+                                          VerticalAlignment="Center"
+                                          AutomationProperties.Name="消息 W 位"
+                                          Content="W"
+                                          IsChecked="{Binding MessageWBit}"
+                                          ToolTip="这条消息要求对方回复（W-Bit）" />
+                            </StackPanel>
+                            <StackPanel Width="170" Margin="12,0,0,0">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="自动回复" />
+                                <ComboBox AutomationProperties.Name="自动回复"
+                                          ItemsSource="{Binding AutoReplyOptions}"
+                                          SelectedItem="{Binding MessageAutoReply}"
+                                          ToolTip="收到这条消息时自动回哪一条" />
+                            </StackPanel>
+                        </WrapPanel>
+                    </DockPanel>
+                    <TabControl Grid.Row="2" Margin="8,0">
+                        <TabItem Header="结构">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Menu Margin="2,4,0,0" Background="Transparent">
+                                    <MenuItem Header="＋ 子项" ItemsSource="{Binding ItemTypeOptions}">
+                                        <MenuItem.ItemContainerStyle>
+                                            <Style TargetType="MenuItem">
+                                                <Setter Property="Header" Value="{Binding Header}" />
+                                                <Setter Property="Command"
+                                                        Value="{Binding DataContext.AddChildCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
+                                                <Setter Property="CommandParameter" Value="{Binding Type}" />
+                                            </Style>
+                                        </MenuItem.ItemContainerStyle>
+                                    </MenuItem>
+                                    <MenuItem Header="＋ 同级" ItemsSource="{Binding ItemTypeOptions}">
+                                        <MenuItem.ItemContainerStyle>
+                                            <Style TargetType="MenuItem">
+                                                <Setter Property="Header" Value="{Binding Header}" />
+                                                <Setter Property="Command"
+                                                        Value="{Binding DataContext.AddSiblingCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
+                                                <Setter Property="CommandParameter" Value="{Binding Type}" />
+                                            </Style>
+                                        </MenuItem.ItemContainerStyle>
+                                    </MenuItem>
+                                    <MenuItem Header="删除" Command="{Binding DeleteNodeCommand}" />
+                                </Menu>
+                                <TreeView x:Name="StructureTree"
+                                          Grid.Row="1"
+                                          Margin="4,0,4,4"
+                                          BorderThickness="0"
+                                          ItemsSource="{Binding StructureRootItems}"
+                                          PreviewKeyDown="StructureTreePreviewKeyDown">
+                                    <TreeView.ItemContainerStyle>
+                                        <Style TargetType="TreeViewItem">
+                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                            <Setter Property="ContextMenu" Value="{StaticResource NodeContextMenu}" />
+                                            <!-- TreeViewItem 的 UIA 名字默认取数据项的 ToString，
+                                                 走查和读屏都读不出这一行是什么，必须显式给。 -->
+                                            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+                                            <EventSetter Event="PreviewMouseRightButtonDown"
+                                                         Handler="SelectNodeOnRightClick" />
+                                        </Style>
+                                    </TreeView.ItemContainerStyle>
+                                    <TreeView.ItemTemplate>
+                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                            <StackPanel Orientation="Horizontal"
+                                                        ToolTip="{Binding ValidationError}">
+                                                <Border Margin="0,1,6,1"
+                                                        Padding="5,0"
+                                                        Background="{Binding BadgeBrush}"
+                                                        CornerRadius="3">
+                                                    <TextBlock FontFamily="Cascadia Mono"
+                                                               FontSize="11"
+                                                               Foreground="White"
+                                                               Text="{Binding TypeLabel}" />
+                                                </Border>
+                                                <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
+                                                <TextBlock Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           Text="{Binding ValuePreview}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground"
+                                                                    Value="{StaticResource MutedBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                                                    <Setter Property="Foreground" Value="#DC2626" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </HierarchicalDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                </TreeView>
+                                <TextBlock Grid.Row="1"
+                                           Margin="14"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           Text="{Binding StructureHint}"
+                                           TextAlignment="Center"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding StructureHint}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <Border Grid.Row="2"
+                                        Padding="8,6"
+                                        Background="#F8FAFC"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="0,1,0,0">
+                                    <Grid DataContext="{Binding SelectedNode}">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBlock VerticalAlignment="Center"
+                                                   Foreground="{StaticResource MutedBrush}"
+                                                   Text="选中一个节点后，在这里改名称和值。">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <StackPanel Orientation="Horizontal">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <Border Margin="0,1,8,1"
+                                                    Padding="5,0"
+                                                    VerticalAlignment="Center"
+                                                    Background="{Binding BadgeBrush}"
+                                                    CornerRadius="3">
+                                                <TextBlock FontFamily="Cascadia Mono"
+                                                           FontSize="11"
+                                                           Foreground="White"
+                                                           Text="{Binding TypeLabel}" />
+                                            </Border>
+                                            <TextBlock Margin="0,0,6,0"
+                                                       VerticalAlignment="Center"
+                                                       Style="{StaticResource FieldLabelStyle}"
+                                                       Text="名称" />
+                                            <TextBox Width="150"
+                                                     Margin="0,0,12,0"
+                                                     VerticalAlignment="Center"
+                                                     AutomationProperties.Name="节点名称"
+                                                     Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="可选，例如 PPID / COMMACK；留空就是没有名字" />
+                                            <TextBlock Margin="0,0,6,0"
+                                                       VerticalAlignment="Center"
+                                                       Style="{StaticResource FieldLabelStyle}"
+                                                       Text="值" />
+                                            <TextBox Width="240"
+                                                     Margin="0,0,12,0"
+                                                     VerticalAlignment="Center"
+                                                     AutomationProperties.Name="节点值"
+                                                     AcceptsReturn="{Binding IsMultiLineValue}"
+                                                     Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
+                                                     TextWrapping="Wrap"
+                                                     ToolTip="{Binding ValidationError}">
+                                                <TextBox.Style>
+                                                    <Style TargetType="TextBox">
+                                                        <Setter Property="MinHeight" Value="30" />
+                                                        <Setter Property="Padding" Value="7,4" />
+                                                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ShowsValueEditor}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsMultiLineValue}" Value="True">
+                                                                <Setter Property="Height" Value="64" />
+                                                                <Setter Property="VerticalContentAlignment" Value="Top" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                                                <Setter Property="BorderBrush" Value="#DC2626" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBox.Style>
+                                            </TextBox>
+                                            <ComboBox Width="90"
+                                                      Margin="0,0,12,0"
+                                                      VerticalAlignment="Center"
+                                                      AutomationProperties.Name="节点值"
+                                                      ItemsSource="{Binding BooleanOptions}"
+                                                      SelectedItem="{Binding EditValue}">
+                                                <ComboBox.Style>
+                                                    <Style TargetType="ComboBox">
+                                                        <Setter Property="MinHeight" Value="30" />
+                                                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ShowsBooleanEditor}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ComboBox.Style>
+                                            </ComboBox>
+                                            <TextBlock VerticalAlignment="Center"
+                                                       Foreground="{StaticResource MutedBrush}"
+                                                       Text="{Binding ValueNote}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ShowsValueNote}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <TextBlock Grid.Row="1"
+                                                   Margin="0,4,0,0"
+                                                   Foreground="#DC2626"
+                                                   Text="{Binding ValidationError}"
+                                                   TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="SML">
+                            <Grid Margin="4,4,4,4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="96" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBox BorderThickness="0"
+                                         IsReadOnly="True"
+                                         AcceptsReturn="True"
+                                         AutomationProperties.Name="SML 预览"
+                                         FontFamily="Cascadia Mono"
+                                         TextWrapping="NoWrap"
+                                         Text="{Binding SmlPreviewText, Mode=OneWay}"
+                                         VerticalScrollBarVisibility="Auto">
+                                    <TextBox.Style>
+                                        <Style TargetType="TextBox">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SmlPreviewHasError}" Value="True">
+                                                    <Setter Property="Foreground" Value="#DC2626" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBox.Style>
+                                </TextBox>
+                                <TextBlock Grid.Row="1"
+                                           Margin="0,6,0,2"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           Text="粘贴一条完整消息的 SML（带 SxFy 消息头），覆盖当前消息的消息头和结构：" />
+                                <TextBox Grid.Row="2"
+                                         AcceptsReturn="True"
+                                         AutomationProperties.Name="粘贴 SML"
+                                         FontFamily="Cascadia Mono"
+                                         TextWrapping="NoWrap"
+                                         Text="{Binding PasteSmlText, UpdateSourceTrigger=PropertyChanged}"
+                                         VerticalScrollBarVisibility="Auto" />
+                                <Button Grid.Row="3"
+                                        Width="120"
+                                        Margin="0,6,0,0"
+                                        HorizontalAlignment="Right"
+                                        Command="{Binding ApplySmlCommand}"
+                                        Content="覆盖当前消息" />
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="3"
+                          HorizontalAlignment="Stretch"
+                          Background="Transparent" />
+
+            <Grid Grid.Column="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="1.2*" />
+                    <RowDefinition Height="5" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Style="{StaticResource PanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Margin="10,8"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Text="通信记录" />
+                        <Grid Grid.Row="1"
+                              Margin="8,0,8,8">
+                            <ListView x:Name="RecordList"
+                                      ItemsSource="{Binding Records}"
+                                      SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="时间"
+                                                        Width="88"
+                                                        DisplayMemberBinding="{Binding TimeText}" />
+                                        <GridViewColumn Header="方向"
+                                                        Width="46"
+                                                        DisplayMemberBinding="{Binding DirectionText}" />
+                                        <GridViewColumn Header="消息"
+                                                        Width="140"
+                                                        DisplayMemberBinding="{Binding MessageText}" />
+                                        <GridViewColumn Header="SystemBytes"
+                                                        Width="92"
+                                                        DisplayMemberBinding="{Binding SystemBytesText}" />
+                                        <GridViewColumn Header="状态"
+                                                        Width="112"
+                                                        DisplayMemberBinding="{Binding StatusText}" />
+                                        <GridViewColumn Header="耗时"
+                                                        Width="62"
+                                                        DisplayMemberBinding="{Binding ElapsedText}" />
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Text="{Binding RecordsHint}" />
+                        </Grid>
+                    </Grid>
+                </Border>
+                <GridSplitter Grid.Row="1"
+                              VerticalAlignment="Stretch"
+                              HorizontalAlignment="Stretch"
+                              Background="Transparent" />
+                <Border Grid.Row="2" Style="{StaticResource PanelStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Margin="10,8"
+                                   Style="{StaticResource SectionTitleStyle}"
+                                   Text="详情" />
+                        <TextBox x:Name="RecordDetailBox"
+                                 Grid.Row="1"
+                                 Margin="8,0,8,8"
+                                 BorderThickness="0"
+                                 IsReadOnly="True"
+                                 AcceptsReturn="True"
+                                 FontFamily="Cascadia Mono"
+                                 MouseDoubleClick="ToggleDetailExpand"
+                                 Text="{Binding RecordDetail, Mode=OneWay}"
+                                 TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 ToolTip="大消息的正文折叠着，双击展开或收起" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="2"
+                Padding="10,5"
+                Background="White"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="0,1,0,0">
+            <TextBlock AutomationProperties.AutomationId="StatusBar"
+                       Foreground="{StaticResource MutedBrush}"
+                       Text="{Binding StatusMessage}" />
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,70 @@
+<SXML>
+    <DataDictionary>
+        <UnknownEntry Code="7">keep me</UnknownEntry>
+    </DataDictionary>
+    <!-- 注释必须原样保留 -->
+    <MessageDictionary>
+        <Message Name="S1F1_AreYouThere" Description="link test">
+            <Stream>1</Stream>
+            <Function>1</Function>
+            <WBit>1</WBit>
+            <AutoReply>S1F2_OnlineData</AutoReply>
+            <Structure/>
+        </Message>
+        <Message Name="S1F2_OnlineData" Description="">
+            <Stream>1</Stream>
+            <Function>2</Function>
+            <Structure>
+                <L>
+                    <A Name="MDLN">
+                        <Value>QODERSECS</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <A Name="SOFT">
+                        <Value>1.0</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="RecipeBody" Description="multi-line A">
+            <Stream>7</Stream>
+            <Function>25</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                    <A Name="PPID">
+                        <Value>TEST-RECIPE</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <A Name="PPBODY" ExtraAttr="keep">
+                        <Value>[Section1]
+Key1=1
+Key2=two
+</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <B Name="Mask">
+                        <Value>00FF</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <Boolean Name="Flag">
+                        <Value>True</Value>
+                        <Maps Type="2048">
+                        </Maps>
+                    </Boolean>
+                    <U4 Name="Count">
+                        <Value>42</Value>
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
+                </L>
+            </Structure>
+        </Message>
+    </MessageDictionary>
+</SXML>
