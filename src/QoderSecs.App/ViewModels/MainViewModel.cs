@@ -56,6 +56,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private MessageEntry? _selectedMessage;
     private readonly List<StructureNodeViewModel> _structureNodes = [];
     private StructureNodeViewModel? _selectedNode;
+    private StructureNodeViewModel? _editingNode;
     private CancellationTokenSource? _structureRefresh;
     private string _pasteSmlText = string.Empty;
     private bool _loadingMessageEditor;
@@ -102,6 +103,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             NewMessage();
             return Task.CompletedTask;
         });
+        DeleteMessageCommand = new RelayCommand(
+            DeleteMessage,
+            () => SelectedMessage is not null);
         AddChildCommand = new RelayCommand<SecsItemType>(
             AddChild,
             () => SelectedNode is not null
@@ -141,6 +145,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public AsyncRelayCommand NewMessageCommand { get; }
 
+    public RelayCommand DeleteMessageCommand { get; }
+
     public RelayCommand<SecsItemType> AddChildCommand { get; }
 
     public RelayCommand<SecsItemType> AddSiblingCommand { get; }
@@ -172,6 +178,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (previous is not null)
             {
                 previous.IsSelected = false;
+                // 选中挪走了，上一行的行内编辑就结束。改出去的名称和值留住，不弹确认也不回滚
+                // （用户 2026-10-18 定：不做 Esc 取消，提交是即时的）。
+                previous.IsEditing = false;
+            }
+
+            if (ReferenceEquals(_editingNode, previous))
+            {
+                _editingNode = null;
             }
 
             if (value is not null)
@@ -538,6 +552,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 SyncMessageEditor();
                 RefreshStructure();
                 SendCommand.RaiseCanExecuteChanged();
+                DeleteMessageCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -979,6 +994,65 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// 删掉选中的那条消息。没有撤销（用户 2026-10-18 定），确认框是唯一防线：默认焦点落在「否」上。
+    /// 正文只说两件必须说的事：不可恢复、有几条自动回复指向它。
+    /// 断指只提示不改（同一批决定）：指向的文本原样留着，后果是自动回复不再命中，
+    /// 这条行为 Core 侧有测试兜着（AutoReplyResolver 找不到名字就返回 null）。
+    /// </summary>
+    private void DeleteMessage()
+    {
+        var entry = SelectedMessage;
+        if (entry is null)
+        {
+            return;
+        }
+
+        var label = entry.Name.Length == 0 ? entry.Signature : $"{entry.Name}（{entry.Signature}）";
+
+        // 空名称的消息不可能被指向：AutoReplyResolver 把空目标当成没配（AutoReplyResolver.cs:20）。
+        // 比名字用 Ordinal，和它查目标时用的是同一条口径。
+        var brokenReferences = entry.Name.Length == 0
+            ? 0
+            : _library.Messages.Count(message =>
+                !ReferenceEquals(message, entry)
+                && string.Equals(message.AutoReply?.Trim(), entry.Name, StringComparison.Ordinal));
+
+        var lines = new List<string> { $"确定删除 {label}？不可恢复。" };
+        if (brokenReferences > 0)
+        {
+            lines.Add($"{brokenReferences} 条自动回复指向它，删完之后不会回复。");
+        }
+
+        var answer = MessageBox.Show(
+            string.Join(Environment.NewLine, lines),
+            "删除消息",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            _library.RemoveMessage(entry);
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            Fail($"删除失败：{exception.Message}");
+            return;
+        }
+
+        // 删完之后 SelectedMessage 手上那条已经不在库里了，但它的 Index 正好落到原来那条的下一条上，
+        // RefreshMessages 按 Index 找回选中，效果就是选中往下走一格；删的是最后一条时选中变空。
+        RefreshMessages();
+        StatusMessage = brokenReferences == 0
+            ? $"已删除 {label}。"
+            : $"已删除 {label}，{brokenReferences} 条自动回复指向失效。";
+    }
+
+    /// <summary>
     /// 搜索框每敲一个字都会走到这里，所以要按 Index 把当前选中的消息找回来，
     /// 否则过滤一次选中就跳回第一条，中栏正在编辑的内容会莫名其妙换掉。
     /// </summary>
@@ -1137,6 +1211,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// 实测 1MB 的 B 值一次要 40ms（预览）加 100ms（校验），还分配 17MB；
     /// 边打字边重建界面就跟不上手了，所以停下来一会儿再刷一次。
     /// </summary>
+    /// <summary>
+    /// 进就地编辑。同时只承认一行在编辑，否则两行的框都在、改的却是同一个 SelectedNode，
+    /// 看着就是「明明点的是这一行，写进去的是另一行」。
+    /// </summary>
+    internal void BeginStructureEdit(StructureNodeViewModel node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        if (_editingNode is { } previous && !ReferenceEquals(previous, node))
+        {
+            previous.IsEditing = false;
+        }
+
+        _editingNode = node;
+        node.IsEditing = true;
+    }
+
     internal void OnStructureEdited()
     {
         CancelStructureRefresh();
@@ -1189,6 +1280,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _structureNodes.Clear();
         StructureRootItems.Clear();
+        // 树整体重建，旧 VM 全部作废，编辑态跟着结束（新 VM 的 IsEditing 默认就是 false）。
+        _editingNode = null;
 
         var root = SelectedMessage is null ? null : StructureNode.FromStructure(SelectedMessage.Structure);
         if (root is not null)

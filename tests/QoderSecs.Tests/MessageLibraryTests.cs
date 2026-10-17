@@ -249,5 +249,106 @@ public sealed class MessageLibraryTests
             .Attribute("ExtraAttr")!.Value);
         Assert.HasCount(3, library.Messages);
     }
+
+    [TestMethod]
+    public void RemoveMessage_MiddleEntryShiftsLaterIndices()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        library.RemoveMessage(library.Messages[1]);
+
+        // Index 是位置，删一条后面全部前移；旧快照的 Index 从这里开始就不能再用了。
+        Assert.HasCount(2, library.Messages);
+        Assert.AreEqual("S1F1_AreYouThere", library.Messages[0].Name);
+        Assert.AreEqual(0, library.Messages[0].Index);
+        Assert.AreEqual("RecipeBody", library.Messages[1].Name);
+        Assert.AreEqual(1, library.Messages[1].Index);
+    }
+
+    [TestMethod]
+    public void RemoveMessage_LeavesNoBlankLineBehind()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        library.RemoveMessage(library.Messages[1]);
+        var exported = library.Export();
+
+        // 换行缩进要跟消息一起走，否则删除处会留下成片空行，文本工具里比对就是整片不同。
+        var lines = exported.Split('\n');
+        for (var i = 1; i < lines.Length; i++)
+        {
+            Assert.IsFalse(
+                lines[i].Trim().Length == 0 && lines[i - 1].Trim().Length == 0,
+                $"第 {i + 1} 行连着上一行都是空行：{Environment.NewLine}{exported}");
+        }
+
+        Assert.HasCount(2, library.Document.Descendants("Message").ToList());
+    }
+
+    [TestMethod]
+    public void RemoveMessage_DoesNotRewriteThePointersThatBreak()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        // 被指向的是 S1F2_OnlineData；删掉它，指向它的那条文本必须一个字都不动（用户 2026-10-18 定：只提示不改）。
+        library.RemoveMessage(library.Messages[1]);
+
+        Assert.AreEqual("S1F2_OnlineData", library.Messages[0].AutoReply);
+        Assert.IsNull(AutoReplyResolver.FindTarget(library, 1, 1));
+    }
+
+    [TestMethod]
+    public void RemoveMessage_KeepsTheRestOfTheDocumentLoadable()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        library.RemoveMessage(library.Messages[0]);
+        var reloaded = MessageLibrary.Load(library.Export());
+
+        Assert.HasCount(2, reloaded.Messages);
+        Assert.AreEqual("S1F2_OnlineData", reloaded.Messages[0].Name);
+        Assert.AreEqual("RecipeBody", reloaded.Messages[1].Name);
+
+        // 未知内容原样保留：DataDictionary、注释、Maps。
+        Assert.AreEqual("keep me", reloaded.Document.Root!.Element("DataDictionary")!.Element("UnknownEntry")!.Value);
+        Assert.IsTrue(reloaded.Document.DescendantNodes().OfType<XComment>().Any());
+        Assert.HasCount(7, reloaded.Document.Descendants("Maps").ToList());
+    }
+
+    [TestMethod]
+    public void RemoveMessage_LastEntryLeavesAnEmptyDictionaryThatStillGrows()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        while (library.Messages.Count > 0)
+        {
+            library.RemoveMessage(library.Messages[^1]);
+        }
+
+        Assert.IsEmpty(library.Messages);
+        Assert.IsFalse(library.Document.Root!.Element("MessageDictionary")!.Nodes().Any());
+
+        library.NewMessage(2, 3, "S2F3_New");
+        var reloaded = MessageLibrary.Load(library.Export());
+        Assert.HasCount(1, reloaded.Messages);
+        Assert.AreEqual("S2F3", reloaded.Messages[0].Signature);
+        Assert.AreEqual("S2F3_New", reloaded.Messages[0].Name);
+    }
+
+    [TestMethod]
+    public void RemoveMessage_RejectsStaleAndForeignEntries()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        var entry = library.Messages[0];
+        var foreign = MessageLibrary.Load(ReadFixture()).Messages[1];
+
+        Assert.ThrowsExactly<ArgumentException>(() => library.RemoveMessage(foreign));
+        Assert.HasCount(3, library.Messages);
+
+        library.RemoveMessage(entry);
+        // 同一条删两次：抛出来，且不能再动别的消息。
+        Assert.ThrowsExactly<ArgumentException>(() => library.RemoveMessage(entry));
+        Assert.HasCount(2, library.Messages);
+        Assert.ThrowsExactly<ArgumentNullException>(() => library.RemoveMessage(null!));
+    }
 }
 

@@ -112,6 +112,41 @@ public sealed class MessageLibrary
     }
 
     /// <summary>
+    /// 删掉一条消息，连它前面的换行缩进一起删——和 <see cref="NewMessage"/> 沿用缩进是同一条理由：
+    /// 不删干净的话 MessageDictionary 里会留下成片空行，同事拿文本工具比对 SXML 会看到删除处整片不同。
+    /// Index 是消息在 MessageDictionary 里的位置，删一条后面的全部前移，所以调用方手上的旧快照
+    /// 不能再来定位，删除之后要按 <see cref="Messages"/> 重新取。
+    /// </summary>
+    public void RemoveMessage(MessageEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var dictionary = _document.Root?.Element("MessageDictionary");
+        if (dictionary is null || !ReferenceEquals(entry.Element.Parent, dictionary))
+        {
+            // MessageEntry 是一次性快照：库换过或者同一条删两次时，手上的元素已经不在当前文档里了。
+            throw new ArgumentException("这条消息不在当前消息库里（库已换过，或者这条已经删掉了）。", nameof(entry));
+        }
+
+        var separator = entry.Element.PreviousNode;
+        entry.Element.Remove();
+        if (separator is XText text && string.IsNullOrWhiteSpace(text.Value))
+        {
+            text.Remove();
+        }
+
+        var leftovers = dictionary.Nodes().ToList();
+        if (!dictionary.Elements("Message").Any() && leftovers.All(node => node is XText))
+        {
+            // 最后一条删完只剩空白节点，导出会是「<MessageDictionary>    </MessageDictionary>」。
+            // 有注释就不动，未知内容原样保留是比空行更硬的口径。
+            dictionary.RemoveNodes();
+        }
+
+        Messages = ParseMessages(_document);
+    }
+
+    /// <summary>
     /// 用粘贴进来的 SML 覆盖一条消息的头和结构，其余内容（Name、Description、AutoReply、未知子元素）原样保留。
     /// </summary>
     public MessageEntry ApplySml(MessageEntry entry, ParsedSml parsed)

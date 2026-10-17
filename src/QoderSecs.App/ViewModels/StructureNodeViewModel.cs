@@ -44,6 +44,7 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     private bool _isExpanded = true;
     private bool _isSelected;
+    private bool _isEditing;
 
     public StructureNodeViewModel(StructureNode node, StructureNodeViewModel? parent, MainViewModel owner)
     {
@@ -73,6 +74,17 @@ public sealed class StructureNodeViewModel : ObservableObject
     {
         get => _isExpanded;
         set => SetProperty(ref _isExpanded, value);
+    }
+
+    /// <summary>
+    /// 就地编辑态：双击行或 F2 打开，选中换到别的节点、整棵树重建时关掉。
+    /// 只管显不显示行内那两个框，不管提交时机——名称和值还是走 EditName / EditValue
+    /// 那对 setter，边敲边写，和底部那两个框同一套语义（用户 2026-10-18 定）。
+    /// </summary>
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set => SetProperty(ref _isEditing, value);
     }
 
     /// <summary>

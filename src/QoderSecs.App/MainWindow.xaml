@@ -311,7 +311,17 @@
                              BorderThickness="0"
                              ItemsSource="{Binding Messages}"
                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                             SelectedItem="{Binding SelectedMessage, Mode=TwoWay}">
+                             SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
+                             PreviewKeyDown="MessageListPreviewKeyDown">
+                        <!-- 删除入口：右键菜单 + Delete 键，不加工具条按钮（那里已经满了）。
+                             菜单挂在列表而不是行上，PlacementTarget 就是 ListBox，
+                             菜单项的 DataContext 直接是 VM，不用绕 RelativeSource。
+                             删的是鼠标底下那一条，靠下面 ItemContainerStyle 里的右键先选中那一步。 -->
+                        <ListBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="删除" Command="{Binding DeleteMessageCommand}" />
+                            </ContextMenu>
+                        </ListBox.ContextMenu>
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <!-- 不加这个，行的 UIA 名字就是 MessageEntry 的 ToString()，
@@ -324,6 +334,8 @@
                                         </MultiBinding>
                                     </Setter.Value>
                                 </Setter>
+                                <EventSetter Event="PreviewMouseRightButtonDown"
+                                             Handler="SelectMessageOnRightClick" />
                             </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
@@ -458,6 +470,7 @@
                                           Margin="4,0,4,4"
                                           BorderThickness="0"
                                           ItemsSource="{Binding StructureRootItems}"
+                                          MouseDoubleClick="StructureTreeMouseDoubleClick"
                                           PreviewKeyDown="StructureTreePreviewKeyDown">
                                     <TreeView.ItemContainerStyle>
                                         <Style TargetType="TreeViewItem">
@@ -469,38 +482,149 @@
                                             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
                                             <EventSetter Event="PreviewMouseRightButtonDown"
                                                          Handler="SelectNodeOnRightClick" />
+                                            <Style.Triggers>
+                                                <!-- 只有正在编辑的那一行拉满宽度，值框才吃得到 * 列；
+                                                     显示态不拉，长值预览照旧把行撑宽，行为不变。 -->
+                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
                                         </Style>
                                     </TreeView.ItemContainerStyle>
                                     <TreeView.ItemTemplate>
                                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                            <StackPanel Orientation="Horizontal"
-                                                        ToolTip="{Binding ValidationError}">
-                                                <Border Margin="0,1,6,1"
-                                                        Padding="5,0"
-                                                        Background="{Binding BadgeBrush}"
-                                                        CornerRadius="3">
-                                                    <TextBlock FontFamily="Cascadia Mono"
-                                                               FontSize="11"
-                                                               Foreground="White"
-                                                               Text="{Binding TypeLabel}" />
-                                                </Border>
-                                                <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
-                                                <TextBlock Margin="8,0,0,0"
-                                                           VerticalAlignment="Center"
-                                                           Text="{Binding ValuePreview}">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Foreground"
-                                                                    Value="{StaticResource MutedBrush}" />
+                                            <!-- 显示态和编辑态叠在同一行上，靠 IsEditing 切：双击行或 F2 进编辑，
+                                                 选中挪走、整棵树重建就退出。两个框绑的还是 EditName / EditValue，
+                                                 边敲边写、红框实时校验，和底部那两个框同一套语义（2026-10-18 定）。
+                                                 多行值（A / J）在行内只占一行，改长内容仍走底部那块。 -->
+                                            <Grid>
+                                                <StackPanel Orientation="Horizontal" ToolTip="{Binding ValidationError}">
+                                                    <StackPanel.Style>
+                                                        <Style TargetType="StackPanel">
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                                                    <Setter Property="Foreground" Value="#DC2626" />
+                                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </StackPanel>
+                                                    </StackPanel.Style>
+                                                    <Border Margin="0,1,6,1"
+                                                            Padding="5,0"
+                                                            Background="{Binding BadgeBrush}"
+                                                            CornerRadius="3">
+                                                        <TextBlock FontFamily="Cascadia Mono"
+                                                                   FontSize="11"
+                                                                   Foreground="White"
+                                                                   Text="{Binding TypeLabel}" />
+                                                    </Border>
+                                                    <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
+                                                    <TextBlock Margin="8,0,0,0"
+                                                               VerticalAlignment="Center"
+                                                               Text="{Binding ValuePreview}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground"
+                                                                        Value="{StaticResource MutedBrush}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                                                        <Setter Property="Foreground" Value="#DC2626" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="100" />
+                                                        <ColumnDefinition Width="*" MinWidth="120" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
+                                                    <Border Margin="0,1,6,1"
+                                                            Padding="5,0"
+                                                            VerticalAlignment="Center"
+                                                            Background="{Binding BadgeBrush}"
+                                                            CornerRadius="3">
+                                                        <TextBlock FontFamily="Cascadia Mono"
+                                                                   FontSize="11"
+                                                                   Foreground="White"
+                                                                   Text="{Binding TypeLabel}" />
+                                                    </Border>
+                                                    <TextBox Grid.Column="1"
+                                                             VerticalAlignment="Center"
+                                                             AutomationProperties.Name="节点名称"
+                                                             Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                                             ToolTip="可选，例如 PPID / COMMACK；留空就是没有名字" />
+                                                    <Grid Grid.Column="2">
+                                                        <TextBox VerticalAlignment="Center"
+                                                                 AcceptsReturn="False"
+                                                                 AutomationProperties.Name="节点值"
+                                                                 Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
+                                                                 TextWrapping="NoWrap"
+                                                                 ToolTip="{Binding ValidationError}">
+                                                            <TextBox.Style>
+                                                                <Style TargetType="TextBox">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding ShowsValueEditor}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="#DC2626" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                            <Setter Property="FocusManager.FocusedElement"
+                                                                                    Value="{Binding RelativeSource={RelativeSource Self}}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBox.Style>
+                                                        </TextBox>
+                                                        <ComboBox Width="90"
+                                                                  HorizontalAlignment="Left"
+                                                                  VerticalAlignment="Center"
+                                                                  AutomationProperties.Name="节点值"
+                                                                  ItemsSource="{Binding BooleanOptions}"
+                                                                  SelectedItem="{Binding EditValue}">
+                                                            <ComboBox.Style>
+                                                                <Style TargetType="ComboBox">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding ShowsBooleanEditor}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </ComboBox.Style>
+                                                        </ComboBox>
+                                                        <TextBlock VerticalAlignment="Center"
+                                                                   Foreground="{StaticResource MutedBrush}"
+                                                                   Text="{Binding ValueNote}"
+                                                                   TextTrimming="CharacterEllipsis">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding ShowsValueNote}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                </Grid>
+                                            </Grid>
                                         </HierarchicalDataTemplate>
                                     </TreeView.ItemTemplate>
                                 </TreeView>

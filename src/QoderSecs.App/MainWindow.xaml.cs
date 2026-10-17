@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using QoderSecs.App.ViewModels;
 using QoderSecs.Core.Connection;
 
@@ -137,6 +138,30 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>同上一条理由，左栏也一样：右键不先选中，删除就会落到之前选中的那条上。</summary>
+    private void SelectMessageOnRightClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBoxItem item)
+        {
+            item.IsSelected = true;
+        }
+    }
+
+    /// <summary>
+    /// 左栏的快捷键：Delete 删选中的那条消息（确认框在命令里弹）。
+    /// 只绑在这个列表上，中栏树的 Delete 还是删节点，两边不串台。
+    /// </summary>
+    private void MessageListPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.DeleteMessageCommand.Execute(null);
+        e.Handled = true;
+    }
+
     /// <summary>
     /// 消息属性框是失焦才提交的，回车本身不会离开输入框。
     /// 这里把焦点移走，让「敲完按回车」和「敲完点别处」是同一条提交路径。
@@ -153,7 +178,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 树的快捷键：Delete 直接删选中节点；Insert 打开选中节点的右键菜单，
+    /// 树的快捷键：Delete 直接删选中节点；F2 就地编辑选中那一行；Insert 打开选中节点的右键菜单，
     /// 键盘用户从那里进「添加子项 / 添加同级」的类型二级菜单。
     /// </summary>
     private void StructureTreePreviewKeyDown(object sender, KeyEventArgs e)
@@ -166,6 +191,13 @@ public partial class MainWindow : Window
         if (e.Key == Key.Delete)
         {
             viewModel.DeleteNodeCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F2 && viewModel.SelectedNode is { } selected)
+        {
+            viewModel.BeginStructureEdit(selected);
             e.Handled = true;
             return;
         }
@@ -185,6 +217,33 @@ public partial class MainWindow : Window
             menu.Placement = PlacementMode.Bottom;
             menu.IsOpen = true;
             e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// 双击行进就地编辑。从鼠标底下的元素往上找它所属的那一行，不用 SelectedNode：
+    /// 双击展开箭头那一下也会冒泡到这里，按 SelectedNode 就会把编辑开在另一行上。
+    /// 找到箭头就放过，那一下是给展开/折叠用的。
+    /// </summary>
+    private void StructureTreeMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel || e.OriginalSource is not Visual source)
+        {
+            return;
+        }
+
+        for (Visual? ancestor = source; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor) as Visual)
+        {
+            if (ancestor is ToggleButton)
+            {
+                return;
+            }
+
+            if (ancestor is TreeViewItem { DataContext: StructureNodeViewModel node })
+            {
+                viewModel.BeginStructureEdit(node);
+                return;
+            }
         }
     }
 
