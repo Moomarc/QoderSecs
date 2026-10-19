@@ -207,14 +207,16 @@ public sealed class HsmsLinkLoopbackTests
         Assert.IsFalse(onlineData.ReplyExpected);
         var onlineSml = SmlConverter.ToSml(onlineData);
         StringAssert.Contains(onlineSml, "'S1F2'");
-        StringAssert.Contains(onlineSml, "QODERSECS-M1");
+        // 样例库只留结构、不填数据，正文里两个 A 是空的（变量名是 SXML 层的东西，上线不带走），
+        // 所以这里认的是根列表的项数——证明带正文的 Secondary 真的回出来了。
+        StringAssert.Contains(onlineSml, "<L [2]");
 
         using var establish = new SecsMessage(1, 13, replyExpected: true);
         using var ack = await peer.SendAsync(establish);
         Assert.IsFalse(ack.ReplyExpected);
         var ackSml = SmlConverter.ToSml(ack);
         StringAssert.Contains(ackSml, "'S1F14'");
-        StringAssert.Contains(ackSml, "QODERSECS-M1");
+        StringAssert.Contains(ackSml, "<L [2]");
 
         // 对端收到的头里没有名称，本端发出去的那条才带库里的名字。
         var inbound = server.Transcript.Records.Where(record => record.Direction == SecsDirection.In).ToList();

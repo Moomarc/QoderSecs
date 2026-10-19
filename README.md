@@ -89,6 +89,8 @@ dotnet publish src/QoderSecs.App/QoderSecs.App.csproj \
 
 第一次启动时，程序会在 exe 旁边解出 `samples/common-commands.sxml`，并建出 `QoderSecsData/`，所以这个目录必须可写。解出来的样本只是一个普通文件，改它、删它、换成自己的都不受影响。启动后消息库是空的，样本不自动加载，要用的自己导入或拖进左栏。
 
+样本里是 21 条 GEM 常用命令的骨架：结构留着、变量名按标准填（`SVID`、`RPTID`、`CEID`、`CEED`、`RCMD`、`PPID`、`TID` 这些），数值一律空着，编号和取值按你手上那台机填。数据字典不在样本里预置，要用在「数据字典」页自己加。
+
 本机测一对连接：开两个 exe 实例，一个填 Active、一个填 Passive，地址用 `127.0.0.1`，先点 Passive 那边再点 Active。程序只提供 `127.0.0.1` 的默认参数，不含任何真实设备信息。
 
 ## 没做

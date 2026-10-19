@@ -1157,9 +1157,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         try
         {
-            // 名字自动取一个没被占用的：连着按两次「新建」就是「新消息」「新消息 2」。
+            // 名字自动取一个没被占用的：连着按两次「新建」就是「NewMessage」「NewMessage 2」。
             // 消息名必须唯一（SxFy 可以重复，名字不行），撞名不再是报错的理由。
-            var entry = _library.NewMessage(1, 1, _library.NextFreeMessageName("新消息"));
+            // 默认名用英文，和消息名本身的命名习惯一致。
+            var entry = _library.NewMessage(1, 1, _library.NextFreeMessageName("NewMessage"));
             _searchText = string.Empty;
             OnPropertyChanged(nameof(SearchText));
             RefreshMessages();

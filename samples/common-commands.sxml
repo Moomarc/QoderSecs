@@ -1,172 +1,63 @@
 <SXML>
-    <DataDictionary>
-        <U4 Name="SVID">
-            <Value>10001</Value>
-            <Maps Type="64">
-            </Maps>
-        </U4>
-        <U4 Name="CEID">
-            <Value>1001</Value>
-            <Maps Type="64">
-            </Maps>
-        </U4>
-        <L Name="SVIDList">
-            <U4 Name="SVID">
-                <Value>10001</Value>
-                <Maps Type="64">
-                </Maps>
-            </U4>
-            <U4 Name="SVID">
-                <Value>10002</Value>
-                <Maps Type="64">
-                </Maps>
-            </U4>
-            <U4 Name="SVID">
-                <Value>10003</Value>
-                <Maps Type="64">
-                </Maps>
-            </U4>
-        </L>
-        <L Name="SVIDValue">
-            <U4 Name="SVID">
-                <Value>10001</Value>
-                <Maps Type="64">
-                </Maps>
-            </U4>
-            <A Name="Value">
-                <Value>LOT-0001</Value>
-                <Maps Type="4096">
-                </Maps>
-            </A>
-        </L>
-        <L Name="ReportList">
-            <L Name="SVIDValue">
-                <U4 Name="SVID">
-                    <Value>10001</Value>
-                    <Maps Type="64">
-                    </Maps>
-                </U4>
-                <A Name="Value">
-                    <Value>LOT-0001</Value>
-                    <Maps Type="4096">
-                    </Maps>
-                </A>
-            </L>
-            <L Name="SVIDValue">
-                <U4 Name="SVID">
-                    <Value>10002</Value>
-                    <Maps Type="64">
-                    </Maps>
-                </U4>
-                <A Name="Value">
-                    <Value>5</Value>
-                    <Maps Type="4096">
-                    </Maps>
-                </A>
-            </L>
-        </L>
-        <L Name="ProcessCompletedEvent">
-            <U4 Name="DATAID">
-                <Value>0</Value>
-                <Maps Type="64">
-                </Maps>
-            </U4>
-            <U4 Name="CEID">
-                <Value>1001</Value>
-                <Maps Type="64">
-                </Maps>
-            </U4>
-            <L Name="ReportList">
-                <L Name="SVIDValue">
-                    <U4 Name="SVID">
-                        <Value>10001</Value>
-                        <Maps Type="64">
-                        </Maps>
-                    </U4>
-                    <A Name="Value">
-                        <Value>LOT-0001</Value>
-                        <Maps Type="4096">
-                        </Maps>
-                    </A>
-                </L>
-            </L>
-        </L>
-    </DataDictionary>
     <MessageDictionary>
-        <Message Name="S1F1_AreYouThere" Description="">
+        <Message Name="S1F1_AreYouThere" Description="在位查询，不带正文">
             <Stream>1</Stream>
             <Function>1</Function>
             <WBit>1</WBit>
             <AutoReply>S1F2_OnlineData</AutoReply>
             <Structure />
         </Message>
-        <Message Name="S1F2_OnlineData" Description="">
+        <Message Name="S1F2_OnlineData" Description="回复 S1F1，带机型和软件版本">
             <Stream>1</Stream>
             <Function>2</Function>
             <Structure>
                 <L>
                     <A Name="MDLN">
-                        <Value>QODERSECS-M1</Value>
+                        <Value />
                         <Maps Type="4096">
                         </Maps>
                     </A>
                     <A Name="SOFT">
-                        <Value>1.0.0</Value>
+                        <Value />
                         <Maps Type="4096">
                         </Maps>
                     </A>
                 </L>
             </Structure>
         </Message>
-        <Message Name="S1F3_StatusRequest" Description="查询 SVID">
+        <Message Name="S1F3_StatusRequest" Description="要查的状态变量 ID 依次列在里面">
             <Stream>1</Stream>
             <Function>3</Function>
             <WBit>1</WBit>
             <AutoReply>S1F4_StatusData</AutoReply>
             <Structure>
                 <L>
-                    <U4 Name="SVID_ControlState">
-                        <Value>10001</Value>
-                        <Maps Type="64">
-                        </Maps>
-                    </U4>
-                    <U4 Name="SVID_ProcessState">
-                        <Value>10002</Value>
-                        <Maps Type="64">
-                        </Maps>
-                    </U4>
-                    <U4 Name="SVID_ProcessedStripCount">
-                        <Value>10003</Value>
+                    <U4 Name="SVID">
+                        <Value />
                         <Maps Type="64">
                         </Maps>
                     </U4>
                 </L>
             </Structure>
         </Message>
-        <Message Name="S1F4_StatusData" Description="按 S1F3 的 SVID 顺序回">
+        <Message Name="S1F4_StatusData" Description="按 S1F3 里 SVID 的顺序回值，变量名和类型由机台定">
             <Stream>1</Stream>
             <Function>4</Function>
             <Structure>
                 <L>
-                    <U2 Name="ControlState">
-                        <Value>1</Value>
-                        <Maps Type="32">
-                        </Maps>
-                    </U2>
-                    <U2 Name="ProcessState">
-                        <Value>5</Value>
-                        <Maps Type="32">
-                        </Maps>
-                    </U2>
-                    <U4 Name="ProcessedStripCount">
-                        <Value>3105</Value>
-                        <Maps Type="64">
-                        </Maps>
-                    </U4>
                 </L>
             </Structure>
         </Message>
-        <Message Name="S1F13_EstablishComms" Description="">
+        <Message Name="S1F11_StatusVariableNamelist" Description="请求 SV 名称表，回信是 S1F12">
+            <Stream>1</Stream>
+            <Function>11</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="S1F13_EstablishComms" Description="建立通信，不带正文">
             <Stream>1</Stream>
             <Function>13</Function>
             <WBit>1</WBit>
@@ -179,18 +70,18 @@
             <Structure>
                 <L>
                     <B Name="COMMACK">
-                        <Value>00</Value>
+                        <Value />
                         <Maps Type="1024">
                         </Maps>
                     </B>
                     <L>
                         <A Name="MDLN">
-                            <Value>QODERSECS-M1</Value>
+                            <Value />
                             <Maps Type="4096">
                             </Maps>
                         </A>
                         <A Name="SOFT">
-                            <Value>1.0.0</Value>
+                            <Value />
                             <Maps Type="4096">
                             </Maps>
                         </A>
@@ -198,132 +89,123 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="S1F15_RequestOffline" Description="">
-            <Stream>1</Stream>
-            <Function>15</Function>
-            <WBit>1</WBit>
-            <AutoReply>S1F16_RequestOfflineAck</AutoReply>
-            <Structure />
-        </Message>
-        <Message Name="S1F16_RequestOfflineAck" Description="OFLACK=0 表示接受">
-            <Stream>1</Stream>
-            <Function>16</Function>
-            <Structure>
-                <B Name="OFLACK">
-                    <Value>00</Value>
-                    <Maps Type="1024">
-                    </Maps>
-                </B>
-            </Structure>
-        </Message>
-        <Message Name="S1F17_RequestOnline" Description="">
-            <Stream>1</Stream>
-            <Function>17</Function>
-            <WBit>1</WBit>
-            <AutoReply>S1F18_RequestOnlineAck</AutoReply>
-            <Structure />
-        </Message>
-        <Message Name="S1F18_RequestOnlineAck" Description="ONLACK=0 表示不接受，1 表示不接受但会自己上线，2 表示接受">
-            <Stream>1</Stream>
-            <Function>18</Function>
-            <Structure>
-                <B Name="ONLACK">
-                    <Value>02</Value>
-                    <Maps Type="1024">
-                    </Maps>
-                </B>
-            </Structure>
-        </Message>
-        <Message Name="S2F31_DateTimeSet" Description="">
+        <Message Name="S2F33_DefineReport" Description="建一个上报组合：RPTID 下挂一串 SVID">
             <Stream>2</Stream>
-            <Function>31</Function>
+            <Function>33</Function>
             <WBit>1</WBit>
-            <AutoReply>S2F32_DateTimeSetAck</AutoReply>
             <Structure>
-                <A Name="DATETIME">
-                    <Value>20261015120000</Value>
-                    <Maps Type="4096">
-                    </Maps>
-                </A>
+                <L>
+                    <U4 Name="DATAID">
+                        <Value />
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
+                    <L Name="RPTIDList">
+                        <L>
+                            <U4 Name="RPTID">
+                                <Value />
+                                <Maps Type="64">
+                                </Maps>
+                            </U4>
+                            <L Name="SVIDList">
+                                <U4 Name="SVID">
+                                    <Value />
+                                    <Maps Type="64">
+                                    </Maps>
+                                </U4>
+                            </L>
+                        </L>
+                    </L>
+                </L>
             </Structure>
         </Message>
-        <Message Name="S2F32_DateTimeSetAck" Description="">
+        <Message Name="S2F35_LinkEventReport" Description="把上报组合挂到收集事件上：CEID 对应一串 RPTID">
             <Stream>2</Stream>
-            <Function>32</Function>
-            <Structure />
+            <Function>35</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                    <U4 Name="DATAID">
+                        <Value />
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
+                    <L Name="CEEDList">
+                        <L>
+                            <U4 Name="CEID">
+                                <Value />
+                                <Maps Type="64">
+                                </Maps>
+                            </U4>
+                            <L Name="RPTIDList">
+                                <U4 Name="RPTID">
+                                    <Value />
+                                    <Maps Type="64">
+                                    </Maps>
+                                </U4>
+                            </L>
+                        </L>
+                    </L>
+                </L>
+            </Structure>
         </Message>
-        <Message Name="S2F41_HostCommand" Description="HCID 加参数表">
+        <Message Name="S2F37_EnableDisableEvents" Description="CEED 为真开事件上报、为假关；后面的列表是 CEID，空列表表示全部">
+            <Stream>2</Stream>
+            <Function>37</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                    <B Name="CEED">
+                        <Value />
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <L Name="CEIDList">
+                        <U4 Name="CEID">
+                            <Value />
+                            <Maps Type="64">
+                            </Maps>
+                        </U4>
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="S2F41_HostCommand" Description="远程命令名加参数表；不带参数时第二个 L 留空">
             <Stream>2</Stream>
             <Function>41</Function>
             <WBit>1</WBit>
             <AutoReply>S2F42_HostCommandAck</AutoReply>
             <Structure>
                 <L>
-                    <A Name="HCID">
-                        <Value>START_LOT</Value>
+                    <A Name="RCMD">
+                        <Value />
                         <Maps Type="4096">
                         </Maps>
                     </A>
                     <L Name="CPList">
-                        <L>
-                            <A Name="CPNAME">
-                                <Value>LOT_ID</Value>
-                                <Maps Type="4096">
-                                </Maps>
-                            </A>
-                            <A Name="CPVAL">
-                                <Value>LOT-0001</Value>
-                                <Maps Type="4096">
-                                </Maps>
-                            </A>
-                        </L>
-                        <L>
-                            <A Name="CPNAME">
-                                <Value>RECIPE</Value>
-                                <Maps Type="4096">
-                                </Maps>
-                            </A>
-                            <A Name="CPVAL">
-                                <Value>RC-DEMO-01</Value>
-                                <Maps Type="4096">
-                                </Maps>
-                            </A>
-                        </L>
                     </L>
                 </L>
             </Structure>
         </Message>
-        <Message Name="S2F42_HostCommandAck" Description="HCACK=0 表示命令可执行">
+        <Message Name="S2F42_HostCommandAck" Description="HCACK=0 表示命令可执行；每个参数名再回一个 CPACK">
             <Stream>2</Stream>
             <Function>42</Function>
             <Structure>
                 <L>
                     <B Name="HCACK">
-                        <Value>00</Value>
+                        <Value />
                         <Maps Type="1024">
                         </Maps>
                     </B>
                     <L Name="CPList">
                         <L>
                             <A Name="CPNAME">
-                                <Value>LOT_ID</Value>
+                                <Value />
                                 <Maps Type="4096">
                                 </Maps>
                             </A>
                             <B Name="CPACK">
-                                <Value>00</Value>
-                                <Maps Type="1024">
-                                </Maps>
-                            </B>
-                        </L>
-                        <L>
-                            <A Name="CPNAME">
-                                <Value>RECIPE</Value>
-                                <Maps Type="4096">
-                                </Maps>
-                            </A>
-                            <B Name="CPACK">
-                                <Value>00</Value>
+                                <Value />
                                 <Maps Type="1024">
                                 </Maps>
                             </B>
@@ -340,30 +222,30 @@
             <Structure>
                 <L>
                     <B Name="ALID">
-                        <Value>87D1</Value>
+                        <Value />
                         <Maps Type="1024">
                         </Maps>
                     </B>
                     <A Name="ALTEXT">
-                        <Value>BOND FORCE OUT OF RANGE</Value>
+                        <Value />
                         <Maps Type="4096">
                         </Maps>
                     </A>
                 </L>
             </Structure>
         </Message>
-        <Message Name="S5F2_AlarmReportAck" Description="">
+        <Message Name="S5F2_AlarmReportAck" Description="告警上报的应答">
             <Stream>5</Stream>
             <Function>2</Function>
             <Structure>
                 <B Name="ACK">
-                    <Value>00</Value>
+                    <Value />
                     <Maps Type="1024">
                     </Maps>
                 </B>
             </Structure>
         </Message>
-        <Message Name="S6F11_EventReport" Description="CEID 加报告内容">
+        <Message Name="S6F11_EventReport" Description="CEID 加上报内容，报告项里的数据由机台定">
             <Stream>6</Stream>
             <Function>11</Function>
             <WBit>1</WBit>
@@ -371,41 +253,108 @@
             <Structure>
                 <L>
                     <U4 Name="DATAID">
-                        <Value>0</Value>
+                        <Value />
                         <Maps Type="64">
                         </Maps>
                     </U4>
                     <U4 Name="CEID">
-                        <Value>1001</Value>
+                        <Value />
                         <Maps Type="64">
                         </Maps>
                     </U4>
                     <L Name="ReportList">
                         <L>
-                            <U4 Name="SVID">
-                                <Value>10001</Value>
+                            <U4 Name="RPTID">
+                                <Value />
                                 <Maps Type="64">
                                 </Maps>
                             </U4>
-                            <A Name="Value">
-                                <Value>LOT-0001</Value>
-                                <Maps Type="4096">
-                                </Maps>
-                            </A>
+                            <L Name="Report">
+                            </L>
                         </L>
                     </L>
                 </L>
             </Structure>
         </Message>
-        <Message Name="S6F12_EventReportAck" Description="">
+        <Message Name="S6F12_EventReportAck" Description="事件上报的应答">
             <Stream>6</Stream>
             <Function>12</Function>
             <Structure>
                 <B Name="ACK">
-                    <Value>00</Value>
+                    <Value />
                     <Maps Type="1024">
                     </Maps>
                 </B>
+            </Structure>
+        </Message>
+        <Message Name="S7F3_ProcessProgramSend" Description="下发配方：PPID 加未格式化的 PPBODY">
+            <Stream>7</Stream>
+            <Function>3</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                    <A Name="PPID">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <A Name="PPBODY">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="S7F5_ProcessProgramRequest" Description="按 PPID 反向读取机台里的配方">
+            <Stream>7</Stream>
+            <Function>5</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <A Name="PPID">
+                    <Value />
+                    <Maps Type="4096">
+                    </Maps>
+                </A>
+            </Structure>
+        </Message>
+        <Message Name="S7F17_DeleteProcessProgram" Description="删除指定 PPID，列表为空表示删除全部">
+            <Stream>7</Stream>
+            <Function>17</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                    <A Name="PPID">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="S7F19_CurrentEPPDRequest" Description="查机台现有配方清单，只有报头没有正文，回信是 S7F20">
+            <Stream>7</Stream>
+            <Function>19</Function>
+            <WBit>1</WBit>
+            <Structure />
+        </Message>
+        <Message Name="S10F3_TerminalDisplaySingle" Description="往机台屏幕发一行显示：TID 加 TEXT">
+            <Stream>10</Stream>
+            <Function>3</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                    <B Name="TID">
+                        <Value />
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <A Name="TEXT">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
             </Structure>
         </Message>
     </MessageDictionary>

@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using QoderSecs.Core.Messages;
 
 namespace QoderSecs.Tests;
@@ -53,40 +54,65 @@ public sealed class SampleLibraryTests
             reloaded.Messages.Select(entry => entry.Name).ToList());
     }
 
+    /// <summary>
+    /// 样例库不再自带数据字典：CEID、SVID 这些编号每台机都不一样，预置进去等于替用户做了假设，
+    /// 用的时候在字典页自己加。
+    /// </summary>
     [TestMethod]
-    public void ExportRoundTripsWithoutLosingDictionaryEntries()
+    public void CarriesNoDataDictionary()
     {
-        var library = Sample();
-        var reloaded = MessageLibrary.Load(library.Export());
-
-        CollectionAssert.AreEqual(
-            library.DataEntries.Select(entry => entry.Name).ToList(),
-            reloaded.DataEntries.Select(entry => entry.Name).ToList());
+        Assert.IsEmpty(Sample().DataEntries, "样例库不该预置数据字典条目。");
     }
 
     /// <summary>
-    /// 字典里放的是 CEID、SVID 这类要翻文档才能凑齐的变量，界面靠类型名渲染每一项，
+    /// 这份库是按「留结构、不填数据」的口径给的：叶子节点的 &lt;Value&gt; 一律空着，
+    /// 编号和取值由用的人按手上那台机填。界面靠类型名渲染每一项，
     /// 认不出来的名字会显示成「未知元素类型」，所以整棵子树都得是已知类型。
     /// </summary>
     [TestMethod]
-    public void DictionaryHoldsCeidAndSvidVariablesOfKnownTypes()
+    public void StructuresAreKnownTypesAndCarryNoValues()
     {
-        var entries = Sample().DataEntries;
-
-        CollectionAssert.Contains(entries.Select(entry => entry.Name).ToList(), "CEID");
-        CollectionAssert.Contains(entries.Select(entry => entry.Name).ToList(), "SVID");
-
-        foreach (var element in entries.SelectMany(entry => new[] { entry.Element }.Concat(entry.Element.Descendants())))
+        foreach (var entry in Sample().Messages)
         {
-            if (element.Name == "Value" || element.Name == "Maps")
+            foreach (var element in (entry.Structure ?? new XElement("L")).Descendants()
+                         .Where(element => element.Name != "Value" && element.Name != "Maps"))
             {
-                continue;
-            }
+                Assert.IsTrue(
+                    SecsItemTypes.TryParse(element.Name.LocalName, out var type),
+                    $"{entry.Name} 里出现了认不出的元素 <{element.Name}>。");
 
-            Assert.IsTrue(
-                SecsItemTypes.TryParse(element.Name.LocalName, out _),
-                $"字典条目里出现了认不出的元素 <{element.Name}>。");
+                if (type == SecsItemType.List)
+                {
+                    continue;
+                }
+
+                Assert.IsTrue(
+                    string.IsNullOrWhiteSpace(element.Element("Value")?.Value),
+                    $"{entry.Name} 的 <{element.Name} {element.Attribute("Name")}> 还带着填好的数据。");
+            }
         }
+    }
+
+    /// <summary>
+    /// 消息清单是用户定的：GEM 常用命令留全，日期时间和上下线那几条不要。
+    /// 改动这份清单会先在这里撞到，改的人得是有意为之。
+    /// </summary>
+    [TestMethod]
+    public void MessageSetIsTheAgreedOne()
+    {
+        var actual = Sample().Messages
+            .Select(entry => entry.Signature)
+            .OrderBy(signature => signature, StringComparer.Ordinal)
+            .ToList();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "S10F3", "S1F1", "S1F11", "S1F13", "S1F14", "S1F2", "S1F3", "S1F4",
+                "S2F33", "S2F35", "S2F37", "S2F41", "S2F42",
+                "S5F1", "S5F2", "S6F11", "S6F12", "S7F17", "S7F19", "S7F3", "S7F5",
+            }.OrderBy(signature => signature, StringComparer.Ordinal).ToList(),
+            actual);
     }
 
     private static MessageLibrary Sample() => MessageLibrary.Load(
