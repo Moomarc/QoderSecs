@@ -19,7 +19,8 @@ public partial class App : Application
             var startupNotices = new[]
             {
                 paths.EnsureCreated(),
-                SampleLibrary.EnsureExtracted(paths.SampleLibraryPath)
+                SampleLibrary.EnsureExtracted(paths.SampleLibraryPath),
+                LogDirectoryCleaner.Clean(paths.LogsDirectory)
             }.Where(message => message is not null).ToArray();
 
             var viewModel = new MainViewModel(new ConnectionSettingsStore(paths.SettingsPath));

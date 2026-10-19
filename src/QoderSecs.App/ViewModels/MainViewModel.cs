@@ -54,9 +54,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _libraryPath = string.Empty;
     private string _searchText = string.Empty;
     private MessageEntry? _selectedMessage;
+    /// <summary>
+    /// 两棵树各自的节点登记。条目那一档和消息体那一档的元素永远是两批不同的 XElement，
+    /// 分段靠 Core 的 SecsSections，界面上不写第二份判断。
+    /// </summary>
     private readonly List<StructureNodeViewModel> _structureNodes = [];
-    private StructureNodeViewModel? _selectedNode;
+    private readonly List<StructureNodeViewModel> _entryNodes = [];
+
+    /// <summary>每棵树自己的选中项。字典页和结构页各自记一份，切页签不会把选中串到另一棵树上去。</summary>
+    private StructureNodeViewModel? _selectedStructureNode;
+    private StructureNodeViewModel? _selectedEntryNode;
     private StructureNodeViewModel? _editingNode;
+    private int _editorTab;
+
+    /// <summary>
+    /// 结构树的剪贴板，进程内一个槽。存的是克隆体——它不挂在任何树上，
+    /// 所以换消息、重新导入、删掉原节点都不会让这一份跟着变形。
+    /// </summary>
+    private XElement? _structureClipboard;
     private CancellationTokenSource? _structureRefresh;
     private string _pasteSmlText = string.Empty;
     private bool _loadingMessageEditor;
@@ -109,17 +124,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DuplicateMessageCommand = new RelayCommand(
             DuplicateMessage,
             () => SelectedMessage is not null);
-        AddChildCommand = new RelayCommand<SecsItemType>(
-            AddChild,
-            () => SelectedNode is not null
-                ? StructureEditor.CanAddChild(SelectedNode.Element)
-                // 空结构没有可选中的节点，加的是根节点；判断借 Core 的 CanAddChild，
-                // 和 AddChild 返回 null 与否必须是同一条，否则界面显示能点、点下去没反应。
-                : SelectedMessage?.Structure is { } structure && StructureEditor.CanAddChild(structure));
+        AddChildCommand = new RelayCommand<SecsItemType>(AddChild, CanAddChildToSelection);
         AddSiblingCommand = new RelayCommand<SecsItemType>(
             AddSibling,
             () => SelectedNode is not null && StructureEditor.CanAddSibling(SelectedNode.Element));
         DeleteNodeCommand = new RelayCommand(DeleteNode, () => SelectedNode is not null);
+        CopyNodeCommand = new RelayCommand(CopyNode, () => SelectedNode is not null);
+        PasteNodeCommand = new RelayCommand(PasteNode, CanPasteNode);
+        SaveNodeAsEntryCommand = new RelayCommand(SaveNodeAsEntry, () => SelectedNode is not null);
+        // 「新增数据」永远能点：字典是全局的一堆条目，不归某一条消息，
+        // 库里还没有条目时也正好要靠它建第一条。
+        NewEntryCommand = new RelayCommand<SecsItemType>(NewEntry);
+        DeleteEntryCommand = new RelayCommand(DeleteEntry, () => SelectedDataEntry is not null);
         ApplySmlCommand = new RelayCommand(
             ApplyPastedSml,
             () => SelectedMessage is not null && PasteSmlText.Trim().Length > 0);
@@ -127,6 +143,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SendCommand = AsyncCommand(SendMessageAsync, () => CanSend);
         _link.PhaseChanged += OnLinkPhaseChanged;
         _link.Transcript.RecordAdded += OnRecordAdded;
+        _link.Transcript.RecordRemoved += OnRecordRemoved;
 
         // 载入文件时整份换掉库实例，所以给取值委托而不是存引用。
         _link.LibraryProvider = () => _library;
@@ -158,6 +175,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public RelayCommand DeleteNodeCommand { get; }
 
+    public RelayCommand CopyNodeCommand { get; }
+
+    public RelayCommand PasteNodeCommand { get; }
+
     public RelayCommand ApplySmlCommand { get; }
 
     public AsyncRelayCommand ConnectCommand { get; }
@@ -168,41 +189,99 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<StructureNodeViewModel> StructureRootItems { get; } = [];
 
-    public StructureNodeViewModel? SelectedNode
+    /// <summary>字典页那棵树的顶层：一个条目就是一个顶层节点，不垫假根行（条目之间互不隶属）。</summary>
+    public ObservableCollection<StructureNodeViewModel> EntryRootItems { get; } = [];
+
+    /// <summary>数据字典那个页签的序号。页签顺序变了改这里，界面上不另找一遍。</summary>
+    public const int DictionaryTabIndex = 2;
+
+    /// <summary>
+    /// 消息编辑区当前停在哪个页签（0 结构、1 SML、2 数据字典）。
+    /// 命令落在哪棵树上问它，不问「上一次点的是哪一行」——
+    /// 人站在字典页却把删除加到消息结构上，是两棵树最容易出的错。
+    /// </summary>
+    public int EditorTab
     {
-        get => _selectedNode;
+        get => _editorTab;
         set
         {
-            if (ReferenceEquals(_selectedNode, value))
+            if (!SetProperty(ref _editorTab, value))
             {
                 return;
             }
 
-            var previous = _selectedNode;
-            _selectedNode = value;
-            if (previous is not null)
-            {
-                previous.IsSelected = false;
-                // 选中挪走了，上一行的行内编辑就结束。改出去的名称和值留住，不弹确认也不回滚
-                // （用户 2026-10-18 定：不做 Esc 取消，提交是即时的）。
-                previous.IsEditing = false;
-            }
-
-            if (ReferenceEquals(_editingNode, previous))
-            {
-                _editingNode = null;
-            }
-
-            if (value is not null)
-            {
-                value.IsSelected = true;
-            }
-
-            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedNode));
             OnPropertyChanged(nameof(HasSelectedNode));
             RaiseTreeCommandCanExecute();
         }
     }
+
+    /// <summary>
+    /// 当前这棵树的选中节点。两棵树各自记一份，读的时候按页签取，
+    /// 所以人站在哪一页，命令就作用在哪一页的选中项上。
+    /// </summary>
+    public StructureNodeViewModel? SelectedNode =>
+        EditorTab == DictionaryTabIndex ? _selectedEntryNode : _selectedStructureNode;
+
+    /// <summary>行 VM 的 IsSelected 变成 true 时走这里。落在哪一份看节点自己在哪一段，不问页签。</summary>
+    internal void OnNodeSelected(StructureNodeViewModel? node)
+    {
+        if (node is null)
+        {
+            // 命令做完时那个节点可能没建成（Core 拒了），这时保持原有选中，不清另一棵的。
+            return;
+        }
+
+        if (IsEntryNode(node))
+        {
+            SetSelectedNode(ref _selectedEntryNode, node);
+            SyncSelectedEntryFromTree();
+            return;
+        }
+
+        SetSelectedNode(ref _selectedStructureNode, node);
+    }
+
+    /// <summary>树里没有可选中的节点了（删到空、换消息、整棵树重建）。只清自己那一棵的选中。</summary>
+    internal void ClearStructureSelection() => SetSelectedNode(ref _selectedStructureNode, null);
+
+    internal void ClearEntrySelection() => SetSelectedNode(ref _selectedEntryNode, null);
+
+    private void SetSelectedNode(ref StructureNodeViewModel? lane, StructureNodeViewModel? value)
+    {
+        if (ReferenceEquals(lane, value))
+        {
+            return;
+        }
+
+        var previous = lane;
+        lane = value;
+        if (previous is not null)
+        {
+            previous.IsSelected = false;
+            // 选中挪走了，上一行的行内编辑就结束。改出去的名称和值留住，不弹确认也不回滚
+            // （用户 2026-10-18 定：不做 Esc 取消，提交是即时的）。
+            previous.IsEditing = false;
+        }
+
+        if (ReferenceEquals(_editingNode, previous))
+        {
+            _editingNode = null;
+        }
+
+        if (value is not null)
+        {
+            value.IsSelected = true;
+        }
+
+        OnPropertyChanged(nameof(SelectedNode));
+        OnPropertyChanged(nameof(HasSelectedNode));
+        RaiseTreeCommandCanExecute();
+    }
+
+    /// <summary>节点属于字典段还是消息段，判断只有一条：Core 的 SecsSections。</summary>
+    private static bool IsEntryNode(StructureNodeViewModel node) =>
+        SecsSections.Of(node.Element) == SecsSection.Dictionary;
 
     public bool HasSelectedNode => SelectedNode is not null;
 
@@ -258,6 +337,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>通信记录面板空着时的提示语；有记录时是空串，XAML 靠它把提示隐藏掉。</summary>
     public string RecordsHint => Records.Count == 0 ? "尚无通信记录" : string.Empty;
+
+    /// <summary>
+    /// 面板标题。超出条数上限被挤掉过老记录就要在这里说一句——
+    /// 面板上只剩 5000 条而会话跑了两万条，不写清楚就是「记录凭空少了」，属于交互正确性。
+    /// </summary>
+    public string RecordsTitle => _link.Transcript.DiscardedRecords > 0
+        ? $"通信记录（已达 {_link.Transcript.RecordCap} 条上限，丢掉最早的 {_link.Transcript.DiscardedRecords} 条）"
+        : "通信记录";
 
     public LinkPhase Phase
     {
@@ -705,6 +792,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             Records.Clear();
             OnPropertyChanged(nameof(RecordsHint));
+            OnPropertyChanged(nameof(RecordsTitle));
             try
             {
                 _link.Connect(profile);
@@ -715,6 +803,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            // 丢弃计数是 Core 在 Connect 里清的，这里再报一次面板标题才不会留旧数字。
+            OnPropertyChanged(nameof(RecordsTitle));
             StatusMessage = $"正在连接 {profile.IpAddress}:{profile.Port}（{profile.Mode}）。";
         }
         finally
@@ -810,6 +900,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             Records.Add(record);
             OnPropertyChanged(nameof(RecordsHint));
+        });
+    }
+
+    /// <summary>
+    /// Core 挤出上限之外的老记录时才会走到这里。面板上少一条是看得见的变化，
+    /// 所以标题里那句「丢掉最早的 N 条」要跟着一起刷新，不能只删列表。
+    /// </summary>
+    private void OnRecordRemoved(CommunicationRecord record)
+    {
+        OnUiThread(() =>
+        {
+            Records.Remove(record);
+            OnPropertyChanged(nameof(RecordsHint));
+            OnPropertyChanged(nameof(RecordsTitle));
         });
     }
 
@@ -927,7 +1031,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _searchText = string.Empty;
             OnPropertyChanged(nameof(SearchText));
             RefreshMessages();
-            StatusMessage = $"已导入 {library.Messages.Count} 条消息：{Path.GetFileName(path)}{note}";
+            // 换库就是把整份文档换掉，字典条目跟着整体重取。
+            RefreshDataEntries();
+            RefreshEntryTree();
+            var entriesNote = library.DataEntries.Count == 0
+                ? string.Empty
+                : $"、{library.DataEntries.Count} 个字典条目";
+            StatusMessage = $"已导入 {library.Messages.Count} 条消息{entriesNote}：{Path.GetFileName(path)}{note}";
             return true;
         }
         catch (Exception exception) when (
@@ -1002,16 +1112,30 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void ClearLibrary()
     {
-        var count = _library.Messages.Count;
-        if (count == 0)
+        // 清空是整份文档没了，字典条目跟着一起走，所以确认框里要把两样都报出来：
+        // 只有条目、没有消息的库也算「有东西可清」，不能提前当空库放过。
+        var parts = new List<string>();
+        if (_library.Messages.Count > 0)
+        {
+            parts.Add($"{_library.Messages.Count} 条消息");
+        }
+
+        if (_library.DataEntries.Count > 0)
+        {
+            parts.Add($"{_library.DataEntries.Count} 个字典条目");
+        }
+
+        if (parts.Count == 0)
         {
             StatusMessage = "消息库已经是空的。";
             return;
         }
 
+        var summary = string.Join("、", parts);
+
         // 防误触：默认焦点落在「否」上，回车不会直接清空。
         var answer = MessageBox.Show(
-            $"确定要清空消息库里的 {count} 条消息吗？没有导出过的改动会全部丢失。",
+            $"确定要清空消息库里的 {summary} 吗？没有导出过的改动会全部丢失。",
             "清空消息库",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning,
@@ -1024,21 +1148,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _library.Clear();
         _libraryPath = string.Empty;
         RefreshMessages();
-        StatusMessage = $"已清空消息库（原有 {count} 条消息）。";
+        RefreshDataEntries();
+        RefreshEntryTree();
+        StatusMessage = $"已清空消息库（原有 {summary}）。";
     }
 
     private void NewMessage()
     {
         try
         {
-            var entry = _library.NewMessage(1, 1, "新消息");
+            // 名字自动取一个没被占用的：连着按两次「新建」就是「新消息」「新消息 2」。
+            // 消息名必须唯一（SxFy 可以重复，名字不行），撞名不再是报错的理由。
+            var entry = _library.NewMessage(1, 1, _library.NextFreeMessageName("新消息"));
             _searchText = string.Empty;
             OnPropertyChanged(nameof(SearchText));
             RefreshMessages();
             SelectedMessage = Messages.FirstOrDefault(message => message.Index == entry.Index);
             StatusMessage = $"已新建 {entry.Signature}「{entry.Name}」。";
         }
-        catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException)
+        catch (Exception exception) when (exception is FormatException or ArgumentOutOfRangeException or ArgumentException)
         {
             Fail($"新建消息失败：{exception.Message}");
         }
@@ -1046,8 +1174,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// 复制选中的那条，副本紧跟在原条后面。除名字以外全部照抄，名字一律换成「原名 Copy」，
-    /// 后缀用英文是跟着消息名的命名习惯走的。不做查重：连着复制两次就是「X Copy」和「X Copy Copy」。
-    /// 名字必须和原条不同——自动回复按 Name 指向消息，两条同名之后指向落到谁身上变成看库里的顺序。
+    /// 撞了就依次试「原名 Copy 2」——后缀用英文是跟着消息名的命名习惯走的。
+    /// 名字必须和原条不同、也必须非空：自动回复按 Name 指向消息，两条同名之后指向落到谁身上
+    /// 变成看库里的顺序。SxFy 相同不要紧，同一 S2F41 可以有 START、STOP、PP_SELECT 三条。
     /// 不弹确认：这一步无损，撤销这套工具本来也不做。
     /// </summary>
     private void DuplicateMessage()
@@ -1058,11 +1187,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var name = entry.Name.Length == 0 ? "Copy" : $"{entry.Name} Copy";
+        var baseName = entry.Name.Length == 0 ? "Copy" : $"{entry.Name} Copy";
         MessageEntry copy;
         try
         {
-            copy = _library.DuplicateMessage(entry, name);
+            copy = _library.DuplicateMessage(entry, _library.NextFreeMessageName(baseName));
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException)
         {
@@ -1193,7 +1322,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         // 空结构没有可选中的节点，加的是这条消息的根元素：Core 的 AddChild 对空 <Structure>
         // 就是这个语义，提示语让点的也是这一步，不能在这里断掉。
-        var parent = SelectedNode?.Element ?? SelectedMessage?.Structure;
+        // 字典那一页不套用这一步：条目之间互不隶属，没选中条目就没有落点，不能替人挑一条。
+        var parent = SelectedNode?.Element
+            ?? (EditorTab == DictionaryTabIndex ? null : SelectedMessage?.Structure);
         if (parent is null)
         {
             return;
@@ -1207,14 +1338,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        RefreshStructure();
-        var addedNode = FindStructureNode(added);
+        RefreshTreeOf(added);
+        var addedNode = FindNode(added);
         if (addedNode?.Parent is { } parentNode)
         {
             parentNode.IsExpanded = true;
         }
 
-        SelectedNode = addedNode;
+        OnNodeSelected(addedNode);
         StatusMessage = isRoot
             ? $"已添加根节点 {SecsItemTypes.ElementName(type)}。"
             : $"已添加子项 {SecsItemTypes.ElementName(type)}。";
@@ -1228,6 +1359,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // 条目那一层的「同级」是另一条条目，归字典那条排版路管，不走结构树那一步。
+        if (IsEntryNode(node) && node.Parent is null && FindDataEntry(node) is { } currentEntry)
+        {
+            CreateEntry(type, currentEntry);
+            return;
+        }
+
         var added = StructureEditor.AddSibling(node.Element, type);
         if (added is null)
         {
@@ -1235,14 +1373,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        RefreshStructure();
-        var addedNode = FindStructureNode(added);
+        RefreshTreeOf(added);
+        var addedNode = FindNode(added);
         if (addedNode?.Parent is { } parent)
         {
             parent.IsExpanded = true;
         }
 
-        SelectedNode = addedNode;
+        OnNodeSelected(addedNode);
         StatusMessage = $"已添加同级 {SecsItemTypes.ElementName(type)}。";
     }
 
@@ -1254,6 +1392,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // 字典那一层的节点就是条目本身，删它要走 RemoveEntry：连它前面那段换行缩进一起删，
+        // 才不留成片空行给同事比对。StructureEditor.Delete 只管元素，不懂这一段排版。
+        if (IsEntryNode(node) && node.Parent is null)
+        {
+            DeleteEntry();
+            return;
+        }
+
+        // 段要在删之前问：元素一脱离文档就落到 Elsewhere，那棵树该刷哪一棵就再也问不出来了。
+        var isEntry = IsEntryNode(node);
         var parentElement = node.Element.Parent;
         if (!StructureEditor.Delete(node.Element))
         {
@@ -1261,9 +1409,208 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        RefreshStructure();
-        SelectedNode = parentElement is null ? null : FindStructureNode(parentElement);
+        if (isEntry)
+        {
+            RefreshEntryTree();
+        }
+        else
+        {
+            RefreshStructure();
+        }
+
+        if (parentElement is not null && FindNode(parentElement) is { } parentNode)
+        {
+            OnNodeSelected(parentNode);
+        }
+
         StatusMessage = $"已删除 {node.TypeLabel} 节点。";
+    }
+
+    private void CopyNode()
+    {
+        var node = SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+
+        _structureClipboard = StructureEditor.CloneSubtree(node.Element);
+        StatusMessage = $"已复制 {node.TypeLabel} 节点。";
+        RaiseTreeCommandCanExecute();
+    }
+
+    /// <summary>
+    /// 粘贴落在哪：选中的节点；结构页没选中就是这条消息的结构，那时收下的可能是根。
+    /// 字典页没选中条目时不给落点——条目互不隶属，粘到「字典根」等于凭空多出一条，
+    /// 那件事该由「新增数据」或「存为条目」明着做，不由 Ctrl+V 顺手做。
+    /// </summary>
+    private XElement? PasteTarget() => SelectedNode?.Element
+        ?? (EditorTab == DictionaryTabIndex ? null : SelectedMessage?.Structure);
+
+    private bool CanPasteNode()
+    {
+        if (_structureClipboard is null)
+        {
+            return false;
+        }
+
+        var target = PasteTarget();
+        return target is not null && StructureEditor.PlacementOf(target) != PastePlacement.Nowhere;
+    }
+
+    private void PasteNode()
+    {
+        var source = _structureClipboard;
+        var target = PasteTarget();
+        if (source is null || target is null)
+        {
+            return;
+        }
+
+        var placement = StructureEditor.PlacementOf(target);
+        if (placement == PastePlacement.Nowhere)
+        {
+            Fail("这个位置不能粘贴：它既不收子项，也没有同级位置。");
+            return;
+        }
+
+        // 每次粘的都是槽里这一份的克隆：槽本身必须一直不挂树，否则粘第二次
+        // 插进去的就是同一个实例，Core 会当成「搬活节点」拦下。
+        var pasted = StructureEditor.PasteInto(StructureEditor.CloneSubtree(source), target);
+        if (pasted is null)
+        {
+            Fail("这个位置不能粘贴。");
+            return;
+        }
+
+        RefreshTreeOf(pasted);
+        var pastedNode = FindNode(pasted);
+        if (pastedNode?.Parent is { } parent)
+        {
+            parent.IsExpanded = true;
+        }
+
+        OnNodeSelected(pastedNode);
+        StatusMessage = placement switch
+        {
+            PastePlacement.AsChild when target.Name.LocalName == "Structure"
+                => $"已粘贴为这条消息的根节点 {pasted.Name.LocalName}。",
+            PastePlacement.AsChild => $"已粘贴为子项 {pasted.Name.LocalName}。",
+            _ => $"已粘贴为同级 {pasted.Name.LocalName}。"
+        };
+    }
+
+    /// <summary>
+    /// 拖动时这个落点收不收、以什么方式收（搬走还是复制一份）。光标形状和放下去那一步都问它，
+    /// 界面那层不再判第二遍。
+    /// </summary>
+    public DropWay NodeDropWay(StructureNodeViewModel dragged, StructureNodeViewModel target) =>
+        StructureEditor.DropWayOf(dragged.Element, target.Element);
+
+    /// <summary>把 dragged 放到 target 上。搬还是复制由 Core 判，界面只看它给的答案。</summary>
+    public void DropNode(StructureNodeViewModel dragged, StructureNodeViewModel target)
+    {
+        ArgumentNullException.ThrowIfNull(dragged);
+        ArgumentNullException.ThrowIfNull(target);
+
+        switch (StructureEditor.DropWayOf(dragged.Element, target.Element))
+        {
+            case DropWay.Move:
+                MoveNode(dragged, target);
+                return;
+            case DropWay.Copy:
+                CopyNodeInto(dragged, target);
+                return;
+            default:
+                Fail(DropRefusalReason(dragged.Element, target.Element));
+                return;
+        }
+    }
+
+    /// <summary>
+    /// 字典页跨条目那一种落点：在落点插一份克隆，来源那一条不动。
+    /// 状态栏要说清这是复制，不然人会以为原来那条被挪走了。
+    /// </summary>
+    private void CopyNodeInto(StructureNodeViewModel dragged, StructureNodeViewModel target)
+    {
+        // 落点要在动之前问：插完之后 target 那一档可能就变了，照插完的状态会说错话。
+        var placement = StructureEditor.DropPlacementOf(dragged.Element, target.Element);
+        var copy = StructureEditor.CopyForDrop(dragged.Element, target.Element);
+        if (copy is null)
+        {
+            Fail("这个位置不收：复制一份也插不进去。");
+            return;
+        }
+
+        RefreshTreeOf(copy);
+        SelectDropped(FindNode(copy));
+        StatusMessage = placement == PastePlacement.AsChild
+            ? $"已把 {dragged.TypeLabel} 复制一份放进 {target.TypeLabel} 里，原来那一条没动。"
+            : $"已把 {dragged.TypeLabel} 复制一份排到 {target.TypeLabel} 后面，原来那一条没动。";
+    }
+
+    /// <summary>把 dragged 搬到 target 上。落点不收时树不动，状态栏说清为什么。</summary>
+    private void MoveNode(StructureNodeViewModel dragged, StructureNodeViewModel target)
+    {
+        // 落点要在搬之前问：搬完之后 target 那一档可能就变了（往空 <Structure> 里放一个节点，
+        // 它就不再接收了），照搬完的状态会说错话。
+        var placement = StructureEditor.DropPlacementOf(dragged.Element, target.Element);
+        if (!StructureEditor.Move(dragged.Element, target.Element))
+        {
+            Fail(DropRefusalReason(dragged.Element, target.Element));
+            return;
+        }
+
+        RefreshTreeOf(dragged.Element);
+        SelectDropped(FindNode(dragged.Element));
+        StatusMessage = placement switch
+        {
+            PastePlacement.AsChild => $"已把 {dragged.TypeLabel} 放进 {target.TypeLabel} 里。",
+            _ => $"已把 {dragged.TypeLabel} 移到 {target.TypeLabel} 后面。"
+        };
+    }
+
+    /// <summary>放下之后选中新位置那一行，父项顺手展开，不然复制出来的那份藏在折叠的节点里看不见。</summary>
+    private void SelectDropped(StructureNodeViewModel? droppedNode)
+    {
+        if (droppedNode?.Parent is { } parent)
+        {
+            parent.IsExpanded = true;
+        }
+
+        OnNodeSelected(droppedNode);
+    }
+
+    /// <summary>
+    /// 拒绝原因。判断顺序照 Core 的 DropPlacementOf：先能不能动，再是不是自己身上，
+    /// 再是不是自己的子树，然后是不是跨段，最后才是这个位置两档都不收。
+    /// </summary>
+    private static string DropRefusalReason(XElement dragged, XElement target)
+    {
+        if (!StructureEditor.CanMove(dragged))
+        {
+            return "这个节点不能拖：根元素只收东西，值和 Maps 不是能搬的元素。";
+        }
+
+        if (ReferenceEquals(dragged, target))
+        {
+            return "不能放在自己身上。";
+        }
+
+        for (var parent = target.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (ReferenceEquals(parent, dragged))
+            {
+                return "不能把它放进自己的子树里。";
+            }
+        }
+
+        if (SecsSections.Of(dragged) != SecsSections.Of(target))
+        {
+            return "消息结构和数据字典之间不能拖，用右键的复制和粘贴。";
+        }
+
+        return "这个位置不收：它既不能当父项，也没有同级位置。";
     }
 
     /// <summary>
@@ -1312,11 +1659,39 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         node.IsEditing = true;
     }
 
-    internal void OnStructureEdited()
+    /// <summary>
+    /// 把行内编辑收掉。名称和值是边敲边写进 XML 的，这里没有要提交的东西，只把「正在编辑」
+    /// 这个状态交出去。点到正在编辑那一行以外（树的空白处、工具栏、别的页签）走这一条——
+    /// 之前只有「选中挪到别的行」和「整棵树重建」两条路会收框，点空白处不改选中，
+    /// 那个框就一直开着。
+    /// </summary>
+    internal void EndStructureEdit()
     {
+        if (_editingNode is not { } editing)
+        {
+            return;
+        }
+
+        editing.IsEditing = false;
+        _editingNode = null;
+    }
+
+    /// <summary>
+    /// 行上填完一个字：延迟重算 SML 预览和校验。改的是字典里的条目时，条目快照也换一份——
+    /// DataEntry 是构造时拍的照片，不会自己跟着 XML 走，不刷名字框就还显示改之前那个值。
+    /// </summary>
+    internal void OnStructureEdited(StructureNodeViewModel node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
         CancelStructureRefresh();
         var cancellation = (_structureRefresh = new CancellationTokenSource()).Token;
         _ = RaiseStructureNotificationsAfterDelayAsync(cancellation);
+
+        if (IsEntryNode(node))
+        {
+            RefreshDataEntries();
+        }
     }
 
     private async Task RaiseStructureNotificationsAfterDelayAsync(CancellationToken cancellationToken)
@@ -1364,8 +1739,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _structureNodes.Clear();
         StructureRootItems.Clear();
-        // 树整体重建，旧 VM 全部作废，编辑态跟着结束（新 VM 的 IsEditing 默认就是 false）。
-        _editingNode = null;
+        // 这一棵的旧 VM 全部作废，编辑态跟着结束（新 VM 的 IsEditing 默认就是 false）。
+        // 正在编辑的要是字典那棵树上的行，不能顺手一起清：字典树没重建，那一行的框还开着，
+        // 而 _editingNode 一清空就没人再去关它，再双击另一行变成两行同时编辑
+        // （1597 行那条「同时只承认一行在编辑」的规矩就是这么破的）。
+        if (_editingNode is { } editing && !IsEntryNode(editing))
+        {
+            _editingNode = null;
+        }
 
         var root = SelectedMessage is null ? null : StructureNode.FromStructure(SelectedMessage.Structure);
         if (root is not null)
@@ -1378,7 +1759,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             node.IsExpanded = !collapsed.Contains(node.Element);
         }
 
-        SelectedNode = selected is null ? null : FindStructureNode(selected);
+        if (selected is null || FindNode(selected) is not { } restored)
+        {
+            ClearStructureSelection();
+        }
+        else
+        {
+            SetSelectedNode(ref _selectedStructureNode, restored);
+        }
+
         OnPropertyChanged(nameof(StructureHint));
         RaiseStructureNotifications();
         RaiseTreeCommandCanExecute();
@@ -1448,11 +1837,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var updated = _library.SetName(entry, name);
-        RefreshAfterMessageEdit(updated.Index);
-        StatusMessage = updated.Name.Length == 0
-            ? $"已清掉 {updated.Signature} 的名称。"
-            : $"已把 {updated.Signature} 的名称改成「{updated.Name}」。";
+        try
+        {
+            var updated = _library.SetName(entry, name);
+            RefreshAfterMessageEdit(updated.Index);
+            StatusMessage = $"已把 {updated.Signature} 的名称改成「{updated.Name}」。";
+        }
+        catch (ArgumentException exception)
+        {
+            // 空名字或者撞了别的消息：名字非空且唯一是 SecsExpress 对消息体的硬要求，
+            // 写进去同事那边打不开，所以这里拒掉并把框里的字改回存下来的那一个。
+            Fail($"改名失败：{exception.Message}");
+            SyncMessageEditor();
+        }
     }
 
     private void CommitHeader()
@@ -1533,16 +1930,391 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value)
         && value is >= 1 and <= 255;
 
-    internal void RegisterStructureNode(StructureNodeViewModel node) => _structureNodes.Add(node);
+    /// <summary>
+    /// 行 VM 造出来就按自己所在的段登记：字典段的进条目那一本，其余进消息结构那一本。
+    /// 两本分开，重建一棵树才不会把另一棵的展开和选中一起丢掉。
+    /// </summary>
+    internal void RegisterNode(StructureNodeViewModel node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
 
-    private StructureNodeViewModel? FindStructureNode(XElement element) =>
-        _structureNodes.FirstOrDefault(node => ReferenceEquals(node.Element, element));
+        var registry = IsEntryNode(node) ? _entryNodes : _structureNodes;
+        registry.Add(node);
+    }
+
+    private StructureNodeViewModel? FindNode(XElement element)
+    {
+        var registry = SecsSections.Of(element) == SecsSection.Dictionary ? _entryNodes : _structureNodes;
+        return registry.FirstOrDefault(node => ReferenceEquals(node.Element, element));
+    }
+
+    /// <summary>
+    /// 命令只改了其中一棵树，就只重建那一棵。
+    /// 字典这棵不能直接重建：条目 VM 包的是 <see cref="DataEntry"/> 那份快照，
+    /// 命令改的是活文档里的 XElement，快照不重取的话「添加子项」加进去的那一层
+    /// 在树上根本不会出现；所以先重取条目再重建。
+    /// </summary>
+    private void RefreshTreeOf(XElement element)
+    {
+        if (SecsSections.Of(element) == SecsSection.Dictionary)
+        {
+            // 先让库把条目清单按文档重拍，再往界面上抄：拖动改的是顶层条目的先后次序，
+            // 不重拍这一步，XML 换了序、字典页还是老序。
+            _library.SyncDataEntries();
+            RefreshDataEntries();
+            RefreshEntryTree();
+        }
+        else
+        {
+            RefreshStructure();
+        }
+    }
+
+    /// <summary>
+    /// 「添加子项」能不能点。判断必须和 AddChild 里算落点那一句是同一条，
+    /// 否则就是「菜单亮着、点下去没反应」。空结构那一步只归结构页。
+    /// </summary>
+    private bool CanAddChildToSelection() => SelectedNode is { } node
+        ? StructureEditor.CanAddChild(node.Element)
+        : EditorTab != DictionaryTabIndex
+            && SelectedMessage?.Structure is { } structure && StructureEditor.CanAddChild(structure);
 
     private void RaiseTreeCommandCanExecute()
     {
         AddChildCommand.RaiseCanExecuteChanged();
         AddSiblingCommand.RaiseCanExecuteChanged();
         DeleteNodeCommand.RaiseCanExecuteChanged();
+        CopyNodeCommand.RaiseCanExecuteChanged();
+        PasteNodeCommand.RaiseCanExecuteChanged();
+        // 「存为条目」和条目那一侧的「删除」看的是同一个选中项，跟着树命令一起刷，不另找时机。
+        RaiseEntryCommandCanExecute();
+    }
+
+    // ---------- 数据字典条目：单独存起来的 data 和 list ----------
+
+    private DataEntry? _selectedDataEntry;
+    private string _dataEntryName = string.Empty;
+    private bool _loadingDataEntry;
+    private bool _refreshingEntries;
+
+    public ObservableCollection<DataEntry> DataEntries { get; } = [];
+
+    public RelayCommand SaveNodeAsEntryCommand { get; }
+
+    public RelayCommand<SecsItemType> NewEntryCommand { get; }
+
+    public RelayCommand DeleteEntryCommand { get; }
+
+    public DataEntry? SelectedDataEntry
+    {
+        get => _selectedDataEntry;
+        set
+        {
+            // 列表重建时控件会反推一个 null 上来，那一次不算用户取消选中，和消息列表同一条处理。
+            if (_refreshingEntries && value is null)
+            {
+                return;
+            }
+
+            if (SetProperty(ref _selectedDataEntry, value))
+            {
+                OnPropertyChanged(nameof(HasSelectedDataEntry));
+                SyncDataEntryEditor();
+                RaiseEntryCommandCanExecute();
+            }
+        }
+    }
+
+    public bool HasSelectedDataEntry => SelectedDataEntry is not null;
+
+    /// <summary>
+    /// 选中条目的名字，就地改。留空是把 Name 属性去掉——数据元素的名字可空也可重（用户给的
+    /// SecsExpress 实测，树里字典里同一档）。只有拿旧快照改名这类 Core 拒的情况才把框里的字改回去。
+    /// </summary>
+    public string DataEntryName
+    {
+        get => _dataEntryName;
+        set
+        {
+            if (SetProperty(ref _dataEntryName, value) && !_loadingDataEntry)
+            {
+                CommitEntryName();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 条目列表整体重建：DataEntry 是活节点的一次性快照，存、改、删之后手上那份都可能作废，
+    /// 所以和左栏消息列表用同一套做法，不做增量同步。
+    /// keepIndex 是给「刚存进去的那一条要选中」用的。
+    /// </summary>
+    private void RefreshDataEntries(int? keepIndex = null)
+    {
+        var selected = keepIndex ?? SelectedDataEntry?.Index;
+        _refreshingEntries = true;
+        try
+        {
+            DataEntries.Clear();
+            foreach (var entry in _library.DataEntries)
+            {
+                DataEntries.Add(entry);
+            }
+        }
+        finally
+        {
+            _refreshingEntries = false;
+        }
+
+        SelectedDataEntry = selected is null ? null : DataEntries.FirstOrDefault(entry => entry.Index == selected);
+        OnPropertyChanged(nameof(EntryHint));
+        RaiseEntryCommandCanExecute();
+    }
+
+    /// <summary>
+    /// 条目树整体重建，和结构树那一条同一个做法：按 XElement 身份找回展开和选中，不做增量同步。
+    /// 条目里改过结构之后必须刷，否则 DataEntry 那份快照还是旧的，名字框会把改之前的值显示回去。
+    /// </summary>
+    private void RefreshEntryTree()
+    {
+        var collapsed = _entryNodes
+            .Where(node => !node.IsExpanded)
+            .Select(node => node.Element)
+            .ToHashSet(ReferenceEqualityComparer.Instance);
+        var selected = _selectedEntryNode?.Element;
+
+        _entryNodes.Clear();
+        EntryRootItems.Clear();
+
+        // 条目正在就地编辑时重建，那一行的框就没了；结构页那棵树没动，它的编辑态要留着。
+        if (_editingNode is { } editing && IsEntryNode(editing))
+        {
+            _editingNode = null;
+        }
+
+        foreach (var entry in DataEntries)
+        {
+            // 从活元素重新拍一份，不能用 entry.Node：那份是条目解析时的快照，
+            // 之后在字典里加的子项、改的值都不在里面——旧写法就是这么让树上一个字没变的。
+            EntryRootItems.Add(new StructureNodeViewModel(new StructureNode(entry.Element), null, this));
+        }
+
+        foreach (var node in _entryNodes)
+        {
+            node.IsExpanded = !collapsed.Contains(node.Element);
+        }
+
+        if (selected is not null && FindNode(selected) is { } restored)
+        {
+            SetSelectedNode(ref _selectedEntryNode, restored);
+        }
+        else
+        {
+            ClearEntrySelection();
+        }
+
+        SyncSelectedEntryFromTree();
+        OnPropertyChanged(nameof(EntryHint));
+        RaiseTreeCommandCanExecute();
+    }
+
+    /// <summary>字典页没条目时的提示语，和结构页那条同一个用法。</summary>
+    public string EntryHint => DataEntries.Count == 0
+        ? "还没有条目。点「新增数据」建一条，或者到结构页把选中的节点存为条目"
+        : string.Empty;
+
+    /// <summary>
+    /// 名字框和「删除条目」要的是条目本身，可人可能选在条目里面的某一节上，
+    /// 所以顺着父链走到顶层那一节点，再按元素身份认回它是哪一条条目。
+    /// </summary>
+    private void SyncSelectedEntryFromTree()
+    {
+        var root = _selectedEntryNode;
+        while (root?.Parent is { } parent)
+        {
+            root = parent;
+        }
+
+        SelectedDataEntry = root is null
+            ? null
+            : DataEntries.FirstOrDefault(entry => ReferenceEquals(entry.Element, root.Element));
+    }
+
+    /// <summary>把名字框填成选中条目那一个，带 guard，免得同步反过来又触发一次改名。</summary>
+    private void SyncDataEntryEditor()
+    {
+        _loadingDataEntry = true;
+        try
+        {
+            DataEntryName = SelectedDataEntry?.Name ?? string.Empty;
+        }
+        finally
+        {
+            _loadingDataEntry = false;
+        }
+    }
+
+    /// <summary>
+    /// 把结构页选中的那个节点存成条目。名字就取节点自己的名字，没有名字也照样存——
+    /// 数据元素的名字可空可重（SecsExpress 实测），不是主键，也不值得为它编一个。
+    /// 一律追加、重名也另起一条、不弹确认：条目和消息之间又是复制关系，所以存一次不可能改坏哪条消息。
+    /// </summary>
+    private void SaveNodeAsEntry()
+    {
+        var node = SelectedNode;
+        if (node is null)
+        {
+            return;
+        }
+
+        DataEntry entry;
+        try
+        {
+            entry = _library.SaveEntry(node.DisplayName, node.Element);
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            Fail($"存为条目失败：{exception.Message}");
+            return;
+        }
+
+        RefreshDataEntries(entry.Index);
+        RefreshEntryTree();
+        StatusMessage = entry.Name.Length == 0
+            ? $"已把 {node.TypeLabel} 存为条目（没有名字）。"
+            : $"已把 {node.TypeLabel} 存为条目「{entry.Name}」。";
+    }
+
+    private void CommitEntryName()
+    {
+        var entry = SelectedDataEntry;
+        if (entry is null)
+        {
+            return;
+        }
+
+        var previous = entry.Name;
+        var name = DataEntryName.Trim();
+        if (name == previous)
+        {
+            // 只多敲了空格：把输入框显示回真正存下来的名字。
+            OnPropertyChanged(nameof(DataEntryName));
+            return;
+        }
+
+        try
+        {
+            var updated = _library.RenameEntry(entry, name);
+            RefreshDataEntries(updated.Index);
+            RefreshEntryTree();
+            StatusMessage = updated.Name.Length == 0
+                ? $"已把条目「{previous}」的名字清空。"
+                : $"已把条目改成「{updated.Name}」。";
+        }
+        catch (ArgumentException exception)
+        {
+            Fail($"改名失败：{exception.Message}");
+            SyncDataEntryEditor();
+        }
+    }
+
+    /// <summary>
+    /// 「新增数据」的类型菜单走这里，建在末尾。
+    /// </summary>
+    private void NewEntry(SecsItemType type) => CreateEntry(type, null);
+
+    /// <summary>
+    /// 建一条条目。建出来先不带名字：数据元素的名字可空也可重（SecsExpress 实测），
+    /// 空着让人在行上填，比编一个「新条目」那种假名字干净。
+    /// <paramref name="after"/> 是给「在某一条目下面添加同级」用的——条目那一层的同级就是另一条条目，
+    /// 必须走 Core 的 NewEntry 那条排版路（它管着条目之间那格换行和 8 空格），
+    /// 直接用 StructureEditor.AddSibling 会把两行挤成一行。
+    /// </summary>
+    private void CreateEntry(SecsItemType type, DataEntry? after)
+    {
+        DataEntry entry;
+        try
+        {
+            entry = _library.NewEntry(string.Empty, type, after);
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            Fail($"新建条目失败：{exception.Message}");
+            return;
+        }
+
+        RefreshDataEntries(entry.Index);
+        RefreshEntryTree();
+        if (FindNode(entry.Element) is { } node)
+        {
+            OnNodeSelected(node);
+            BeginStructureEdit(node);
+        }
+
+        StatusMessage = after is null
+            ? $"已在字典里新建 {SecsItemTypes.ElementName(type)} 条目，名字直接在行上填（可以留空）。"
+            : $"已在「{after.Name}」后面新建 {SecsItemTypes.ElementName(type)} 条目。";
+    }
+
+    /// <summary>按顶层那一节点认条目：树里选中的可能是条目里面的某一节。</summary>
+    private DataEntry? FindDataEntry(StructureNodeViewModel node)
+    {
+        var root = node;
+        while (root.Parent is { } parent)
+        {
+            root = parent;
+        }
+
+        return DataEntries.FirstOrDefault(entry => ReferenceEquals(entry.Element, root.Element));
+    }
+
+    /// <summary>
+    /// 删掉选中的条目。这里弹确认，和删树节点不弹是两档：树节点删了从条目再插一份就回来，
+    /// 条目删了那份内容就没有下一个入口了。正文要说清已插入消息的那些副本不受影响，
+    /// 否则用户会以为删条目能把消息里那一坨也一起带走。
+    /// </summary>
+    private void DeleteEntry()
+    {
+        var entry = SelectedDataEntry;
+        if (entry is null)
+        {
+            return;
+        }
+
+        var label = entry.Name.Length == 0 ? "（没有名字的那一条）" : $"「{entry.Name}」";
+        var answer = MessageBox.Show(
+            $"确定删除条目{label}？不可恢复。已经复制进消息的那些内容不受影响。",
+            "删除条目",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var index = entry.Index;
+        try
+        {
+            _library.RemoveEntry(entry);
+        }
+        catch (ArgumentException exception)
+        {
+            Fail($"删除失败：{exception.Message}");
+            RefreshDataEntries();
+            RefreshEntryTree();
+            return;
+        }
+
+        // 删完往下走一格，和删消息同一行为；删的是最后一条时选中变空。
+        RefreshDataEntries(index);
+        RefreshEntryTree();
+        StatusMessage = $"已删除条目{label}。";
+    }
+
+    private void RaiseEntryCommandCanExecute()
+    {
+        SaveNodeAsEntryCommand.RaiseCanExecuteChanged();
+        DeleteEntryCommand.RaiseCanExecuteChanged();
     }
 
     private void LoadEditor(ConnectionProfile profile)

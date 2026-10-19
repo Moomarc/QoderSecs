@@ -6,11 +6,23 @@ namespace QoderSecs.Core.Connection;
 /// </summary>
 public sealed class TranscriptCorrelator
 {
+    /// <summary>
+    /// 内存里长期保留多少条通信记录。上限按 16KB 那条分档算：正文不超过
+    /// TranscriptLog.InlineLimit 的记录会在内存里留整份 SML，5000 条最坏约 80MB，上限按这条算档取。
+    /// </summary>
+    public const int DefaultRecordCap = 5000;
+
     private readonly object _gate = new();
     private readonly List<CommunicationRecord> _records = [];
     private readonly Dictionary<int, CommunicationRecord> _outstandingRequests = [];
     private readonly Dictionary<int, CommunicationRecord> _timedOutRequests = [];
     private readonly Dictionary<int, CommunicationRecord> _awaitingLocalReply = [];
+
+    /// <summary>保留多少条。设成 0 或负数就是不设上限。</summary>
+    public int RecordCap { get; set; } = DefaultRecordCap;
+
+    /// <summary>因为超出上限被丢掉的老记录条数，界面拿它说一句「已丢弃 N 条」。</summary>
+    public int DiscardedRecords { get; private set; }
 
     public IReadOnlyList<CommunicationRecord> Records
     {
@@ -25,12 +37,29 @@ public sealed class TranscriptCorrelator
 
     public event Action<CommunicationRecord>? RecordAdded;
 
-    public CommunicationRecord RecordOutbound(SecsHeader header, int systemBytes, string? sml, DateTimeOffset timestamp)
+    /// <summary>记录被上限挤掉时通知，界面那一份集合要跟着删，不然两边条数不一致。</summary>
+    public event Action<CommunicationRecord>? RecordRemoved;
+
+    /// <summary>
+    /// 记一条发出去的消息。日志位置要在记录进列表之前就挂好：RecordAdded 一响，
+    /// 别人立刻就能读这条记录，晚一步赋值读到的就是没有正文位置的半条。
+    /// </summary>
+    public CommunicationRecord RecordOutbound(
+        SecsHeader header,
+        int systemBytes,
+        string? sml,
+        DateTimeOffset timestamp,
+        long? smlSequence = null,
+        long? smlByteLength = null)
     {
         var status = header.ReplyExpected && !header.IsSecondary
             ? RecordStatus.AwaitingSecondary
             : RecordStatus.Sent;
-        var record = Add(new CommunicationRecord(SecsDirection.Out, systemBytes, header, timestamp, sml, status));
+        var record = Add(new CommunicationRecord(SecsDirection.Out, systemBytes, header, timestamp, sml, status)
+        {
+            SmlSequence = smlSequence,
+            SmlByteLength = smlByteLength
+        });
 
         lock (_gate)
         {
@@ -47,7 +76,13 @@ public sealed class TranscriptCorrelator
         return record;
     }
 
-    public CommunicationRecord RecordInbound(SecsHeader header, int systemBytes, string? sml, DateTimeOffset timestamp)
+    public CommunicationRecord RecordInbound(
+        SecsHeader header,
+        int systemBytes,
+        string? sml,
+        DateTimeOffset timestamp,
+        long? smlSequence = null,
+        long? smlByteLength = null)
     {
         if (header.IsSecondary)
         {
@@ -66,15 +101,24 @@ public sealed class TranscriptCorrelator
 
             if (request is null)
             {
-                return Add(new CommunicationRecord(SecsDirection.In, systemBytes, header, timestamp, sml, RecordStatus.OrphanSecondary));
+                return Add(new CommunicationRecord(
+                    SecsDirection.In, systemBytes, header, timestamp, sml, RecordStatus.OrphanSecondary)
+                {
+                    SmlSequence = smlSequence,
+                    SmlByteLength = smlByteLength
+                });
             }
 
             var isLate = request.Status == RecordStatus.TimedOut;
             var record = Add(new CommunicationRecord(
                 SecsDirection.In, systemBytes, header, timestamp, sml,
-                isLate ? RecordStatus.LateSecondary : RecordStatus.PairedSecondary));
+                isLate ? RecordStatus.LateSecondary : RecordStatus.PairedSecondary)
+            {
+                SmlSequence = smlSequence,
+                SmlByteLength = smlByteLength,
+                LinkedSystemBytes = systemBytes
+            });
 
-            record.LinkedSystemBytes = systemBytes;
             request.ElapsedMilliseconds = (int)Math.Round((timestamp - request.Timestamp).TotalMilliseconds);
             if (!isLate)
             {
@@ -85,7 +129,11 @@ public sealed class TranscriptCorrelator
         }
 
         var inboundStatus = header.ReplyExpected ? RecordStatus.AwaitingReply : RecordStatus.Received;
-        var inbound = Add(new CommunicationRecord(SecsDirection.In, systemBytes, header, timestamp, sml, inboundStatus));
+        var inbound = Add(new CommunicationRecord(SecsDirection.In, systemBytes, header, timestamp, sml, inboundStatus)
+        {
+            SmlSequence = smlSequence,
+            SmlByteLength = smlByteLength
+        });
         if (inboundStatus == RecordStatus.AwaitingReply)
         {
             lock (_gate)
@@ -156,17 +204,64 @@ public sealed class TranscriptCorrelator
             _outstandingRequests.Clear();
             _timedOutRequests.Clear();
             _awaitingLocalReply.Clear();
+            DiscardedRecords = 0;
         }
     }
 
     private CommunicationRecord Add(CommunicationRecord record)
     {
+        List<CommunicationRecord> dropped = [];
         lock (_gate)
         {
             _records.Add(record);
+            TrimLocked(dropped);
         }
 
         RecordAdded?.Invoke(record);
+
+        // 丢弃通知放在锁外：界面的集合是 Dispatcher 那边的事，拿着协议的锁回去调它不安全。
+        foreach (var droppedRecord in dropped)
+        {
+            DiscardedRecords++;
+            RecordRemoved?.Invoke(droppedRecord);
+        }
+
         return record;
+    }
+
+    /// <summary>
+    /// 从最老的开始丢，丢到不超过上限为止。
+    /// 还挂在三本配对表里的记录不能丢：请求被丢了它的回复就配不上，
+    /// 标成超时的丢了那条迟到回复也没地方挂——配对正确性比条数重要，
+    /// 所以极端情况下（几千条都没回）实际条数会顶在之上。
+    /// 最新那一条也留着：调用方是 Add 里先记账、登记配对表在 Add 之后，
+    /// 万一前面全挂着，把刚交给调用方那条挤掉就等于返回了一个列表里找不到的记录。
+    /// </summary>
+    private void TrimLocked(List<CommunicationRecord> dropped)
+    {
+        var cap = RecordCap;
+        if (cap <= 0 || _records.Count <= cap)
+        {
+            return;
+        }
+
+        var overflow = _records.Count - cap;
+        for (var i = 0; i < _records.Count - 1 && dropped.Count < overflow; i++)
+        {
+            var candidate = _records[i];
+            if (_outstandingRequests.ContainsValue(candidate)
+                || _timedOutRequests.ContainsValue(candidate)
+                || _awaitingLocalReply.ContainsValue(candidate))
+            {
+                continue;
+            }
+
+            dropped.Add(candidate);
+        }
+
+        foreach (var record in dropped)
+        {
+            _records.Remove(record);
+        }
     }
 }

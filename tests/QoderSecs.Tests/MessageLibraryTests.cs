@@ -25,9 +25,11 @@ public sealed class MessageLibraryTests
         Assert.IsNotNull(first.Structure);
         Assert.IsFalse(first.Structure!.HasElements);
         Assert.AreEqual("S1F1", first.Signature);
+        Assert.AreEqual("W", first.WBitMark);
 
         var second = library.Messages[1];
         Assert.IsFalse(second.WBit);
+        Assert.AreEqual("-", second.WBitMark);
         Assert.IsNull(second.AutoReply);
         Assert.IsNotNull(second.Structure);
 
@@ -122,16 +124,24 @@ public sealed class MessageLibraryTests
         Assert.IsFalse(library.Export().Contains("S1F1_AreYouThere", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// 消息名的两条规则：非空、且不许多条共用。这是 SecsExpress 对消息体的硬要求
+    /// （SecsExpress 实测），反过来 SxFy 可以重复。
+    /// </summary>
     [TestMethod]
-    public void SetName_BlankRemovesTheAttribute()
+    public void SetName_RejectsBlankAndNamesAnotherMessageAlreadyHas()
     {
         var library = MessageLibrary.Load(ReadFixture());
+        var first = library.Messages[0];
+        var otherName = library.Messages[1].Name;
+        var exported = library.Export();
 
-        var updated = library.SetName(library.Messages[1], "   ");
+        Assert.ThrowsExactly<ArgumentException>(() => library.SetName(first, "   "));
+        Assert.ThrowsExactly<ArgumentException>(() => library.SetName(first, otherName));
+        Assert.AreEqual(exported, library.Export(), "拒掉之后文档一个字都不该变");
 
-        Assert.AreEqual(string.Empty, updated.Name);
-        Assert.IsNull(updated.Element.Attribute("Name"));
-        Assert.AreEqual("Description", updated.Element.Attributes().Single().Name.LocalName);
+        // 改回自己原来那个名字不算撞自己。
+        Assert.AreEqual(first.Name, library.SetName(first, first.Name).Name);
     }
 
     [TestMethod]
@@ -417,16 +427,84 @@ public sealed class MessageLibraryTests
         Assert.AreSame(entry.Element, original.Element);
     }
 
+    /// <summary>副本的名字同样受那两条规则约束：空不行、撞别的消息也不行，拦下来不留半截副本。</summary>
     [TestMethod]
-    public void DuplicateMessage_BlankNameRemovesTheAttribute()
+    public void DuplicateMessage_RejectsBlankAndDuplicateNames()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        var exported = library.Export();
+
+        Assert.ThrowsExactly<ArgumentException>(() => library.DuplicateMessage(library.Messages[0], "   "));
+        Assert.ThrowsExactly<ArgumentException>(
+            () => library.DuplicateMessage(library.Messages[0], library.Messages[1].Name));
+
+        Assert.HasCount(3, library.Messages);
+        Assert.AreEqual(exported, library.Export());
+    }
+
+    [TestMethod]
+    public void NextFreeMessageName_SkipsTheNamesTheLibraryAlreadyHas()
     {
         var library = MessageLibrary.Load(ReadFixture());
 
-        var copy = library.DuplicateMessage(library.Messages[0], "   ");
+        Assert.AreEqual("消息", library.NextFreeMessageName("   "), "空白的基名落一个能认出来的名字，不是报错");
+        Assert.AreEqual(library.Messages[0].Name + " 2", library.NextFreeMessageName(library.Messages[0].Name));
 
-        Assert.AreEqual(string.Empty, copy.Name);
-        Assert.IsNull(copy.Element.Attribute("Name"));
-        Assert.AreEqual("link test", copy.Element.Attribute("Description")?.Value);
+        // 连着按两次「新建」走的就是这条路：第二次不该因为撞名而失败。
+        library.NewMessage(1, 99, library.NextFreeMessageName("消息"));
+        Assert.AreEqual("消息 2", library.NextFreeMessageName("消息"));
+        library.NewMessage(1, 99, library.NextFreeMessageName("消息"));
+        Assert.AreEqual("消息 3", library.NextFreeMessageName("消息"));
+    }
+
+    /// <summary>同一个 SxFy 摆三条、靠名字区分（同一个 S2F41 摆 START/STOP/PP_SELECT 是正常用法）。</summary>
+    [TestMethod]
+    public void TheSameSignatureCanRepeatButTheNameCannot()
+    {
+        const string xml = """
+            <SXML>
+                <DataDictionary>
+                </DataDictionary>
+                <MessageDictionary>
+                    <Message Name="START">
+                        <Stream>2</Stream>
+                        <Function>41</Function>
+                        <AutoReply>ACK_START</AutoReply>
+                        <Structure />
+                    </Message>
+                    <Message Name="STOP">
+                        <Stream>2</Stream>
+                        <Function>41</Function>
+                        <Structure />
+                    </Message>
+                    <Message Name="PP_SELECT">
+                        <Stream>2</Stream>
+                        <Function>41</Function>
+                        <Structure />
+                    </Message>
+                    <Message Name="ACK_START">
+                        <Stream>2</Stream>
+                        <Function>42</Function>
+                        <Structure />
+                    </Message>
+                </MessageDictionary>
+            </SXML>
+            """;
+        var library = MessageLibrary.Load(xml);
+
+        CollectionAssert.AreEqual(
+            new[] { "START", "STOP", "PP_SELECT", "ACK_START" },
+            library.Messages.Select(entry => entry.Name).ToList());
+        Assert.AreEqual("S2F41", library.Messages[0].Signature);
+        Assert.AreEqual("S2F41", library.Messages[2].Signature, "三条共用一个 SxFy 是合法的");
+
+        // 再加一条同 SxFy 的：只要名字是新的就收。
+        var fourth = library.NewMessage(2, 41, "EQUIP_SELECT");
+        Assert.AreEqual("S2F41", fourth.Signature);
+        Assert.ThrowsExactly<ArgumentException>(() => library.NewMessage(2, 41, "STOP"));
+
+        // 同 SxFy 多条时取第一条配了 AutoReply 的，指向按名字精确落——名字唯一就是这一步不出歧义的理由。
+        Assert.AreEqual("ACK_START", AutoReplyResolver.FindTarget(library, 2, 41)?.Name);
     }
 
     [TestMethod]

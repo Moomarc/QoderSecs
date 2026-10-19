@@ -1,5 +1,96 @@
 <SXML>
     <DataDictionary>
+        <U4 Name="SVID">
+            <Value>10001</Value>
+            <Maps Type="64">
+            </Maps>
+        </U4>
+        <U4 Name="CEID">
+            <Value>1001</Value>
+            <Maps Type="64">
+            </Maps>
+        </U4>
+        <L Name="SVIDList">
+            <U4 Name="SVID">
+                <Value>10001</Value>
+                <Maps Type="64">
+                </Maps>
+            </U4>
+            <U4 Name="SVID">
+                <Value>10002</Value>
+                <Maps Type="64">
+                </Maps>
+            </U4>
+            <U4 Name="SVID">
+                <Value>10003</Value>
+                <Maps Type="64">
+                </Maps>
+            </U4>
+        </L>
+        <L Name="SVIDValue">
+            <U4 Name="SVID">
+                <Value>10001</Value>
+                <Maps Type="64">
+                </Maps>
+            </U4>
+            <A Name="Value">
+                <Value>LOT-0001</Value>
+                <Maps Type="4096">
+                </Maps>
+            </A>
+        </L>
+        <L Name="ReportList">
+            <L Name="SVIDValue">
+                <U4 Name="SVID">
+                    <Value>10001</Value>
+                    <Maps Type="64">
+                    </Maps>
+                </U4>
+                <A Name="Value">
+                    <Value>LOT-0001</Value>
+                    <Maps Type="4096">
+                    </Maps>
+                </A>
+            </L>
+            <L Name="SVIDValue">
+                <U4 Name="SVID">
+                    <Value>10002</Value>
+                    <Maps Type="64">
+                    </Maps>
+                </U4>
+                <A Name="Value">
+                    <Value>5</Value>
+                    <Maps Type="4096">
+                    </Maps>
+                </A>
+            </L>
+        </L>
+        <L Name="ProcessCompletedEvent">
+            <U4 Name="DATAID">
+                <Value>0</Value>
+                <Maps Type="64">
+                </Maps>
+            </U4>
+            <U4 Name="CEID">
+                <Value>1001</Value>
+                <Maps Type="64">
+                </Maps>
+            </U4>
+            <L Name="ReportList">
+                <L Name="SVIDValue">
+                    <U4 Name="SVID">
+                        <Value>10001</Value>
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
+                    <A Name="Value">
+                        <Value>LOT-0001</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </L>
+        </L>
     </DataDictionary>
     <MessageDictionary>
         <Message Name="S1F1_AreYouThere" Description="">

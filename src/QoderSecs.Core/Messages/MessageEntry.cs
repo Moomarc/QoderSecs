@@ -41,4 +41,10 @@ public sealed record MessageEntry
     public int Index { get; }
 
     public string Signature => $"S{Stream}F{Function}";
+
+    /// <summary>
+    /// 左栏那一列的记号：置了 W 位写 W，没置写短横。
+    /// 放在 Core 是为了让「哪些消息要求回复」这条判断能被测到，界面只做绑定。
+    /// </summary>
+    public string WBitMark => WBit ? "W" : "-";
 }

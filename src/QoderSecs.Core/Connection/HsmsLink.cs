@@ -611,7 +611,7 @@ public sealed class HsmsLink : IAsyncDisposable
                 }
             }
 
-            AttachLogDetails(Transcript.RecordOutbound(header, systemBytes, inline, at), sequence, byteLength);
+            AttachLogDetails(Transcript.RecordOutbound(header, systemBytes, inline, at, sequence, byteLength));
         }
         else
         {
@@ -623,7 +623,7 @@ public sealed class HsmsLink : IAsyncDisposable
                 }
             }
 
-            AttachLogDetails(Transcript.RecordInbound(header, systemBytes, inline, at), sequence, byteLength);
+            AttachLogDetails(Transcript.RecordInbound(header, systemBytes, inline, at, sequence, byteLength));
         }
     }
 
@@ -639,12 +639,9 @@ public sealed class HsmsLink : IAsyncDisposable
         }
     }
 
-    /// <summary>把日志位置和状态变化挂到记录上：位置供详情读盘，状态变化写进 detail.log。</summary>
-    private void AttachLogDetails(CommunicationRecord record, long? sequence, long byteLength)
+    /// <summary>把状态变化写进 detail.log。日志位置和正文长度在记录进列表之前就挂好了。</summary>
+    private void AttachLogDetails(CommunicationRecord record)
     {
-        record.SmlSequence = sequence;
-        record.SmlByteLength = byteLength;
-
         Log?.EnqueueDetail(
             $"{record.DirectionText} {record.MessageText} sys={record.SystemBytesText} 状态={record.StatusText}");
         record.PropertyChanged += (_, e) =>

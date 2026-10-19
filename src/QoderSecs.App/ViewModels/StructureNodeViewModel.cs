@@ -52,7 +52,7 @@ public sealed class StructureNodeViewModel : ObservableObject
         Element = node.Element;
         Parent = parent;
         Owner = owner;
-        owner.RegisterStructureNode(this);
+        owner.RegisterNode(this);
 
         foreach (var child in node.Children)
         {
@@ -77,7 +77,7 @@ public sealed class StructureNodeViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 就地编辑态：双击行或 F2 打开，选中换到别的节点、整棵树重建时关掉。
+    /// 就地编辑态：双击行或 F2 打开，点到这一行以外、选中换到别的节点、整棵树重建时关掉。
     /// 只管显不显示行内那两个框，不管提交时机——名称和值还是走 EditName / EditValue
     /// 那对 setter，边敲边写，和底部那两个框同一套语义（用户 2026-10-18 定）。
     /// </summary>
@@ -88,7 +88,7 @@ public sealed class StructureNodeViewModel : ObservableObject
     }
 
     /// <summary>
-    /// TreeViewItem.IsSelected 双向绑到这里。选中变化要汇到 Owner.SelectedNode 一处，
+    /// TreeViewItem.IsSelected 双向绑到这里。选中变化要汇到 Owner 一处（由它按段落进对应那棵树），
     /// 否则右键菜单、快捷键和删除各自读到的"选中节点"会对不上。
     /// </summary>
     public bool IsSelected
@@ -98,7 +98,7 @@ public sealed class StructureNodeViewModel : ObservableObject
         {
             if (SetProperty(ref _isSelected, value) && value)
             {
-                Owner.SelectedNode = this;
+                Owner.OnNodeSelected(this);
             }
         }
     }
@@ -149,6 +149,13 @@ public sealed class StructureNodeViewModel : ObservableObject
     public Visibility AddSeparatorVisibility =>
         CanAddChild || CanAddSibling ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// 已经在字典里的节点不给「存为条目」：那一条本来就在字典里，再存一次是给自己复制一份，
+    /// 菜单里留着只会让人以为还要按这个才算保存。要另一条同级条目用「添加同级」。
+    /// </summary>
+    public Visibility SaveAsEntryVisibility =>
+        SecsSections.Of(Element) == SecsSection.Dictionary ? Visibility.Collapsed : Visibility.Visible;
+
     // ---------- 属性编辑 ----------
 
     /// <summary>Boolean 的下拉只有两个合法值，从源头就不让填出错的。</summary>
@@ -184,7 +191,7 @@ public sealed class StructureNodeViewModel : ObservableObject
 
             StructureEditor.SetName(Element, value);
             RefreshSnapshot();
-            Owner.OnStructureEdited();
+            Owner.OnStructureEdited(this);
         }
     }
 
@@ -200,7 +207,7 @@ public sealed class StructureNodeViewModel : ObservableObject
 
             StructureEditor.SetValue(Element, value);
             RefreshSnapshot();
-            Owner.OnStructureEdited();
+            Owner.OnStructureEdited(this);
         }
     }
 

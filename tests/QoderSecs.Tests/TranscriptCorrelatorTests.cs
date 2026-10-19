@@ -277,6 +277,121 @@ public sealed class TranscriptCorrelatorTests
         Assert.AreEqual(RecordStatus.TimedOut, request.Status);
     }
 
+    /// <summary>上限是 5000 条；改 DefaultRecordCap 就会撞到这条。</summary>
+    [TestMethod]
+    public void DefaultCapIsFiveThousandRecords()
+    {
+        Assert.AreEqual(5000, new TranscriptCorrelator().RecordCap);
+    }
+
+    [TestMethod]
+    public void CapDropsTheOldestRecordsAndCountsThem()
+    {
+        var correlator = new TranscriptCorrelator { RecordCap = 3 };
+        for (var system = 0x10; system < 0x16; system++)
+        {
+            correlator.RecordInbound(Header(2, 41, false), system, "S2F41", T0.AddMilliseconds(system));
+        }
+
+        Assert.HasCount(3, correlator.Records);
+        Assert.AreEqual(3, correlator.DiscardedRecords);
+        Assert.AreEqual(0x13, correlator.Records[0].SystemBytes);
+        Assert.AreEqual(0x15, correlator.Records[2].SystemBytes);
+    }
+
+    [TestMethod]
+    public void CapSkipsOverARequestThatIsStillWaiting()
+    {
+        var correlator = new TranscriptCorrelator { RecordCap = 2 };
+        correlator.RecordOutbound(Header(1, 1, true), 0xA1, "S1F1", T0);
+        correlator.RecordInbound(Header(2, 41, false), 0xA2, "S2F41", T0);
+        correlator.RecordInbound(Header(2, 41, false), 0xA3, "S2F41", T0);
+
+        Assert.HasCount(2, correlator.Records);
+        Assert.AreEqual(0xA1, correlator.Records[0].SystemBytes);
+        Assert.AreEqual(0xA3, correlator.Records[1].SystemBytes);
+        Assert.AreEqual(1, correlator.DiscardedRecords);
+    }
+
+    /// <summary>前面全挂着时宁可顶在上限之上，也不能把刚交给调用方那一条挤掉。</summary>
+    [TestMethod]
+    public void CapGrowsPastTheLimitInsteadOfDroppingTheNewestRecord()
+    {
+        var correlator = new TranscriptCorrelator { RecordCap = 1 };
+        var first = correlator.RecordOutbound(Header(1, 1, true), 0xB1, "S1F1", T0);
+        correlator.RecordOutbound(Header(1, 1, true), 0xB2, "S1F1", T0);
+        var third = correlator.RecordOutbound(Header(1, 1, true), 0xB3, "S1F1", T0);
+
+        Assert.HasCount(3, correlator.Records);
+        Assert.AreEqual(0, correlator.DiscardedRecords);
+        Assert.AreEqual(first, correlator.Records[0]);
+        Assert.AreEqual(third, correlator.Records[2]);
+    }
+
+    [TestMethod]
+    public void DroppedRecordComesOutOfRecordsAndFiresRecordRemoved()
+    {
+        var correlator = new TranscriptCorrelator { RecordCap = 1 };
+        var droppedAt = new List<CommunicationRecord>();
+        correlator.RecordRemoved += record => droppedAt.Add(record);
+
+        var oldest = correlator.RecordInbound(Header(2, 41, false), 0xC1, "S2F41", T0);
+        correlator.RecordInbound(Header(2, 41, false), 0xC2, "S2F41", T0);
+
+        Assert.HasCount(1, droppedAt);
+        Assert.AreEqual(oldest, droppedAt[0]);
+        Assert.IsFalse(correlator.Records.Contains(oldest));
+    }
+
+    [TestMethod]
+    public void ZeroCapMeansNoLimit()
+    {
+        var correlator = new TranscriptCorrelator { RecordCap = 0 };
+        for (var system = 0; system < 50; system++)
+        {
+            correlator.RecordInbound(Header(2, 41, false), system, "S2F41", T0);
+        }
+
+        Assert.HasCount(50, correlator.Records);
+        Assert.AreEqual(0, correlator.DiscardedRecords);
+    }
+
+    [TestMethod]
+    public void ClearResetsTheDiscardCounter()
+    {
+        var correlator = new TranscriptCorrelator { RecordCap = 1 };
+        correlator.RecordInbound(Header(2, 41, false), 0xD1, "S2F41", T0);
+        correlator.RecordInbound(Header(2, 41, false), 0xD2, "S2F41", T0);
+        Assert.AreEqual(1, correlator.DiscardedRecords);
+
+        correlator.Clear();
+
+        Assert.AreEqual(0, correlator.DiscardedRecords);
+    }
+
+    /// <summary>
+    /// 大正文的记录靠 SmlSequence 去 sml.log 里找正文，所以这个位置必须在记录被看见之前就有了。
+    /// 早先是先发出去再补挂，读得快的另一边拿到过一条点开没正文的记录。
+    /// </summary>
+    [TestMethod]
+    public void RecordAddedCarriesTheLogLocationItWasGiven()
+    {
+        var correlator = new TranscriptCorrelator();
+        var delivered = new List<CommunicationRecord>();
+        correlator.RecordAdded += delivered.Add;
+
+        correlator.RecordInbound(
+            Header(6, 11, false), 0x11223344, null, T0, smlSequence: 7, smlByteLength: 33_000_000);
+        correlator.RecordOutbound(
+            Header(2, 41, false), 0x55, null, T0, smlSequence: 8, smlByteLength: 120);
+
+        Assert.HasCount(2, delivered);
+        Assert.AreEqual(7, delivered[0].SmlSequence);
+        Assert.AreEqual(33_000_000, delivered[0].SmlByteLength);
+        Assert.AreEqual(8, delivered[1].SmlSequence);
+        Assert.AreEqual(120, delivered[1].SmlByteLength);
+    }
+
     private static SecsHeader Header(int stream, int function, bool replyExpected, string? name = null) =>
         new(stream, function, replyExpected, name);
 }

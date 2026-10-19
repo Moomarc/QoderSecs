@@ -8,7 +8,8 @@
         MinHeight="680"
         Background="#F3F4F6"
         FontFamily="Segoe UI"
-        FontSize="13">
+        FontSize="13"
+        PreviewMouseDown="WindowPreviewMouseDown">
     <Window.Resources>
         <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF" />
         <SolidColorBrush x:Key="BorderBrush" Color="#D8DEE8" />
@@ -90,7 +91,175 @@
             </MenuItem>
             <Separator Visibility="{Binding AddSeparatorVisibility}" />
             <MenuItem Header="删除" Command="{Binding Owner.DeleteNodeCommand}" />
+            <Separator />
+            <MenuItem Header="复制"
+                      InputGestureText="Ctrl+C"
+                      Command="{Binding Owner.CopyNodeCommand}" />
+            <MenuItem Header="粘贴"
+                      InputGestureText="Ctrl+V"
+                      Command="{Binding Owner.PasteNodeCommand}" />
+            <Separator />
+            <Separator Visibility="{Binding SaveAsEntryVisibility}" />
+            <MenuItem Header="存为条目"
+                      Visibility="{Binding SaveAsEntryVisibility}"
+                      Command="{Binding Owner.SaveNodeAsEntryCommand}"
+                      ToolTip="把这个节点整份存进数据字典，之后可以复制粘贴到别的消息里；改条目不会动这条消息" />
         </ContextMenu>
+
+        <!-- 两棵树共用同一套行样式：结构页那棵和字典页那棵都是 SECS-II 子树，
+             一行上要看的东西一模一样（类型色块、名字、值预览、就地那两个框）。
+             写两份迟早会漂移成「字典那棵不能双击改名」这一类毛病。 -->
+        <Style x:Key="StructureNodeItemStyle" TargetType="TreeViewItem">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="ContextMenu" Value="{StaticResource NodeContextMenu}" />
+            <!-- TreeViewItem 的 UIA 名字默认取数据项的 ToString，
+                 走查和读屏都读不出这一行是什么，必须显式给。 -->
+            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+            <EventSetter Event="PreviewMouseRightButtonDown"
+                         Handler="SelectNodeOnRightClick" />
+            <Style.Triggers>
+                <!-- 只有正在编辑的那一行拉满宽度，值框才吃得到 * 列；
+                     显示态不拉，长值预览照旧把行撑宽，行为不变。 -->
+                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <HierarchicalDataTemplate x:Key="StructureNodeRowTemplate" ItemsSource="{Binding Children}">
+            <!-- 显示态和编辑态叠在同一行上，靠 IsEditing 切：双击行或 F2 进编辑，
+                 点到这一行以外、选中挪走、整棵树重建就退出。两个框绑的还是 EditName / EditValue，
+                 边敲边写、红框实时校验，和底部那两个框同一套语义（2026-10-18 定）。
+                 多行值（A / J）在行内只占一行，改长内容仍走底部那块。 -->
+            <Grid>
+                <StackPanel Orientation="Horizontal" ToolTip="{Binding ValidationError}">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Border Margin="0,1,6,1"
+                            Padding="5,0"
+                            Background="{Binding BadgeBrush}"
+                            CornerRadius="3">
+                        <TextBlock FontFamily="Cascadia Mono"
+                                   FontSize="11"
+                                   Foreground="White"
+                                   Text="{Binding TypeLabel}" />
+                    </Border>
+                    <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
+                    <TextBlock Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               Text="{Binding ValuePreview}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                        <Setter Property="Foreground" Value="#DC2626" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" MinWidth="120" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Border Margin="0,1,6,1"
+                            Padding="5,0"
+                            VerticalAlignment="Center"
+                            Background="{Binding BadgeBrush}"
+                            CornerRadius="3">
+                        <TextBlock FontFamily="Cascadia Mono"
+                                   FontSize="11"
+                                   Foreground="White"
+                                   Text="{Binding TypeLabel}" />
+                    </Border>
+                    <TextBox Grid.Column="1"
+                             VerticalAlignment="Center"
+                             AutomationProperties.Name="节点名称"
+                             Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="可选，例如 PPID / COMMACK；留空就是没有名字" />
+                    <Grid Grid.Column="2">
+                        <TextBox VerticalAlignment="Center"
+                                 AcceptsReturn="False"
+                                 AutomationProperties.Name="节点值"
+                                 Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
+                                 TextWrapping="NoWrap"
+                                 ToolTip="{Binding ValidationError}">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowsValueEditor}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                            <Setter Property="BorderBrush" Value="#DC2626" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                            <Setter Property="FocusManager.FocusedElement"
+                                                    Value="{Binding RelativeSource={RelativeSource Self}}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <ComboBox Width="90"
+                                  HorizontalAlignment="Left"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.Name="节点值"
+                                  ItemsSource="{Binding BooleanOptions}"
+                                  SelectedItem="{Binding EditValue}">
+                            <ComboBox.Style>
+                                <Style TargetType="ComboBox">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowsBooleanEditor}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ComboBox.Style>
+                        </ComboBox>
+                        <TextBlock VerticalAlignment="Center"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   Text="{Binding ValueNote}"
+                                   TextTrimming="CharacterEllipsis">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowsValueNote}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </HierarchicalDataTemplate>
     </Window.Resources>
 
     <Window.InputBindings>
@@ -334,8 +503,9 @@
                                      读屏软件会把整段 XML 念一遍，自动化测试也没法精确断言。 -->
                                 <Setter Property="AutomationProperties.Name">
                                     <Setter.Value>
-                                        <MultiBinding StringFormat="{}{0} {1}">
+                                        <MultiBinding StringFormat="{}{0} {1} {2}">
                                             <Binding Path="Signature" />
+                                            <Binding Path="WBitMark" />
                                             <Binding Path="Name" />
                                         </MultiBinding>
                                     </Setter.Value>
@@ -352,6 +522,23 @@
                                                FontFamily="Cascadia Mono"
                                                Foreground="{StaticResource PrimaryBrush}"
                                                Text="{Binding Signature}" />
+                                    <TextBlock Width="14"
+                                               Margin="0,0,6,0"
+                                               FontFamily="Cascadia Mono"
+                                               TextAlignment="Center"
+                                               ToolTip="这条消息要求对方回复（W-Bit）"
+                                               Text="{Binding WBitMark}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding WBit}" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                     <TextBlock Text="{Binding Name}" />
                                 </StackPanel>
                             </DataTemplate>
@@ -406,6 +593,7 @@
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" />
                                 <TextBox AutomationProperties.Name="消息名称"
                                          KeyDown="CommitOnEnter"
+                                         ToolTip="同一个 SxFy 可以有多条消息，全靠这个名字区分（自动回复也是按它指向的）；不能留空，也不能和别的消息重名"
                                          Text="{Binding MessageName, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
                             <!-- S、F、W 当成一个整体：WrapPanel 只按直接子元素折行，
@@ -440,7 +628,9 @@
                             </StackPanel>
                         </WrapPanel>
                     </DockPanel>
-                    <TabControl Grid.Row="2" Margin="8,0">
+                    <TabControl Grid.Row="2"
+                                Margin="8,0"
+                                SelectedIndex="{Binding EditorTab}">
                         <TabItem Header="结构">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -470,169 +660,32 @@
                                         </MenuItem.ItemContainerStyle>
                                     </MenuItem>
                                     <MenuItem Header="删除" Command="{Binding DeleteNodeCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="复制"
+                                              InputGestureText="Ctrl+C"
+                                              Command="{Binding CopyNodeCommand}" />
+                                    <MenuItem Header="粘贴"
+                                              InputGestureText="Ctrl+V"
+                                              Command="{Binding PasteNodeCommand}" />
+                                    <Separator />
+                                    <MenuItem Header="存为条目"
+                                              Command="{Binding SaveNodeAsEntryCommand}"
+                                              ToolTip="把这个节点整份存进数据字典，之后可以复制粘贴到别的消息里；改条目不会动这条消息" />
                                 </Menu>
                                 <TreeView x:Name="StructureTree"
                                           Grid.Row="1"
                                           Margin="4,0,4,4"
                                           BorderThickness="0"
+                                          AllowDrop="True"
+                                          ItemContainerStyle="{StaticResource StructureNodeItemStyle}"
+                                          ItemTemplate="{StaticResource StructureNodeRowTemplate}"
                                           ItemsSource="{Binding StructureRootItems}"
-                                          MouseDoubleClick="StructureTreeMouseDoubleClick"
-                                          PreviewKeyDown="StructureTreePreviewKeyDown">
-                                    <TreeView.ItemContainerStyle>
-                                        <Style TargetType="TreeViewItem">
-                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-                                            <Setter Property="ContextMenu" Value="{StaticResource NodeContextMenu}" />
-                                            <!-- TreeViewItem 的 UIA 名字默认取数据项的 ToString，
-                                                 走查和读屏都读不出这一行是什么，必须显式给。 -->
-                                            <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
-                                            <EventSetter Event="PreviewMouseRightButtonDown"
-                                                         Handler="SelectNodeOnRightClick" />
-                                            <Style.Triggers>
-                                                <!-- 只有正在编辑的那一行拉满宽度，值框才吃得到 * 列；
-                                                     显示态不拉，长值预览照旧把行撑宽，行为不变。 -->
-                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TreeView.ItemContainerStyle>
-                                    <TreeView.ItemTemplate>
-                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                            <!-- 显示态和编辑态叠在同一行上，靠 IsEditing 切：双击行或 F2 进编辑，
-                                                 选中挪走、整棵树重建就退出。两个框绑的还是 EditName / EditValue，
-                                                 边敲边写、红框实时校验，和底部那两个框同一套语义（2026-10-18 定）。
-                                                 多行值（A / J）在行内只占一行，改长内容仍走底部那块。 -->
-                                            <Grid>
-                                                <StackPanel Orientation="Horizontal" ToolTip="{Binding ValidationError}">
-                                                    <StackPanel.Style>
-                                                        <Style TargetType="StackPanel">
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </StackPanel.Style>
-                                                    <Border Margin="0,1,6,1"
-                                                            Padding="5,0"
-                                                            Background="{Binding BadgeBrush}"
-                                                            CornerRadius="3">
-                                                        <TextBlock FontFamily="Cascadia Mono"
-                                                                   FontSize="11"
-                                                                   Foreground="White"
-                                                                   Text="{Binding TypeLabel}" />
-                                                    </Border>
-                                                    <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
-                                                    <TextBlock Margin="8,0,0,0"
-                                                               VerticalAlignment="Center"
-                                                               Text="{Binding ValuePreview}">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground"
-                                                                        Value="{StaticResource MutedBrush}" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                                                        <Setter Property="Foreground" Value="#DC2626" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </StackPanel>
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="100" />
-                                                        <ColumnDefinition Width="*" MinWidth="120" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Grid.Style>
-                                                        <Style TargetType="Grid">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Grid.Style>
-                                                    <Border Margin="0,1,6,1"
-                                                            Padding="5,0"
-                                                            VerticalAlignment="Center"
-                                                            Background="{Binding BadgeBrush}"
-                                                            CornerRadius="3">
-                                                        <TextBlock FontFamily="Cascadia Mono"
-                                                                   FontSize="11"
-                                                                   Foreground="White"
-                                                                   Text="{Binding TypeLabel}" />
-                                                    </Border>
-                                                    <TextBox Grid.Column="1"
-                                                             VerticalAlignment="Center"
-                                                             AutomationProperties.Name="节点名称"
-                                                             Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
-                                                             ToolTip="可选，例如 PPID / COMMACK；留空就是没有名字" />
-                                                    <Grid Grid.Column="2">
-                                                        <TextBox VerticalAlignment="Center"
-                                                                 AcceptsReturn="False"
-                                                                 AutomationProperties.Name="节点值"
-                                                                 Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
-                                                                 TextWrapping="NoWrap"
-                                                                 ToolTip="{Binding ValidationError}">
-                                                            <TextBox.Style>
-                                                                <Style TargetType="TextBox">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding ShowsValueEditor}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                                                            <Setter Property="BorderBrush" Value="#DC2626" />
-                                                                        </DataTrigger>
-                                                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                                            <Setter Property="FocusManager.FocusedElement"
-                                                                                    Value="{Binding RelativeSource={RelativeSource Self}}" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </TextBox.Style>
-                                                        </TextBox>
-                                                        <ComboBox Width="90"
-                                                                  HorizontalAlignment="Left"
-                                                                  VerticalAlignment="Center"
-                                                                  AutomationProperties.Name="节点值"
-                                                                  ItemsSource="{Binding BooleanOptions}"
-                                                                  SelectedItem="{Binding EditValue}">
-                                                            <ComboBox.Style>
-                                                                <Style TargetType="ComboBox">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding ShowsBooleanEditor}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </ComboBox.Style>
-                                                        </ComboBox>
-                                                        <TextBlock VerticalAlignment="Center"
-                                                                   Foreground="{StaticResource MutedBrush}"
-                                                                   Text="{Binding ValueNote}"
-                                                                   TextTrimming="CharacterEllipsis">
-                                                            <TextBlock.Style>
-                                                                <Style TargetType="TextBlock">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding ShowsValueNote}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </TextBlock.Style>
-                                                        </TextBlock>
-                                                    </Grid>
-                                                </Grid>
-                                            </Grid>
-                                        </HierarchicalDataTemplate>
-                                    </TreeView.ItemTemplate>
+                                          PreviewMouseLeftButtonDown="NodeTreePreviewMouseLeftButtonDown"
+                                          MouseMove="NodeTreeMouseMove"
+                                          DragOver="NodeTreeDragOver"
+                                          Drop="NodeTreeDrop"
+                                          MouseDoubleClick="NodeTreeMouseDoubleClick"
+                                          PreviewKeyDown="NodeTreePreviewKeyDown">
                                 </TreeView>
                                 <TextBlock Grid.Row="1"
                                            Margin="14"
@@ -840,6 +893,69 @@
                                         Content="覆盖当前消息" />
                             </Grid>
                         </TabItem>
+                        <!-- 数据字典：单独存起来的 data 和 list，给别的消息当素材。
+                             条目和消息之间是复制关系，两边改了都不影响对方。 -->
+                        <TabItem Header="数据字典">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Menu Grid.Row="0" Margin="2,4,0,0" Background="Transparent">
+                                    <MenuItem Header="新增数据" ItemsSource="{Binding ItemTypeOptions}">
+                                        <MenuItem.ItemContainerStyle>
+                                            <Style TargetType="MenuItem">
+                                                <Setter Property="Header" Value="{Binding Header}" />
+                                                <Setter Property="Command"
+                                                        Value="{Binding DataContext.NewEntryCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
+                                                <Setter Property="CommandParameter" Value="{Binding Type}" />
+                                            </Style>
+                                        </MenuItem.ItemContainerStyle>
+                                    </MenuItem>
+                                    <MenuItem Header="删除条目"
+                                              Command="{Binding DeleteEntryCommand}"
+                                              ToolTip="只删字典里这一条，已经复制进消息的那些内容不受影响" />
+                                    <Separator />
+                                    <MenuItem Header="复制"
+                                              InputGestureText="Ctrl+C"
+                                              Command="{Binding CopyNodeCommand}" />
+                                    <MenuItem Header="粘贴"
+                                              InputGestureText="Ctrl+V"
+                                              Command="{Binding PasteNodeCommand}" />
+                                </Menu>
+                                <Grid Grid.Row="1" Margin="4,0,4,4">
+                                    <!-- 一个条目就是一个顶层节点，不垫假根行：条目之间互不隶属，
+                                         垫一行会让人以为整本字典能像消息体那样拖来拖去。
+                                         树里可以就地改名字和值、加子项、删某一层，和结构页那一棵同一套操作；
+                                         要跨到消息里去只能复制粘贴，拖动过不去（Core 把跨段那一刀拦了）。 -->
+                                    <TreeView x:Name="EntryTree"
+                                              BorderThickness="0"
+                                              AllowDrop="True"
+                                              ItemContainerStyle="{StaticResource StructureNodeItemStyle}"
+                                              ItemTemplate="{StaticResource StructureNodeRowTemplate}"
+                                              ItemsSource="{Binding EntryRootItems}"
+                                              PreviewMouseLeftButtonDown="NodeTreePreviewMouseLeftButtonDown"
+                                              MouseMove="NodeTreeMouseMove"
+                                              DragOver="NodeTreeDragOver"
+                                              Drop="NodeTreeDrop"
+                                              MouseDoubleClick="NodeTreeMouseDoubleClick"
+                                              PreviewKeyDown="NodeTreePreviewKeyDown" />
+                                    <TextBlock HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               Text="{Binding EntryHint}" />
+                                </Grid>
+                                <StackPanel Grid.Row="2" Margin="4,0,4,6">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="条目名称" />
+                                    <TextBox AutomationProperties.Name="条目名称"
+                                             KeyDown="CommitOnEnter"
+                                             IsEnabled="{Binding HasSelectedDataEntry}"
+                                             ToolTip="改名字不影响已经复制进消息的内容；数据元素的名字可以留空、也可以重名"
+                                             Text="{Binding DataEntryName, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                            </Grid>
+                        </TabItem>
                     </TabControl>
                 </Grid>
             </Border>
@@ -862,7 +978,7 @@
                         </Grid.RowDefinitions>
                         <TextBlock Margin="10,8"
                                    Style="{StaticResource SectionTitleStyle}"
-                                   Text="通信记录" />
+                                   Text="{Binding RecordsTitle}" />
                         <Grid Grid.Row="1"
                               Margin="8,0,8,8">
                             <ListView x:Name="RecordList"

@@ -121,13 +121,21 @@ public partial class MainWindow : Window
 
     private void OnRecordsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (!_followLatest || e.Action != NotifyCollectionChangedAction.Add || e.NewItems is not { Count: > 0 } added)
+        if (!_followLatest || e.Action is not (NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Remove))
         {
             return;
         }
 
+        // 追加要贴到最新一条，上限挤掉最老那条也一样：头部少一行时视口不会自己跟到底，
+        // 列表就卡在离底部差一行的地方。两种情况收成同一个动作。
         // 容器还没生成就滚动会什么都没发生，排到本轮布局之后再滚。
-        _ = Dispatcher.BeginInvoke(new Action(() => RecordList.ScrollIntoView(added[added.Count - 1])));
+        _ = Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_recordsSource is { Count: > 0 } records)
+            {
+                RecordList.ScrollIntoView(records[records.Count - 1]);
+            }
+        }));
     }
 
     /// <summary>WPF 的 TreeViewItem 右键不会自动选中，不补这一步右键菜单就会作用在旧选中项上。</summary>
@@ -215,13 +223,31 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// 树的快捷键：Delete 直接删选中节点；F2 就地编辑选中那一行；Insert 打开选中节点的右键菜单，
-    /// 键盘用户从那里进「添加子项 / 添加同级」的类型二级菜单。
+    /// 键盘用户从那里进「添加子项 / 添加同级」的类型二级菜单；Ctrl+C / Ctrl+V 复制粘贴选中子树。
     /// </summary>
-    private void StructureTreePreviewKeyDown(object sender, KeyEventArgs e)
+    private void NodeTreePreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (DataContext is not MainViewModel viewModel)
         {
             return;
+        }
+
+        // 就地编辑的输入框里 Ctrl+C / Ctrl+V 是复制粘贴文本，不能抢成节点的复制粘贴。
+        if (e.OriginalSource is not TextBox && e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            if (e.Key == Key.C && viewModel.CopyNodeCommand.CanExecute(null))
+            {
+                viewModel.CopyNodeCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.V && viewModel.PasteNodeCommand.CanExecute(null))
+            {
+                viewModel.PasteNodeCommand.Execute(null);
+                e.Handled = true;
+                return;
+            }
         }
 
         if (e.Key == Key.Delete)
@@ -261,7 +287,7 @@ public partial class MainWindow : Window
     /// 双击展开箭头那一下也会冒泡到这里，按 SelectedNode 就会把编辑开在另一行上。
     /// 找到箭头就放过，那一下是给展开/折叠用的。
     /// </summary>
-    private void StructureTreeMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private void NodeTreeMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (DataContext is not MainViewModel viewModel || e.OriginalSource is not Visual source)
         {
@@ -281,6 +307,160 @@ public partial class MainWindow : Window
                 return;
             }
         }
+    }
+
+    /// <summary>
+    /// 按下去的位置不在正在编辑那一行里面，就把行内编辑收掉。
+    /// 树的空白处、工具栏、别的页签都算「行外」；右键菜单在自己的弹出窗口里，走不到这一条，
+    /// 不需要在这里放过它。名称和值是边敲边写的，收框不用提交，也不回滚。
+    /// 这里不 Handled，选中、展开和起拖照旧。
+    /// </summary>
+    private void WindowPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (e.OriginalSource is Visual source)
+        {
+            for (Visual? ancestor = source; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor) as Visual)
+            {
+                if (ancestor is TreeViewItem { DataContext: StructureNodeViewModel { IsEditing: true } })
+                {
+                    return;
+                }
+            }
+        }
+
+        viewModel.EndStructureEdit();
+    }
+
+    // ---------- 结构树拖动：搬过去，或者留一份、放下去的是副本 ----------
+
+    /// <summary>只在同进程内用：拖动的数据里装的是行 VM，出不了这个程序。</summary>
+    private const string StructureNodeDragFormat = "QoderSecs.StructureNode";
+
+    private StructureNodeViewModel? _dragCandidate;
+
+    private Point _dragStart;
+
+    /// <summary>
+    /// 记下起拖候选行。在输入框里按下鼠标是在选文字、在箭头上按下是展开折叠，两种都不起拖。
+    /// 这里不 Handled，否则 WPF 自己的选中和展开就没了。
+    /// </summary>
+    private void NodeTreePreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragCandidate = null;
+
+        if (e.OriginalSource is TextBox || e.OriginalSource is not Visual source)
+        {
+            return;
+        }
+
+        for (Visual? ancestor = source; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor) as Visual)
+        {
+            if (ancestor is ToggleButton)
+            {
+                return;
+            }
+
+            if (ancestor is TreeViewItem { DataContext: StructureNodeViewModel node })
+            {
+                _dragCandidate = node;
+                _dragStart = e.GetPosition(null);
+                return;
+            }
+        }
+    }
+
+    private void NodeTreeMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragCandidate is not { } candidate || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var moved = e.GetPosition(null) - _dragStart;
+        if (Math.Abs(moved.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _dragCandidate = null;
+        _ = DragDrop.DoDragDrop((DependencyObject)sender, new DataObject(StructureNodeDragFormat, candidate), DragDropEffects.Move | DragDropEffects.Copy);
+    }
+
+    /// <summary>
+    /// 光标形状只问 Core 的落点判断，不在界面里再写一份——
+    /// 写两份就会出现「光标显示能放、放下去报错」和反过来那一种。
+    /// 字典页跨条目那一种是复制，光标也得跟着显示成复制。
+    /// </summary>
+    private void NodeTreeDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = TryGetDropPair(sender, e) is (var dragged, var target) && DataContext is MainViewModel viewModel
+            ? DropEffectOf(viewModel.NodeDropWay(dragged, target))
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private static DragDropEffects DropEffectOf(DropWay way) => way switch
+    {
+        DropWay.Move => DragDropEffects.Move,
+        DropWay.Copy => DragDropEffects.Copy,
+        _ => DragDropEffects.None
+    };
+
+    private void NodeTreeDrop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+
+        if (TryGetDropPair(sender, e) is not (var dragged, var target) || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.DropNode(dragged, target);
+    }
+
+    /// <summary>拖出来的行和鼠标底下的行，两个都在同一棵树上且落点收得下才算成对。</summary>
+    private (StructureNodeViewModel dragged, StructureNodeViewModel target)? TryGetDropPair(object sender, DragEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel
+            || sender is not TreeView tree
+            || e.Data.GetData(StructureNodeDragFormat) is not StructureNodeViewModel dragged
+            || TargetNodeUnderMouse(tree, e) is not { } target)
+        {
+            return null;
+        }
+
+        return viewModel.NodeDropWay(dragged, target) == DropWay.Nowhere
+            ? null
+            : (dragged, target);
+    }
+
+    /// <summary>
+    /// 落点按鼠标坐标在树上命中，不用 e.OriginalSource：拖放事件的 OriginalSource 给的是
+    /// 开了 AllowDrop 的那一层（整棵树），从它往上找不到任何一行，光标就永远是「不能放」。
+    /// 树从参数上来——结构页和字典页那一棵共用这几个处理器，写死一棵的名字就会
+    /// 「在字典那棵上拖动，命中算到结构那棵去」。
+    /// </summary>
+    private static StructureNodeViewModel? TargetNodeUnderMouse(TreeView tree, DragEventArgs e) =>
+        NodeUnderMouse(tree.InputHitTest(e.GetPosition(tree)) as DependencyObject);
+
+    /// <summary>从鼠标底下的元素往上找到它所属的那一行。</summary>
+    private static StructureNodeViewModel? NodeUnderMouse(object? source)
+    {
+        for (Visual? ancestor = source as Visual; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor) as Visual)
+        {
+            if (ancestor is TreeViewItem { DataContext: StructureNodeViewModel node })
+            {
+                return node;
+            }
+        }
+
+        return null;
     }
 
     protected override async void OnClosing(CancelEventArgs e)

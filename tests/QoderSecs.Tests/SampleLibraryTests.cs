@@ -53,6 +53,42 @@ public sealed class SampleLibraryTests
             reloaded.Messages.Select(entry => entry.Name).ToList());
     }
 
+    [TestMethod]
+    public void ExportRoundTripsWithoutLosingDictionaryEntries()
+    {
+        var library = Sample();
+        var reloaded = MessageLibrary.Load(library.Export());
+
+        CollectionAssert.AreEqual(
+            library.DataEntries.Select(entry => entry.Name).ToList(),
+            reloaded.DataEntries.Select(entry => entry.Name).ToList());
+    }
+
+    /// <summary>
+    /// 字典里放的是 CEID、SVID 这类要翻文档才能凑齐的变量，界面靠类型名渲染每一项，
+    /// 认不出来的名字会显示成「未知元素类型」，所以整棵子树都得是已知类型。
+    /// </summary>
+    [TestMethod]
+    public void DictionaryHoldsCeidAndSvidVariablesOfKnownTypes()
+    {
+        var entries = Sample().DataEntries;
+
+        CollectionAssert.Contains(entries.Select(entry => entry.Name).ToList(), "CEID");
+        CollectionAssert.Contains(entries.Select(entry => entry.Name).ToList(), "SVID");
+
+        foreach (var element in entries.SelectMany(entry => new[] { entry.Element }.Concat(entry.Element.Descendants())))
+        {
+            if (element.Name == "Value" || element.Name == "Maps")
+            {
+                continue;
+            }
+
+            Assert.IsTrue(
+                SecsItemTypes.TryParse(element.Name.LocalName, out _),
+                $"字典条目里出现了认不出的元素 <{element.Name}>。");
+        }
+    }
+
     private static MessageLibrary Sample() => MessageLibrary.Load(
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "common-commands.sxml")));
 }

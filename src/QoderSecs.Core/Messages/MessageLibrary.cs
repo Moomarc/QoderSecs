@@ -12,9 +12,16 @@ public sealed class MessageLibrary
     {
         _document = document;
         Messages = ParseMessages(document);
+        DataEntries = ParseDataEntries(document);
     }
 
     public IReadOnlyList<MessageEntry> Messages { get; private set; }
+
+    /// <summary>
+    /// <c>DataDictionary</c> 的直接子元素，就是 SecsExpress 自己那份「单独存的 data 和 list」。
+    /// 这一段以前从不解析、整段原样保留，现在只读它和写它，不动别的段。
+    /// </summary>
+    public IReadOnlyList<DataEntry> DataEntries { get; private set; }
 
     public XDocument Document => _document;
 
@@ -77,6 +84,7 @@ public sealed class MessageLibrary
     {
         _document = CreateEmptyDocument();
         Messages = ParseMessages(_document);
+        DataEntries = ParseDataEntries(_document);
     }
 
     /// <summary>
@@ -87,9 +95,10 @@ public sealed class MessageLibrary
     {
         RequireRange(nameof(stream), "Stream", stream);
         RequireRange(nameof(function), "Function", function);
+        var checkedName = RequireMessageName(name, target: null);
 
         var message = new XElement("Message",
-            new XAttribute("Name", name),
+            new XAttribute("Name", checkedName),
             new XElement("Stream", stream.ToString(CultureInfo.InvariantCulture)),
             new XElement("Function", function.ToString(CultureInfo.InvariantCulture)),
             new XElement("Structure"));
@@ -114,9 +123,9 @@ public sealed class MessageLibrary
     /// <summary>
     /// 复制一条消息，插在原条后面。除名字以外全部原样带过来，包括 AutoReply、Description
     /// 和看不懂的未知子元素。
-    /// 名字必须由调用方给一个不同的值：自动回复是按 Name 指向消息的，两条同名之后
+    /// 名字必须给一个库里没有的、而且不能为空——自动回复是按 Name 指向消息的，两条同名之后
     /// 指向落到哪一条变成看库里谁排在前面（<see cref="AutoReplyResolver"/>），
-    /// 界面上的自动回复下拉框也会列出两个一样的选项。
+    /// 界面上的自动回复下拉框也会列出两个一样的选项。SxFy 想重复随便重复，名字不行。
     /// </summary>
     public MessageEntry DuplicateMessage(MessageEntry entry, string name)
     {
@@ -130,15 +139,7 @@ public sealed class MessageLibrary
 
         // 必须是深克隆：浅克隆会让副本和原条共用同一批子节点实例，改副本的结构连着改掉原条。
         var clone = new XElement(entry.Element);
-        var trimmed = name.Trim();
-        if (trimmed.Length == 0)
-        {
-            clone.Attribute("Name")?.Remove();
-        }
-        else
-        {
-            clone.SetAttributeValue("Name", trimmed);
-        }
+        clone.SetAttributeValue("Name", RequireMessageName(name, target: null));
 
         if (entry.Element.PreviousNode is XText separator && string.IsNullOrWhiteSpace(separator.Value))
         {
@@ -215,20 +216,75 @@ public sealed class MessageLibrary
         return Reparse(entry);
     }
 
-    /// <summary>改消息名称。留空就把 Name 属性去掉，读回来是空字符串。</summary>
+    /// <summary>
+    /// 改消息名称。名字非空、且不许多条消息共用（<see cref="RequireMessageName"/>），
+    /// 所以这里不再像早先那样「留空就把 Name 属性去掉」。
+    /// </summary>
     public MessageEntry SetName(MessageEntry entry, string name)
     {
+        var checkedName = RequireMessageName(name, entry.Element);
+
+        entry.Element.SetAttributeValue("Name", checkedName);
+        return Reparse(entry);
+    }
+
+    /// <summary>库里有没有这个名字的消息（首尾空格不算）。</summary>
+    public bool HasMessageName(string name)
+    {
+        var trimmed = name.Trim();
+        return trimmed.Length > 0
+            && Messages.Any(entry => string.Equals(entry.Name, trimmed, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 取一个没被占用的消息名：先试 baseName 本身，占了就依次试「baseName 2」「baseName 3」。
+    /// 新建和复制这两个自动取名的地方要靠它——名字必须唯一，按两次「新建」不能第二次就报错。
+    /// </summary>
+    public string NextFreeMessageName(string baseName)
+    {
+        ArgumentNullException.ThrowIfNull(baseName);
+
+        var trimmed = baseName.Trim();
+        if (trimmed.Length == 0)
+        {
+            trimmed = "消息";
+        }
+
+        for (var attempt = 1; ; attempt++)
+        {
+            var candidate = attempt == 1 ? trimmed : $"{trimmed} {attempt}";
+            if (!HasMessageName(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 消息名的两条规则：非空、且不许多条共用。这是 SecsExpress 对消息体的硬要求
+    /// （SecsExpress 实测），反过来 SxFy 可以重复——同一个 S2F41 可以有 START、STOP、
+    /// PP_SELECT 三条，全靠名字区分，自动回复也按名字指向（<see cref="AutoReplyResolver"/>）。
+    /// 读入不查这一条：同事的文件里就算有同名或没名字的消息也照样得能打开、能导出回去。
+    /// </summary>
+    private string RequireMessageName(string name, XElement? target)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
         var trimmed = name.Trim();
         if (trimmed.Length == 0)
         {
-            entry.Element.Attribute("Name")?.Remove();
-        }
-        else
-        {
-            entry.Element.SetAttributeValue("Name", trimmed);
+            throw new ArgumentException("消息必须有名字：同一个 SxFy 可以有多条，全靠名字区分。", nameof(name));
         }
 
-        return Reparse(entry);
+        var clash = Messages.Any(entry =>
+            !ReferenceEquals(entry.Element, target)
+            && string.Equals(entry.Name, trimmed, StringComparison.Ordinal));
+        if (clash)
+        {
+            throw new ArgumentException($"库里已经有名字叫「{trimmed}」的消息。SxFy 可以重复，名字不行。", nameof(name));
+        }
+
+        return trimmed;
     }
 
     /// <summary>改消息头。Stream、Function、W 位一起改，免得界面上三个框各改一次要重建三遍列表。</summary>
@@ -305,6 +361,236 @@ public sealed class MessageLibrary
         {
             throw new ArgumentOutOfRangeException(argumentName, value, $"{displayName} 必须在 1 到 255 之间。");
         }
+    }
+
+    // ---------- 数据字典条目：单独存起来的 data 和 list ----------
+
+    /// <summary>
+    /// 把消息树里的一个节点存成条目，一律追加在末尾。
+    /// 名字可空、可重（SecsExpress 实测：data/list 这类数据元素既不要求名字唯一，
+    /// 也不要求非空，树里和字典里都一样；那两条只约束消息体）。传进来的名字为空就是把 Name 属性去掉。
+    /// 条目和消息之间是复制关系，改条目碰不到任何一条已经写好的消息。
+    /// 必须深拷贝，理由和 <see cref="DuplicateMessage"/> 同一条：浅拷贝会让条目和消息里的
+    /// 那个节点共用同一批子节点实例，之后改一边另一边跟着变，复制语义就假了。
+    /// </summary>
+    public DataEntry SaveEntry(string name, XElement source)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(source);
+        if (source.Parent is null)
+        {
+            throw new ArgumentException("要存的必须是消息树里的一个节点，脱离树的元素没地方可去。", nameof(source));
+        }
+
+        var dictionary = RequireDataDictionary();
+        var clone = new XElement(source);
+        SetEntryName(clone, name);
+        AddEntryNode(dictionary, clone);
+
+        DataEntries = ParseDataEntries(_document);
+        return DataEntries.Single(entry => ReferenceEquals(entry.Element, clone));
+    }
+
+    /// <summary>
+    /// 在字典里新建一个条目，内容是这个类型必然合法的默认值（和结构页「添加子项」同一套，
+    /// 建出来就不是红的）。名字可空可重，理由同 <see cref="SaveEntry"/>；留空就是没有 Name 属性，
+    /// 界面上那一栏空白，靠类型和内容认。
+    /// <paramref name="after"/> 给定时插在那一条之后，没给就追加在末尾。
+    /// </summary>
+    public DataEntry NewEntry(string name, SecsItemType type, DataEntry? after = null)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        var dictionary = RequireDataDictionary();
+        var entry = StructureEditor.NewElement(type);
+        SetEntryName(entry, name);
+
+        if (after is null)
+        {
+            AddEntryNode(dictionary, entry);
+        }
+        else
+        {
+            RequireCurrentEntry(after);
+            InsertEntryAfter(after.Element, entry);
+        }
+
+        DataEntries = ParseDataEntries(_document);
+        return DataEntries.Single(parsed => ReferenceEquals(parsed.Element, entry));
+    }
+
+    /// <summary>改条目名字。留空是把 Name 属性去掉，不是拒；名字不参与任何查重。</summary>
+    public DataEntry RenameEntry(DataEntry entry, string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        RequireCurrentEntry(entry);
+
+        SetEntryName(entry.Element, name);
+        DataEntries = ParseDataEntries(_document);
+        return DataEntries[entry.Index];
+    }
+
+    /// <summary>
+    /// 名字落到元素上：留空就去掉 Name 属性，和 <see cref="DuplicateMessage"/>、
+    /// 树上的就地改名（<see cref="StructureEditor.SetName"/>）是同一条写法。
+    /// </summary>
+    private static void SetEntryName(XElement entry, string name)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0)
+        {
+            entry.Attribute("Name")?.Remove();
+            return;
+        }
+
+        entry.SetAttributeValue("Name", trimmed);
+    }
+
+    /// <summary>
+    /// 删掉条目，连它前面那段换行缩进一起删，和 <see cref="RemoveMessage"/> 同一条理由：
+    /// 不留成片空行给同事比对。删完什么都不剩时留着 <c>&lt;DataDictionary&gt;</c> 换行
+    /// <c>&lt;/DataDictionary&gt;</c> 那一格不塌成自闭合——SecsExpress 自己的空字典就是写成两行的
+    /// （s2test.sxml、s6800.sxml 都是），照它来。
+    /// </summary>
+    public void RemoveEntry(DataEntry entry)
+    {
+        RequireCurrentEntry(entry);
+
+        var dictionary = _document.Root!.Element("DataDictionary")!;
+        var separator = entry.Element.PreviousNode;
+        entry.Element.Remove();
+        if (separator is XText text && string.IsNullOrWhiteSpace(text.Value))
+        {
+            text.Remove();
+        }
+
+        DataEntries = ParseDataEntries(_document);
+    }
+
+    /// <summary>
+    /// 顶层条目被直接动过顺序之后（界面上拖动一条条目排到另一条后面就是这种），把 <see cref="DataEntries"/>
+    /// 按当前文档重拍一遍。这一份是解析时拍的快照，只改 <c>DataDictionary</c> 里的 XElement 不会让它跟着变，
+    /// 而字典页那棵树的行就是照这一份排的——不重拍，XML 已经换了次序，界面上还是老次序。
+    /// </summary>
+    public void SyncDataEntries() => DataEntries = ParseDataEntries(_document);
+
+    /// <summary>参考件三份都是字典段在消息段之前，缺这一段时就按这个次序补。</summary>
+    private XElement RequireDataDictionary()
+    {
+        var root = _document.Root!;
+        var dictionary = root.Element("DataDictionary");
+        if (dictionary is not null)
+        {
+            return dictionary;
+        }
+
+        var messages = root.Element("MessageDictionary")!;
+        messages.AddBeforeSelf(dictionary = new XElement("DataDictionary"));
+        if (dictionary.PreviousNode is XText indent)
+        {
+            // 补出来的这一段还没有条目，先把它自己包起来那段缩进照着消息段抄一份，
+            // 免得 </DataDictionary> 和 <MessageDictionary> 挤在同一行。
+            dictionary.AddAfterSelf(new XText(indent.Value));
+        }
+
+        return dictionary;
+    }
+
+    private static void AddEntryNode(XElement dictionary, XElement entry)
+    {
+        var last = dictionary.Elements().LastOrDefault();
+        if (last?.PreviousNode is XText separator && dictionary.LastNode is XText tail)
+        {
+            // 沿用文件里已有的换行缩进，理由和 NewMessage 完全一样。
+            tail.AddBeforeSelf(new XText(separator.Value), entry);
+            return;
+        }
+
+        // 这一段里面没有给收尾标签用的换行缩进：刚补出来的空段、手写成 <DataDictionary/> 的、
+        // 或者条目挤在同一行的都算。先照着 SecsExpress 空字典的两行写法补一段，再走下面那一步，
+        // 否则条目就贴在 <DataDictionary> 后面写成一行，同事那边比对会莫名其妙多出一次改动。
+        var closing = dictionary.LastNode as XText;
+        if (closing is null || !closing.Value.Contains('\n'))
+        {
+            dictionary.Add(closing = new XText(LineIndent(dictionary)));
+        }
+
+        var closingIndent = closing.Value;
+        closing.Value = Deeper(closingIndent);
+        closing.AddAfterSelf(entry, new XText(closingIndent));
+    }
+
+    /// <summary>
+    /// 插在某一条之后。那一条自己行首的换行缩进就是条目这一层的排版，照抄一份跟到它后面。
+    /// 抄不到（整份文件挤在一行那种）就只保证内容对、排版挤在一行，
+    /// 和结构页里「加同级」的退路一致。
+    /// </summary>
+    private static void InsertEntryAfter(XElement after, XElement entry)
+    {
+        if (after.PreviousNode is XText separator && separator.Value.Contains('\n'))
+        {
+            after.AddAfterSelf(new XText(separator.Value), entry);
+            return;
+        }
+
+        after.AddAfterSelf(entry);
+    }
+
+    /// <summary>
+    /// 元素自己在文件里那一行的换行缩进。整份文件挤在一行、前面没有缩进文本时退成光秃秃一个换行，
+    /// 内容照样是对的，只是排版没人替它猜。
+    /// </summary>
+    private static string LineIndent(XElement element)
+    {
+        if (element.PreviousNode is XText text)
+        {
+            var cut = text.Value.LastIndexOfAny(['\r', '\n']);
+            if (cut >= 0)
+            {
+                return "\n" + text.Value[(cut + 1)..];
+            }
+        }
+
+        return "\n";
+    }
+
+    /// <summary>把一段换行缩进加深一级：SecsExpress 的 SXML 每级四个空格，所以把行尾那段空白再抄一遍。</summary>
+    private static string Deeper(string indent)
+    {
+        var cut = indent.LastIndexOfAny(['\r', '\n']);
+        var pad = indent[(cut + 1)..];
+        return pad.Length == 0 ? indent + "    " : indent + pad;
+    }
+
+    private void RequireCurrentEntry(DataEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var dictionary = _document.Root?.Element("DataDictionary");
+        if (dictionary is null || !ReferenceEquals(entry.Element.Parent, dictionary))
+        {
+            // DataEntry 是一次性快照：库换过、或者同一条删两次之后，手上的元素已经不在当前文档里了。
+            throw new ArgumentException("这个条目不在当前消息库里（库已换过，或者这条已经删掉了）。", nameof(entry));
+        }
+    }
+
+    private static IReadOnlyList<DataEntry> ParseDataEntries(XDocument document)
+    {
+        // 缺 DataDictionary 不算坏文件：ParseMessages 只强制要求 MessageDictionary，
+        // 参考件里也有整段是空的。当空列表处理，第一个条目存进去时再补出这一段。
+        var entries = document.Root?.Element("DataDictionary")?.Elements().ToList();
+        if (entries is null)
+        {
+            return [];
+        }
+
+        var parsed = new List<DataEntry>(entries.Count);
+        for (var index = 0; index < entries.Count; index++)
+        {
+            parsed.Add(new DataEntry(entries[index], index));
+        }
+
+        return parsed;
     }
 
     private static XDocument CreateEmptyDocument() => new(
