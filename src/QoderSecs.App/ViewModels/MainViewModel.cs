@@ -106,6 +106,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DeleteMessageCommand = new RelayCommand(
             DeleteMessage,
             () => SelectedMessage is not null);
+        DuplicateMessageCommand = new RelayCommand(
+            DuplicateMessage,
+            () => SelectedMessage is not null);
         AddChildCommand = new RelayCommand<SecsItemType>(
             AddChild,
             () => SelectedNode is not null
@@ -146,6 +149,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand NewMessageCommand { get; }
 
     public RelayCommand DeleteMessageCommand { get; }
+
+    public RelayCommand DuplicateMessageCommand { get; }
 
     public RelayCommand<SecsItemType> AddChildCommand { get; }
 
@@ -553,6 +558,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 RefreshStructure();
                 SendCommand.RaiseCanExecuteChanged();
                 DeleteMessageCommand.RaiseCanExecuteChanged();
+                DuplicateMessageCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -904,21 +910,66 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        await ImportFromPathAsync(dialog.FileName);
+    }
+
+    /// <summary>
+    /// 导入的两条路径共用这一段：换成新库、清掉搜索、刷新列表和状态栏。
+    /// 返回成功与否，拖放那条要在成功之后才追加「只用了第一个文件」那句。
+    /// </summary>
+    private async Task<bool> ImportFromPathAsync(string path, string? note = null)
+    {
         try
         {
-            var library = await LibraryFile.LoadAsync(dialog.FileName);
+            var library = await LibraryFile.LoadAsync(path);
             _library = library;
-            _libraryPath = dialog.FileName;
+            _libraryPath = path;
             _searchText = string.Empty;
             OnPropertyChanged(nameof(SearchText));
             RefreshMessages();
-            StatusMessage = $"已导入 {library.Messages.Count} 条消息：{Path.GetFileName(dialog.FileName)}";
+            StatusMessage = $"已导入 {library.Messages.Count} 条消息：{Path.GetFileName(path)}{note}";
+            return true;
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or XmlException or FormatException)
         {
             Fail($"导入失败：{exception.Message}");
+            return false;
         }
+    }
+
+    /// <summary>
+    /// 从资源管理器把文件拖到左栏。空库直接导入；库里有消息先弹确认再整体替换。
+    /// 「文件」菜单导入不走这里，它不弹框，两条路径反应不一样是有意的。
+    /// 后缀不对的直接拒掉，不去读文件内容。一次拖多个只取第一个，并在状态栏说清用了哪个。
+    /// </summary>
+    public async Task ImportDroppedFileAsync(string path, int droppedCount)
+    {
+        var fileName = Path.GetFileName(path);
+        if (!LibraryFile.HasLibraryExtension(path))
+        {
+            Fail($"拖入的不是 .sxml 或 .xml 文件：{fileName}");
+            return;
+        }
+
+        var count = _library.Messages.Count;
+        if (count > 0)
+        {
+            // 拖放比点菜单容易误触，所以这一路加确认；默认焦点落在「否」，和清空、删除同一防线口径。
+            var answer = MessageBox.Show(
+                $"消息库里有 {count} 条消息，导入 {fileName} 会全部替换。{Environment.NewLine}没有导出过的改动会丢失。",
+                "替换消息库",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (answer != MessageBoxResult.Yes)
+            {
+                StatusMessage = "已取消，消息库不变。";
+                return;
+            }
+        }
+
+        await ImportFromPathAsync(path, droppedCount > 1 ? $"（拖入 {droppedCount} 个文件，只用了第一个）" : null);
     }
 
     private async Task ExportLibraryAsync()
@@ -991,6 +1042,39 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             Fail($"新建消息失败：{exception.Message}");
         }
+    }
+
+    /// <summary>
+    /// 复制选中的那条，副本紧跟在原条后面。除名字以外全部照抄，名字一律换成「原名 Copy」，
+    /// 后缀用英文是跟着消息名的命名习惯走的。不做查重：连着复制两次就是「X Copy」和「X Copy Copy」。
+    /// 名字必须和原条不同——自动回复按 Name 指向消息，两条同名之后指向落到谁身上变成看库里的顺序。
+    /// 不弹确认：这一步无损，撤销这套工具本来也不做。
+    /// </summary>
+    private void DuplicateMessage()
+    {
+        var entry = SelectedMessage;
+        if (entry is null)
+        {
+            return;
+        }
+
+        var name = entry.Name.Length == 0 ? "Copy" : $"{entry.Name} Copy";
+        MessageEntry copy;
+        try
+        {
+            copy = _library.DuplicateMessage(entry, name);
+        }
+        catch (Exception exception) when (exception is ArgumentException or FormatException)
+        {
+            Fail($"复制失败：{exception.Message}");
+            return;
+        }
+
+        // RefreshMessages 会按 Index 把选中留在原条上，这里要显式挪到副本：
+        // 副本的名字就地可改，选中留在原条就等于让用户自己去列表里找那一行。
+        RefreshMessages();
+        SelectedMessage = Messages.FirstOrDefault(message => message.Index == copy.Index);
+        StatusMessage = $"已复制为 {copy.Name}。";
     }
 
     /// <summary>

@@ -350,5 +350,180 @@ public sealed class MessageLibraryTests
         Assert.HasCount(2, library.Messages);
         Assert.ThrowsExactly<ArgumentNullException>(() => library.RemoveMessage(null!));
     }
+
+    // ---- v1.1 m3 复制消息 ----
+
+    [TestMethod]
+    public void DuplicateMessage_CopiesEverythingExceptTheName()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        var entry = library.Messages[0];
+
+        var copy = library.DuplicateMessage(entry, "S1F1_AreYouThere Copy");
+
+        Assert.AreEqual("S1F1_AreYouThere Copy", copy.Name);
+        Assert.AreEqual("S1F1", copy.Signature);
+        Assert.IsTrue(copy.WBit);
+        Assert.AreEqual("S1F2_OnlineData", copy.AutoReply);
+        Assert.AreEqual("link test", copy.Element.Attribute("Description")?.Value);
+        Assert.IsNotNull(copy.Structure);
+        Assert.IsFalse(copy.Structure!.HasElements);
+
+        // 副本落在原条后面一格，原条之后的全部后移一位。
+        Assert.HasCount(4, library.Messages);
+        Assert.AreEqual(0, library.Messages[0].Index);
+        Assert.AreEqual("S1F1_AreYouThere", library.Messages[0].Name);
+        Assert.AreEqual(1, copy.Index);
+        Assert.AreEqual("S1F2_OnlineData", library.Messages[2].Name);
+        Assert.AreEqual("RecipeBody", library.Messages[3].Name);
+    }
+
+    [TestMethod]
+    public void DuplicateMessage_CopiesTheStructureBodyAndChildOrder()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        var entry = library.Messages[2];
+
+        var copy = library.DuplicateMessage(entry, "RecipeBody Copy");
+
+        CollectionAssert.AreEqual(ChildOrder(entry.Element), ChildOrder(copy.Element));
+        Assert.HasCount(entry.Element.Descendants("Maps").Count(), copy.Element.Descendants("Maps").ToList());
+
+        var originalBody = entry.Structure!.Descendants("A")
+            .Single(element => element.Attribute("Name")?.Value == "PPBODY");
+        var copiedBody = copy.Structure!.Descendants("A")
+            .Single(element => element.Attribute("Name")?.Value == "PPBODY");
+        Assert.AreEqual("keep", copiedBody.Attribute("ExtraAttr")?.Value);
+        Assert.AreEqual(originalBody.Element("Value")!.Value, copiedBody.Element("Value")!.Value);
+    }
+
+    [TestMethod]
+    public void DuplicateMessage_IsADeepCloneSoEditingTheCopyLeavesTheOriginalAlone()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        var entry = library.Messages[1];
+
+        var copy = library.DuplicateMessage(entry, "S1F2_OnlineData Copy");
+
+        // 走库的改法，不走直接写 XML：MessageEntry 是一次性快照，手写的改动不会刷进手上那条的 Signature。
+        var edited = library.SetHeader(copy, 9, 9, false);
+        edited.Element.Element("Structure")!.Descendants("A").First().Element("Value")!.Value = "CHANGED";
+
+        var original = library.Messages.Single(message => message.Name == "S1F2_OnlineData");
+        Assert.AreEqual("S1F2", original.Signature);
+        Assert.AreEqual("QODERSECS", original.Structure!.Descendants("A").First().Element("Value")!.Value);
+        Assert.AreEqual("S9F9", edited.Signature);
+        Assert.AreEqual("CHANGED", edited.Structure!.Descendants("A").First().Element("Value")!.Value);
+        Assert.AreSame(entry.Element, original.Element);
+    }
+
+    [TestMethod]
+    public void DuplicateMessage_BlankNameRemovesTheAttribute()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        var copy = library.DuplicateMessage(library.Messages[0], "   ");
+
+        Assert.AreEqual(string.Empty, copy.Name);
+        Assert.IsNull(copy.Element.Attribute("Name"));
+        Assert.AreEqual("link test", copy.Element.Attribute("Description")?.Value);
+    }
+
+    [TestMethod]
+    public void DuplicateMessage_KeepsOneMessagePerLineAndNoBlankRuns()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        // 复制的是最后一条：它和 </MessageDictionary> 之间不能被挤成一格。
+        library.DuplicateMessage(library.Messages[2], "RecipeBody Copy");
+        var exported = library.Export();
+        string[] lines = [.. exported.Split('\n')];
+
+        for (var i = 1; i < lines.Length; i++)
+        {
+            Assert.IsFalse(
+                lines[i].Trim().Length == 0 && lines[i - 1].Trim().Length == 0,
+                $"第 {i + 1} 行连着上一行都是空行：{Environment.NewLine}{exported}");
+        }
+
+        var originalLine = IndexOfMessageLine(lines, "RecipeBody");
+        var copyLine = IndexOfMessageLine(lines, "RecipeBody Copy");
+        Assert.IsTrue(originalLine >= 0 && copyLine >= 0, $"导出里没有各自的整行消息：{Environment.NewLine}{exported}");
+
+        // 副本单独占一行，缩进和原条一致（换行缩进是从文件里已有的节点抄来的）。
+        Assert.AreEqual(
+            LeadingSpaces(lines[originalLine]),
+            LeadingSpaces(lines[copyLine]));
+        Assert.IsTrue(lines[copyLine].TrimStart().StartsWith("<Message", StringComparison.Ordinal));
+
+        // 最后一条消息的收尾标签必须自己占一行，</MessageDictionary> 前一行就是它。
+        var closeLine = Array.FindIndex(lines, line => line.Trim() == "</MessageDictionary>");
+        Assert.IsGreaterThan(0, closeLine);
+        Assert.AreEqual("</Message>", lines[closeLine - 1].Trim());
+        Assert.HasCount(4, library.Document.Descendants("Message").ToList());
+    }
+
+    private static int IndexOfMessageLine(string[] lines, string name) =>
+        Array.FindIndex(lines, line => line.TrimStart().StartsWith($"<Message Name=\"{name}\"", StringComparison.Ordinal));
+
+    private static int LeadingSpaces(string line) => line.Length - line.TrimStart().Length;
+
+    [TestMethod]
+    public void DuplicateMessage_KeepsTheRestOfTheDocumentLoadable()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        library.DuplicateMessage(library.Messages[0], "S1F1_AreYouThere Copy");
+        var reloaded = MessageLibrary.Load(library.Export());
+
+        Assert.HasCount(4, reloaded.Messages);
+        Assert.AreEqual("S1F1_AreYouThere Copy", reloaded.Messages[1].Name);
+
+        Assert.AreEqual("keep me", reloaded.Document.Root!.Element("DataDictionary")!.Element("UnknownEntry")!.Value);
+        Assert.IsTrue(reloaded.Document.DescendantNodes().OfType<XComment>().Any());
+        Assert.HasCount(7, reloaded.Document.Descendants("Maps").ToList());
+    }
+
+    [TestMethod]
+    public void DuplicateMessage_CopyingTheMessageThatPointsAtAnotherKeepsThePointer()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        library.DuplicateMessage(library.Messages[0], "S1F1_AreYouThere Copy");
+
+        // 同 SxFy 现在有两条、都配了 AutoReply：解析器取排在前面那条的目标，两条目标相同，结果不变。
+        var target = AutoReplyResolver.FindTarget(library, 1, 1);
+        Assert.AreEqual("S1F2_OnlineData", target?.Name);
+    }
+
+    [TestMethod]
+    public void DuplicateMessage_CopyingThePointerTargetLeavesThePointerOnTheOriginal()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        var entry = library.Messages[1];
+
+        library.DuplicateMessage(entry, "S1F2_OnlineData Copy");
+
+        var target = AutoReplyResolver.FindTarget(library, 1, 1);
+        Assert.IsNotNull(target);
+        Assert.AreEqual("S1F2_OnlineData", target!.Name);
+        Assert.AreSame(entry.Element, target.Element);
+    }
+
+    [TestMethod]
+    public void DuplicateMessage_RejectsStaleAndForeignEntries()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+        var entry = library.Messages[0];
+        var foreign = MessageLibrary.Load(ReadFixture()).Messages[1];
+
+        Assert.ThrowsExactly<ArgumentException>(() => library.DuplicateMessage(foreign, "X"));
+        Assert.HasCount(3, library.Messages);
+
+        library.Clear();
+        // 库换过之后手上的快照不算，不能往新文档里塞旧文档的元素。
+        Assert.ThrowsExactly<ArgumentException>(() => library.DuplicateMessage(entry, "X"));
+        Assert.ThrowsExactly<ArgumentNullException>(() => library.DuplicateMessage(null!, "X"));
+    }
 }
 

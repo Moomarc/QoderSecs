@@ -276,7 +276,12 @@
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource PanelStyle}">
-                <Grid>
+                <!-- 左栏整片收文件拖放。AllowDrop 挂在面板的 Grid 上而不是 ListBox 上：
+                     「消息库为空」那条提示文字和 ListBox 是叠在同一格的兄弟元素，
+                     只挂 ListBox 的话拖到提示那一片会因为没有 AllowDrop 的祖先而收不到。 -->
+                <Grid AllowDrop="True"
+                      DragOver="MessageAreaDragOver"
+                      Drop="MessageAreaDrop">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -313,12 +318,13 @@
                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
                              SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
                              PreviewKeyDown="MessageListPreviewKeyDown">
-                        <!-- 删除入口：右键菜单 + Delete 键，不加工具条按钮（那里已经满了）。
+                        <!-- 删除和复制的入口都在右键菜单（删除另外还绑 Delete 键，工具条那里已经满了）。
                              菜单挂在列表而不是行上，PlacementTarget 就是 ListBox，
                              菜单项的 DataContext 直接是 VM，不用绕 RelativeSource。
-                             删的是鼠标底下那一条，靠下面 ItemContainerStyle 里的右键先选中那一步。 -->
+                             操作的是鼠标底下那一条，靠下面 ItemContainerStyle 里的右键先选中那一步。 -->
                         <ListBox.ContextMenu>
                             <ContextMenu>
+                                <MenuItem Header="复制" Command="{Binding DuplicateMessageCommand}" />
                                 <MenuItem Header="删除" Command="{Binding DeleteMessageCommand}" />
                             </ContextMenu>
                         </ListBox.ContextMenu>

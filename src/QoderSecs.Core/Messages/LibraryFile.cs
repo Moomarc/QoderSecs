@@ -10,6 +10,18 @@ public static class LibraryFile
 {
     private static readonly UTF8Encoding NoBom = new(false);
 
+    /// <summary>
+    /// 消息库文件的后缀口径，只认 SecsExpress 的 .sxml 和通用的 .xml。
+    /// 拖放的悬停判定和松手后的导入判定必须走这一个方法，各写一份就会出现
+    /// 「光标显示能松手、松手了说不是库文件」那类断裂。
+    /// </summary>
+    public static bool HasLibraryExtension(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".sxml", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".xml", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static async Task<MessageLibrary> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
         var xml = await File.ReadAllTextAsync(path, cancellationToken);

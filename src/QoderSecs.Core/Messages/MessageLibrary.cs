@@ -112,6 +112,51 @@ public sealed class MessageLibrary
     }
 
     /// <summary>
+    /// 复制一条消息，插在原条后面。除名字以外全部原样带过来，包括 AutoReply、Description
+    /// 和看不懂的未知子元素。
+    /// 名字必须由调用方给一个不同的值：自动回复是按 Name 指向消息的，两条同名之后
+    /// 指向落到哪一条变成看库里谁排在前面（<see cref="AutoReplyResolver"/>），
+    /// 界面上的自动回复下拉框也会列出两个一样的选项。
+    /// </summary>
+    public MessageEntry DuplicateMessage(MessageEntry entry, string name)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var dictionary = _document.Root?.Element("MessageDictionary");
+        if (dictionary is null || !ReferenceEquals(entry.Element.Parent, dictionary))
+        {
+            throw new ArgumentException("这条消息不在当前消息库里（库已换过）。", nameof(entry));
+        }
+
+        // 必须是深克隆：浅克隆会让副本和原条共用同一批子节点实例，改副本的结构连着改掉原条。
+        var clone = new XElement(entry.Element);
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0)
+        {
+            clone.Attribute("Name")?.Remove();
+        }
+        else
+        {
+            clone.SetAttributeValue("Name", trimmed);
+        }
+
+        if (entry.Element.PreviousNode is XText separator && string.IsNullOrWhiteSpace(separator.Value))
+        {
+            // 换行缩进跟着副本走一份，理由和 NewMessage、RemoveMessage 是同一条：
+            // 同事拿文本工具比对 SXML 时不该看到消息挤成一行或者成片空行。
+            // 前面是注释就不抄，未知内容原样保留比省一行空白更硬。
+            entry.Element.AddAfterSelf(new XText(separator.Value), clone);
+        }
+        else
+        {
+            entry.Element.AddAfterSelf(clone);
+        }
+
+        Messages = ParseMessages(_document);
+        return Messages.Single(candidate => ReferenceEquals(candidate.Element, clone));
+    }
+
+    /// <summary>
     /// 删掉一条消息，连它前面的换行缩进一起删——和 <see cref="NewMessage"/> 沿用缩进是同一条理由：
     /// 不删干净的话 MessageDictionary 里会留下成片空行，同事拿文本工具比对 SXML 会看到删除处整片不同。
     /// Index 是消息在 MessageDictionary 里的位置，删一条后面的全部前移，所以调用方手上的旧快照

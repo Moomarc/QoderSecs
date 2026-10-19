@@ -176,4 +176,17 @@ public sealed class LibraryFileTests
         var exception = await Assert.ThrowsExactlyAsync<FormatException>(() => LibraryFile.LoadAsync(path));
         StringAssert.Contains(exception.Message, "残缺");
     }
+
+    [TestMethod]
+    public void HasLibraryExtension_AcceptsSxmlAndXmlOnly()
+    {
+        Assert.IsTrue(LibraryFile.HasLibraryExtension(@"C:\库\common-commands.sxml"));
+        Assert.IsTrue(LibraryFile.HasLibraryExtension(@"C:\库\SAMPLE.XML"));
+
+        // 拖进来的还可能是文件夹、没后缀的文件和别的文本：一律不收，不去读内容。
+        Assert.IsFalse(LibraryFile.HasLibraryExtension("notes.txt"));
+        Assert.IsFalse(LibraryFile.HasLibraryExtension("notes.xml.txt"));
+        Assert.IsFalse(LibraryFile.HasLibraryExtension(@"C:\库"));
+        Assert.IsFalse(LibraryFile.HasLibraryExtension("README"));
+    }
 }

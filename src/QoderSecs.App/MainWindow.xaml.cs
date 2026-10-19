@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using QoderSecs.App.ViewModels;
 using QoderSecs.Core.Connection;
+using QoderSecs.Core.Messages;
 
 namespace QoderSecs.App;
 
@@ -160,6 +161,41 @@ public partial class MainWindow : Window
 
         viewModel.DeleteMessageCommand.Execute(null);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// 拖放数据里能不能取出一个消息库文件。后缀判定走 Core 的 LibraryFile.HasLibraryExtension，
+    /// 和 VM 松手之后那次判断是同一个方法——各写一份就会出现「光标显示能松手、松手了却说不是库文件」。
+    /// 这里不读文件内容，悬停阶段只按文件名决定。
+    /// </summary>
+    private static (string path, int count)? ReadDroppedLibrary(IDataObject data)
+    {
+        if (data.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length == 0)
+        {
+            return null;
+        }
+
+        return LibraryFile.HasLibraryExtension(paths[0]) ? (paths[0], paths.Length) : null;
+    }
+
+    private void MessageAreaDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = ReadDroppedLibrary(e.Data) is null ? DragDropEffects.None : DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    /// <summary>确认框和导入都在 VM 里，这里只负责从拖放数据里取路径。</summary>
+    private async void MessageAreaDrop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+
+        var dropped = ReadDroppedLibrary(e.Data);
+        if (dropped is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        await viewModel.ImportDroppedFileAsync(dropped.Value.path, dropped.Value.count);
     }
 
     /// <summary>
