@@ -19,7 +19,7 @@ public partial class App : Application
             var startupNotices = new[]
             {
                 paths.EnsureCreated(),
-                SampleLibrary.EnsureExtracted(paths.SampleLibraryPath),
+                SampleLibrary.EnsureExtracted(paths),
                 LogDirectoryCleaner.Clean(paths.LogsDirectory)
             }.Where(message => message is not null).ToArray();
 

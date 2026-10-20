@@ -44,12 +44,12 @@ public sealed class StructureEditorTests
         {
             var node = new StructureNode(StructureEditor.NewElement(type));
             Assert.IsNull(node.ValidationError, type.ToString());
-            Assert.AreEqual(string.Empty, node.Values.Single(), type.ToString());
+            Assert.AreEqual(string.Empty, node.ValueText, type.ToString());
         }
 
         var boolean = new StructureNode(StructureEditor.NewElement(SecsItemType.Boolean));
         Assert.IsNull(boolean.ValidationError);
-        Assert.AreEqual("False", boolean.Values.Single());
+        Assert.AreEqual("False", boolean.ValueText);
 
         foreach (var type in Numerics)
         {
@@ -382,7 +382,7 @@ public sealed class StructureEditorTests
     }
 
     [TestMethod]
-    public void SetValue_RefusesListsArraysAndUnknownElements()
+    public void SetValue_RefusesListsAndUnknownButFoldsArraysIntoOneValue()
     {
         var root = Root(Sample());
         Assert.IsFalse(StructureEditor.SetValue(root, "x"), "L 没有值");
@@ -390,8 +390,10 @@ public sealed class StructureEditorTests
 
         var count = root.Elements().ElementAt(4);
         count.Add(new XElement("Value", "1"));
-        Assert.IsFalse(StructureEditor.SetValue(count, "2"), "数组不可编辑");
-        Assert.HasCount(2, count.Elements("Value"));
+
+        Assert.IsTrue(StructureEditor.SetValue(count, "2 3"), "多个值也算可编辑");
+        Assert.HasCount(1, count.Elements("Value"), "改完只能留一个 <Value>，第二种形状不能留在文件里");
+        Assert.AreEqual("2 3", count.Element("Value")!.Value);
 
         var unknown = new XElement("Weird");
         Assert.IsFalse(StructureEditor.SetValue(unknown, "3"));
@@ -420,7 +422,8 @@ public sealed class StructureEditorTests
 
         var count = root.Elements().ElementAt(4);
         count.Add(new XElement("Value", "1"));
-        Assert.IsFalse(new StructureNode(count).IsValueEditable, "数组不可编辑");
+        Assert.IsTrue(new StructureNode(count).IsValueEditable, "多个值也算可编辑");
+        Assert.IsTrue(StructureEditor.SetValue(count, "1 2"), "输入框显示得出来，这里就必须改得进去");
         Assert.IsFalse(new StructureNode(new XElement("Weird")).IsValueEditable, "未知类型不碰");
     }
 

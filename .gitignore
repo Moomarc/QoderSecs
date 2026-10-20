@@ -6,11 +6,10 @@
 # dotenv files
 .env
 
-# QoderSecs local data and reference analysis
+# QoderSecs local data
 .tmp_analysis/
 data/
 QoderSecsData/
-# 会话原始记录含账号个人信息，只保留本地
 docs/session/
 
 # User-specific files

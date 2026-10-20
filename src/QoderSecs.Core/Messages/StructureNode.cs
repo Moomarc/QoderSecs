@@ -15,7 +15,16 @@ public sealed class StructureNode
             .Where(child => child.Name != "Value" && child.Name != "Maps")
             .Select(child => new StructureNode(child))
             .ToList();
-        Values = element.Elements("Value").Select(value => value.Value).ToList();
+
+        // 多个 <Value> 子元素并不存在这个模型里：SecsExpress 自己的四份 sxml 一个例子都没有，
+        // 数组一律写成单个 <Value>、各个值之间用空白分开（照 SecsExpress 的存法）。
+        // 读入时真碰上多个就拼成一段文本，不让它变成不可编辑的第二种形状。
+        var valueElements = element.Elements("Value").ToList();
+        HasValue = valueElements.Count > 0;
+        ValueText = string.Join(' ', valueElements.Select(value => value.Value));
+        Items = SecsItemTypes.IsElementArray(ItemType)
+            ? ValueText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            : [];
     }
 
     public XElement Element { get; }
@@ -37,27 +46,31 @@ public sealed class StructureNode
 
     public IReadOnlyList<StructureNode> Children { get; }
 
-    public IReadOnlyList<string> Values { get; }
+    /// <summary>&lt;Value&gt; 里的原文，多个值就是空格分隔的那一段。没有 Value 子元素时是空串。</summary>
+    public string ValueText { get; }
+
+    /// <summary>有没有 &lt;Value&gt; 子元素。L 带了个空的 Value 也算带，这一条要和"有没有正文"分开判。</summary>
+    public bool HasValue { get; }
+
+    /// <summary>数值和 Boolean 按空白拆出来的各个值；A / J / B / L 为空，它们的正文整体看 <see cref="ValueText"/>。</summary>
+    public IReadOnlyList<string> Items { get; }
 
     /// <summary>
-    /// 第一个 &lt;Value&gt; 的文本，没有就是空串；数值类型的空占位按 "0" 返回，
+    /// &lt;Value&gt; 里的文本，没有就是空串；数值类型的空占位按 "0" 返回，
     /// 和 ValidateNumber 放行空值的规则配套，转换时不用再判一次。
     /// </summary>
-    public string SingleValue
-    {
-        get
-        {
-            var value = Values.Count == 0 ? string.Empty : Values[0];
-            return string.IsNullOrWhiteSpace(value) && IsNumeric(ItemType) ? "0" : value;
-        }
-    }
+    public string SingleValue =>
+        string.IsNullOrWhiteSpace(ValueText) && IsNumeric(ItemType) ? "0" : ValueText;
 
-    public bool IsArray => Values.Count > 1;
+    public bool IsArray => Items.Count > 1;
 
-    public bool IsEditable => HasKnownType && !IsArray;
+    /// <summary>这个类型能不能装多个值。A / J / B 是一段字节文本，不在数组这一档里。</summary>
+    public bool CanHoldArray => SecsItemTypes.IsElementArray(ItemType);
+
+    public bool IsEditable => HasKnownType;
 
     /// <summary>
-    /// 值输入框能不能编辑。L 本身没有值，数组和未知类型 v1 不碰，
+    /// 值输入框能不能编辑。L 本身没有值，未知类型 v1 不碰，
     /// 界面显不显示输入框和 SetValue 返不返回 false 必须是同一条判断。
     /// </summary>
     public bool IsValueEditable => IsEditable && ItemType != SecsItemType.List;
@@ -71,28 +84,39 @@ public sealed class StructureNode
             return $"未知元素类型「{ElementName}」，v1 不编辑。";
         }
 
-        if (IsArray)
+        if (ItemType == SecsItemType.List)
         {
-            return "v1 不支持数值数组，保持原样不可编辑。";
+            return HasValue ? "L 不能带 <Value>。" : null;
         }
 
-        var value = Values.Count == 0 ? null : Values[0];
-        return ItemType switch
+        if (IsArray)
         {
-            SecsItemType.List => Values.Count == 0 ? null : "L 不能带 <Value>。",
-            SecsItemType.A or SecsItemType.J => null,
-            SecsItemType.B => ValidateBinary(value),
-            SecsItemType.Boolean => ValidateBoolean(value),
-            _ => ValidateNumber(value)
-        };
+            // 逐个值判，报出是第几个出错：机台的数组动辄几十个值，只说「不合法」查不动。
+            for (var index = 0; index < Items.Count; index++)
+            {
+                var error = ValidateOne(Items[index]);
+                if (error is not null)
+                {
+                    return $"第 {index + 1} 个值有问题：{error}";
+                }
+            }
+
+            return null;
+        }
+
+        return ValidateOne(HasValue ? ValueText : null);
     }
 
-    /// <summary>刻意和 Validate 里的 default 分支保持同一套判断：除这五种之外的类型都走数值校验。</summary>
-    private static bool IsNumeric(SecsItemType? type) => type switch
+    private string? ValidateOne(string? value) => ItemType switch
     {
-        null or SecsItemType.List or SecsItemType.A or SecsItemType.J or SecsItemType.B or SecsItemType.Boolean => false,
-        _ => true
+        SecsItemType.A or SecsItemType.J => null,
+        SecsItemType.B => ValidateBinary(value),
+        SecsItemType.Boolean => ValidateBoolean(value),
+        _ => ValidateNumber(value)
     };
+
+    /// <summary>走数值校验的那些类型：数组判断的补集，减掉 Boolean。和 Validate 的 default 分支同源。</summary>
+    private static bool IsNumeric(SecsItemType? type) => SecsItemTypes.IsElementArray(type) && type != SecsItemType.Boolean;
 
     private string? ValidateNumber(string? value)
     {

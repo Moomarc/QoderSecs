@@ -205,7 +205,7 @@
                                  AutomationProperties.Name="节点值"
                                  Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
                                  TextWrapping="NoWrap"
-                                 ToolTip="{Binding ValidationError}">
+                                 ToolTip="{Binding ValueEditorTip}">
                             <TextBox.Style>
                                 <Style TargetType="TextBox">
                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -466,7 +466,9 @@
                                     <MenuItem Command="{Binding ClearLibraryCommand}" Header="清空消息库…" />
                                 </MenuItem>
                             </Menu>
-                            <Button Command="{Binding NewMessageCommand}" Content="＋ 新消息" />
+                            <Button AutomationProperties.AutomationId="NewMessage"
+                                    Command="{Binding NewMessageCommand}"
+                                    Content="＋ 新消息" />
                         </StackPanel>
                         <TextBlock Margin="0,0,8,0"
                                    Style="{StaticResource SectionTitleStyle}"
@@ -577,7 +579,8 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Margin="10,4,8,4"
+                    <TextBlock Grid.Row="0"
+                               Margin="10,4,8,4"
                                Style="{StaticResource SectionTitleStyle}"
                                Text="消息编辑" />
                     <DockPanel Grid.Row="1" Margin="10,0,8,8">
@@ -588,10 +591,20 @@
                                 DockPanel.Dock="Right"
                                 Command="{Binding SendCommand}"
                                 Content="发送" />
+                        <!-- 带 W 的消息在途时发送按键必然变灰（一次只发一条），
+                             没有这个按钮的话等待只能靠 T3 到点，观感就是程序卡死。 -->
+                        <Button Width="90"
+                                Margin="0,0,0,0"
+                                VerticalAlignment="Bottom"
+                                DockPanel.Dock="Right"
+                                Visibility="{Binding CancelSendVisibility}"
+                                Command="{Binding CancelSendCommand}"
+                                Content="取消等待" />
                         <WrapPanel IsEnabled="{Binding HasSelectedMessage}">
                             <StackPanel Width="170">
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" />
-                                <TextBox AutomationProperties.Name="消息名称"
+                                <TextBox AutomationProperties.AutomationId="MessageName"
+                                         AutomationProperties.Name="消息名称"
                                          KeyDown="CommitOnEnter"
                                          ToolTip="同一个 SxFy 可以有多条消息，全靠这个名字区分（自动回复也是按它指向的）；不能留空，也不能和别的消息重名"
                                          Text="{Binding MessageName, UpdateSourceTrigger=LostFocus}" />
@@ -602,29 +615,44 @@
                             <StackPanel Margin="8,0,0,0" Orientation="Horizontal">
                                 <StackPanel Width="56">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="S" />
-                                    <TextBox AutomationProperties.Name="消息 Stream"
+                                    <TextBox AutomationProperties.AutomationId="MessageStream"
+                                             AutomationProperties.Name="消息 Stream"
                                              KeyDown="CommitOnEnter"
                                              Text="{Binding StreamText, UpdateSourceTrigger=LostFocus}" />
                                 </StackPanel>
                                 <StackPanel Width="56" Margin="8,0,0,0">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="F" />
-                                    <TextBox AutomationProperties.Name="消息 Function"
+                                    <TextBox AutomationProperties.AutomationId="MessageFunction"
+                                             AutomationProperties.Name="消息 Function"
                                              KeyDown="CommitOnEnter"
                                              Text="{Binding FunctionText, UpdateSourceTrigger=LostFocus}" />
                                 </StackPanel>
                                 <CheckBox Margin="10,17,0,0"
                                           VerticalAlignment="Center"
+                                          AutomationProperties.AutomationId="MessageWBit"
                                           AutomationProperties.Name="消息 W 位"
                                           Content="W"
                                           IsChecked="{Binding MessageWBit}"
                                           ToolTip="这条消息要求对方回复（W-Bit）" />
                             </StackPanel>
                             <StackPanel Width="170" Margin="12,0,0,0">
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="自动回复" />
-                                <ComboBox AutomationProperties.Name="自动回复"
-                                          ItemsSource="{Binding AutoReplyOptions}"
+                                <TextBlock Style="{StaticResource FieldLabelStyle}"
+                                           Text="{Binding AutoReplyFieldLabel}" />
+                                <ComboBox AutomationProperties.AutomationId="MessageAutoReply"
+                                          AutomationProperties.Name="{Binding AutoReplyFieldLabel}"
+                                          DisplayMemberPath="Display"
+                                          ItemsSource="{Binding AutoReplyCandidates}"
                                           SelectedItem="{Binding MessageAutoReply}"
-                                          ToolTip="收到这条消息时自动回哪一条" />
+                                          ToolTip="收到这条消息时自动回哪一条。候选写的是「SxF · 名字」；标了「不配对」的是说它不是本条 F+1 那一号，照样可以选，程序按名字回">
+                                    <ComboBox.ItemContainerStyle>
+                                        <Style TargetType="ComboBoxItem">
+                                            <!-- 不加这个，下拉项的 UIA 名字就是 AutoReplyOption 的 ToString()，
+                                                 读屏软件念一串字段名，自动化也断言不到「SxF · 名字」那段文案。
+                                                 和左栏消息行同一个做法。 -->
+                                            <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
+                                        </Style>
+                                    </ComboBox.ItemContainerStyle>
+                                </ComboBox>
                             </StackPanel>
                         </WrapPanel>
                     </DockPanel>
@@ -770,7 +798,7 @@
                                                      AcceptsReturn="{Binding IsMultiLineValue}"
                                                      Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
                                                      TextWrapping="Wrap"
-                                                     ToolTip="{Binding ValidationError}">
+                                                     ToolTip="{Binding ValueEditorTip}">
                                                 <TextBox.Style>
                                                     <Style TargetType="TextBox">
                                                         <Setter Property="MinHeight" Value="30" />

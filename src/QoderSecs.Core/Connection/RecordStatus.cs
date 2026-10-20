@@ -37,5 +37,8 @@ public enum RecordStatus
     OrphanSecondary,
 
     /// <summary>连接断开时还挂着等待的记录：等的那条不会再来了。</summary>
-    LinkClosed
+    LinkClosed,
+
+    /// <summary>发出去了但本端不再等它的回复（点了「取消等待」）。回复稍后真到了仍按迟到配对。</summary>
+    WaitAbandoned
 }

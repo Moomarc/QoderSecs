@@ -196,6 +196,9 @@ public static class SmlConverter
         }
 
         var value = node.SingleValue;
+        // 数组的各个值。空的数值占位没有值可拆，退成 SingleValue 那一个 0，和 ValidateNumber
+        // 放行空值、SmlParser 允许 <U4 [1] > 是同一条口径。
+        var values = node.Items.Count > 0 ? node.Items : [value];
         var culture = CultureInfo.InvariantCulture;
         switch (node.ItemType)
         {
@@ -223,41 +226,56 @@ public static class SmlConverter
                 item = Item.B(Convert.FromHexString(StructureNode.NormalizeBinary(value)));
                 return true;
             case SecsItemType.Boolean:
-                item = Item.Boolean([bool.Parse(value)]);
+                item = Item.Boolean(ParseEach(values, bool.Parse));
                 return true;
             case SecsItemType.I1:
-                item = Item.I1([sbyte.Parse(value, culture)]);
+                item = Item.I1(ParseEach(values, text => sbyte.Parse(text, culture)));
                 return true;
             case SecsItemType.I2:
-                item = Item.I2([short.Parse(value, culture)]);
+                item = Item.I2(ParseEach(values, text => short.Parse(text, culture)));
                 return true;
             case SecsItemType.I4:
-                item = Item.I4([int.Parse(value, culture)]);
+                item = Item.I4(ParseEach(values, text => int.Parse(text, culture)));
                 return true;
             case SecsItemType.I8:
-                item = Item.I8([long.Parse(value, culture)]);
+                item = Item.I8(ParseEach(values, text => long.Parse(text, culture)));
                 return true;
             case SecsItemType.U1:
-                item = Item.U1([byte.Parse(value, culture)]);
+                item = Item.U1(ParseEach(values, text => byte.Parse(text, culture)));
                 return true;
             case SecsItemType.U2:
-                item = Item.U2([ushort.Parse(value, culture)]);
+                item = Item.U2(ParseEach(values, text => ushort.Parse(text, culture)));
                 return true;
             case SecsItemType.U4:
-                item = Item.U4([uint.Parse(value, culture)]);
+                item = Item.U4(ParseEach(values, text => uint.Parse(text, culture)));
                 return true;
             case SecsItemType.U8:
-                item = Item.U8([ulong.Parse(value, culture)]);
+                item = Item.U8(ParseEach(values, text => ulong.Parse(text, culture)));
                 return true;
             case SecsItemType.F4:
-                item = Item.F4([float.Parse(value, culture)]);
+                item = Item.F4(ParseEach(values, text => float.Parse(text, culture)));
                 return true;
             case SecsItemType.F8:
-                item = Item.F8([double.Parse(value, culture)]);
+                item = Item.F8(ParseEach(values, text => double.Parse(text, culture)));
                 return true;
             default:
                 error = $"未知元素类型「{node.ElementName}」，v1 不编辑。";
                 return false;
         }
+    }
+
+    /// <summary>
+    /// 逐个转成该类型的值。走到这一步 ValidationError 已经放行，解析不会再失败；
+    /// 真有人绕过校验塞进来，异常由调用链上的发送路径接住并报成发送失败。
+    /// </summary>
+    private static T[] ParseEach<T>(IReadOnlyList<string> values, Func<string, T> parse)
+    {
+        var parsed = new T[values.Count];
+        for (var index = 0; index < values.Count; index++)
+        {
+            parsed[index] = parse(values[index]);
+        }
+
+        return parsed;
     }
 }

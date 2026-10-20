@@ -118,10 +118,11 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     public string DisplayName => Node.Name ?? string.Empty;
 
+    /// <summary>树行上的值摘要。数组把各个值都显示出来，末尾点个数的标记，行内不用点开就知道填了几项。</summary>
     public string ValuePreview => Node.ItemType switch
     {
         SecsItemType.List or null => string.Empty,
-        _ when Node.IsArray => $"{Node.Values.Count} 个值 · 数组不可编辑",
+        _ when Node.IsArray => $"{OneLine(Node.ValueText)} · {Node.Items.Count} 个值",
         _ => OneLine(Node.SingleValue)
     };
 
@@ -161,7 +162,12 @@ public sealed class StructureNodeViewModel : ObservableObject
     /// <summary>Boolean 的下拉只有两个合法值，从源头就不让填出错的。</summary>
     public IReadOnlyList<string> BooleanOptions { get; } = ["True", "False"];
 
-    public bool IsBoolean => Node.ItemType == SecsItemType.Boolean;
+    /// <summary>下拉只给两个合法值，从源头就不让填出错；数组不走下拉，用文本框按空格分隔编辑。</summary>
+    /// <summary>
+    /// Boolean 只有单值走下拉。判据用「值里有没有空格」而不是值的个数：属性框边敲边写，
+    /// 刚打完 True 再打一个空格那一下值仍是单项，按个数判会当场把文本框换成下拉，光标和空格一起丢。
+    /// </summary>
+    public bool IsBoolean => Node.ItemType == SecsItemType.Boolean && !Node.ValueText.Contains(' ');
 
     public bool IsMultiLineValue => Node.ItemType is SecsItemType.A or SecsItemType.J;
 
@@ -175,9 +181,20 @@ public sealed class StructureNodeViewModel : ObservableObject
     public string ValueNote => Node.ItemType switch
     {
         SecsItemType.List => $"子项 {Node.Children.Count} 个",
-        _ when Node.IsArray => $"{Node.Values.Count} 个值 · 数组不可编辑",
         _ => "未知元素类型，v1 不编辑。"
     };
+
+    /// <summary>
+    /// 值输入框的悬停说明。有问题先报问题，没问题才讲怎么填——数组这一条不写出来，
+    /// 用户看不出这个框能装多个值（第 5 条修改意见要的就是这个能力）。
+    /// </summary>
+    public string? ValueEditorTip => ValidationError ?? (Node.ItemType switch
+    {
+        SecsItemType.A or SecsItemType.J => "一段文本，可以换行。",
+        SecsItemType.B => "十六进制字节，成对写，可以用空格分隔。",
+        _ when Node.CanHoldArray => "可以填多个值，用空格分隔，例如 0 0 1。",
+        _ => null
+    });
 
     public string EditName
     {
@@ -197,7 +214,7 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     public string EditValue
     {
-        get => Node.IsValueEditable && Node.Values.Count > 0 ? Node.Values[0] : string.Empty;
+        get => Node.IsValueEditable ? Node.ValueText : string.Empty;
         set
         {
             if (!Node.IsValueEditable || value == EditValue)
@@ -214,6 +231,8 @@ public sealed class StructureNodeViewModel : ObservableObject
     /// <summary>
     /// 名字或值改完后 XElement 变了，但 VM 包的是构造时的快照。只重建自己这一行再通知，
     /// 比整棵树重建便宜，也不会把属性输入框的光标弄丢。
+    /// 值的形状变了，用哪几个编辑控件也跟着变（Boolean 单值走下拉、数组走文本框），
+    /// 所以那几个可见性也要一起报，不然界面会停在错的那一个控件上。
     /// </summary>
     public void RefreshSnapshot()
     {
@@ -224,7 +243,12 @@ public sealed class StructureNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(ValidationError));
         OnPropertyChanged(nameof(EditName));
         OnPropertyChanged(nameof(EditValue));
+        OnPropertyChanged(nameof(IsBoolean));
+        OnPropertyChanged(nameof(ShowsValueEditor));
+        OnPropertyChanged(nameof(ShowsBooleanEditor));
+        OnPropertyChanged(nameof(ShowsValueNote));
         OnPropertyChanged(nameof(ValueNote));
+        OnPropertyChanged(nameof(ValueEditorTip));
         OnPropertyChanged(nameof(AutomationName));
     }
 

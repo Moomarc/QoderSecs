@@ -109,7 +109,7 @@ public sealed class TranscriptCorrelator
                 });
             }
 
-            var isLate = request.Status == RecordStatus.TimedOut;
+            var isLate = request.Status is RecordStatus.TimedOut or RecordStatus.WaitAbandoned;
             var record = Add(new CommunicationRecord(
                 SecsDirection.In, systemBytes, header, timestamp, sml,
                 isLate ? RecordStatus.LateSecondary : RecordStatus.PairedSecondary)
@@ -146,7 +146,17 @@ public sealed class TranscriptCorrelator
     }
 
     /// <summary>T3 到点但仍允许迟到回复继续配对。</summary>
-    public void MarkTimedOut(int systemBytes, DateTimeOffset timestamp)
+    public void MarkTimedOut(int systemBytes, DateTimeOffset timestamp) =>
+        StopWaiting(systemBytes, timestamp, RecordStatus.TimedOut);
+
+    /// <summary>
+    /// 本端不等这条请求的回复了（点「取消等待」）。走的是 T3 超时那一档的登记，
+    /// 回复要是稍后真到了，仍然按迟到回复配上，不写成无人等待。
+    /// </summary>
+    public void MarkWaitAbandoned(int systemBytes, DateTimeOffset timestamp) =>
+        StopWaiting(systemBytes, timestamp, RecordStatus.WaitAbandoned);
+
+    private void StopWaiting(int systemBytes, DateTimeOffset timestamp, RecordStatus status)
     {
         lock (_gate)
         {
@@ -158,7 +168,7 @@ public sealed class TranscriptCorrelator
             // 耗时先写再改状态：detail.log 只在状态变化时记一行，
             // 反过来会先记一条没有耗时的，再记一条有耗时的，同一件事写两遍。
             record.ElapsedMilliseconds = (int)Math.Round((timestamp - record.Timestamp).TotalMilliseconds);
-            record.Status = RecordStatus.TimedOut;
+            record.Status = status;
             _timedOutRequests[systemBytes] = record;
         }
     }

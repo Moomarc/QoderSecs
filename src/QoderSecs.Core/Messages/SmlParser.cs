@@ -242,7 +242,7 @@ public static class SmlParser
             }
 
             var values = ReadValueTokens(elementName);
-            element.Add(new XElement("Value", type is SecsItemType.B ? ReadBinary(values) : ReadSingle(values, elementName)));
+            element.Add(new XElement("Value", ReadValueText(type, values, elementName)));
             if (MapsTypeCodes.TryGetValue(type, out var code))
             {
                 element.Add(new XElement("Maps", new XAttribute("Type", code)));
@@ -302,7 +302,18 @@ public static class SmlParser
             }
         }
 
-        private static string ReadSingle(List<Token> values, string elementName)
+        /// <summary>
+        /// 值怎么落成一段文本：B 拼十六进制，A/J 只准一段，数值和 Boolean 把多个值用空格连起来
+        /// 存进同一个 &lt;Value&gt;（跟 SecsExpress 的存法一致，数组不发明第二种 XML 形状）。
+        /// </summary>
+        private static string ReadValueText(SecsItemType type, List<Token> values, string elementName) => type switch
+        {
+            SecsItemType.B => ReadBinary(values),
+            SecsItemType.A or SecsItemType.J => ReadPlainText(values, elementName),
+            _ => string.Join(' ', values.Select(value => value.Value))
+        };
+
+        private static string ReadPlainText(List<Token> values, string elementName)
         {
             if (values.Count == 0)
             {
@@ -311,7 +322,8 @@ public static class SmlParser
 
             if (values.Count > 1)
             {
-                throw new SmlParseException($"第 {values[1].Line} 行：v1 不支持数组，{elementName} 只能有一个值。");
+                throw new SmlParseException(
+                    $"第 {values[1].Line} 行：{elementName} 是一段字节文本，只能有一个值；[个数] 写的是它的字节数，不是元素个数。");
             }
 
             return values[0].Value;

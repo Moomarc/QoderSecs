@@ -31,6 +31,12 @@ public sealed class HsmsLink : IAsyncDisposable
 
     /// <summary>本端正在主动断开。Secs4Net 会把断开时的取消当错误报上来，靠这个区分措辞。</summary>
     private bool _closing;
+
+    /// <summary>
+    /// 在途那一条发送的取消源。断开和「取消等待」都经它叫停等回复，
+    /// 取、消、放都在 _gate 里做，界面点取消不会碰上已释放的取消源。
+    /// </summary>
+    private CancellationTokenSource? _pendingSend;
     private CancellationTokenSource? _cts;
     private HsmsConnection? _connection;
     private SecsGem? _gem;
@@ -220,19 +226,32 @@ public sealed class HsmsLink : IAsyncDisposable
         {
             // 清理必须跑完：漏掉 connection.DisposeAsync()，Passive 模式下端口会一直被占着，
             // 再点连接只会得到「地址已在使用」，用户看不出来是上一次没清干净。
+            Exception? teardownFailure = null;
             try
             {
                 gem?.Dispose();
                 await connection.DisposeAsync().ConfigureAwait(false);
             }
-            finally
+            catch (Exception exception)
             {
-                // 把还挂着的记录落到「连接已断开」，这几条状态变化要写进本次会话的 detail.log，
-                // 所以日志留到最后再关。
-                Transcript.ClearPending();
-                SetPhase(LinkPhase.Offline);
-                await CloseLogAsync().ConfigureAwait(false);
+                // 实测：收管线已被取消后，Secs4Net 的 HsmsConnection.Disconnect 自己会抛
+                // NullReferenceException。断开这一步其实成功了（端口释放、记录落定），
+                // 让它抛出去只会让界面弹「这一步操作已中止」。原因在对方库里，我们改不了，
+                // 所以按 Start 失败后清理的同一口径处理：吃掉，但记进本次会话日志。
+                teardownFailure = exception;
             }
+
+            if (teardownFailure is not null)
+            {
+                Log?.EnqueueDetail(
+                    $"连接对象收尾时抛了 {teardownFailure.GetType().Name}：{teardownFailure.Message}；本端已按断开处理。");
+            }
+
+            // 把还挂着的记录落到「连接已断开」，这几条状态变化要写进本次会话的 detail.log，
+            // 所以日志留到最后再关。
+            Transcript.ClearPending();
+            SetPhase(LinkPhase.Offline);
+            await CloseLogAsync().ConfigureAwait(false);
         }
     }
 
@@ -261,26 +280,47 @@ public sealed class HsmsLink : IAsyncDisposable
     public ValueTask DisposeAsync() => DisconnectAsync();
 
     /// <summary>
-    /// 发送一条消息。带 W 位时等对方回复，T3 到点把记录标成超时。
-    /// 返回值会直接写进界面状态栏，所以成功和失败都要把话说清楚。
+    /// 发送一条消息。带 W 位时等对方回复，T3 到点、本端断开或取消等待都会叫停，
+    /// 三种落定的说法不一样，所以返回值直接写进界面状态栏。
     /// </summary>
     public async Task<string> SendAsync(SecsMessage message, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(message);
 
         SecsGem gem;
+        CancellationTokenSource linkCancellation;
         lock (_gate)
         {
-            if (_gem is null)
+            if (_gem is null || _cts is null)
             {
                 throw new InvalidOperationException("尚未连接，不能发送。");
             }
 
             gem = _gem;
+            linkCancellation = _cts;
         }
 
+        // 等回复必须连着这条连接的生命周期：Secs4Net 只在回复到达或 T3 到点时落定，
+        // T3 能配到 86400 秒，不取消就把发送闸门一直握着，界面会读成「按键变灰不能操作」。
+        var sendCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation, linkCancellation.Token);
         var header = new SecsHeader(message.S, message.F, message.ReplyExpected, message.Name);
-        await _sendGate.WaitAsync(cancellation).ConfigureAwait(false);
+        try
+        {
+            await _sendGate.WaitAsync(sendCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            sendCancellation.Dispose();
+            return NotSentText(header, linkCancellation);
+        }
+
+        // 拿到闸门才算在途：闸门一次只放一条出去，所以「取消等待」取消的必然是正在等回复的那一条，
+        // 不会误伤还排在后面的发送。
+        lock (_gate)
+        {
+            _pendingSend = sendCancellation;
+        }
+
         try
         {
             // 出站回调对所有消息都会触发（阶段 4 的自动回复也是），只能靠引用相等认领本次请求。
@@ -295,7 +335,8 @@ public sealed class HsmsLink : IAsyncDisposable
             {
                 // 编码和出站回调都在 gem.SendAsync 的同步段里跑，大消息的 SML 落盘也在那里，
                 // 所以整段扔到线程池上：界面调进来时不能被这条消息的体积卡住。
-                reply = await Task.Run(() => gem.SendAsync(message, cancellation), cancellation).ConfigureAwait(false);
+                reply = await Task.Run(() => gem.SendAsync(message, sendCancellation.Token), sendCancellation.Token)
+                    .ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is SecsException or OperationCanceledException or ObjectDisposedException)
             {
@@ -311,6 +352,18 @@ public sealed class HsmsLink : IAsyncDisposable
                     Log?.EnqueueDetail(
                         $"T3 超时 {header.Signature} sys={timedOut:X8}：等待回复超过 {Profile?.T3Seconds ?? 0} 秒");
                     return $"{header.Signature} 等待回复超时（T3 {Profile?.T3Seconds ?? 0} 秒）。";
+                }
+
+                if (exception is OperationCanceledException)
+                {
+                    if (systemBytes is { } abandoned)
+                    {
+                        return AbandonWaitText(header, abandoned, linkCancellation);
+                    }
+
+                    // 还没上线就被叫停（排在闸门后面、或断开正好赶在发送之前）。
+                    Log?.EnqueueDetail($"未发出 {header.Signature}：{StopReason(linkCancellation)}");
+                    return NotSentText(header, linkCancellation);
                 }
 
                 Log?.EnqueueDetail($"发送失败 {header.Signature}：{exception.Message}");
@@ -335,9 +388,64 @@ public sealed class HsmsLink : IAsyncDisposable
                 _inFlightMessage = null;
             }
 
+            DisposePendingSend(sendCancellation);
             _sendGate.Release();
         }
     }
+
+    /// <summary>
+    /// 取消正在等回复的那条发送。消息已经上线了，取消掉的只是「等」这件事：
+    /// 记录落到已取消等待，闸门立刻放开，发送按键跟着恢复。没有等待中的发送时返回 false。
+    /// </summary>
+    public bool CancelPendingSend()
+    {
+        lock (_gate)
+        {
+            if (_pendingSend is null)
+            {
+                return false;
+            }
+
+            _pendingSend.Cancel();
+            return true;
+        }
+    }
+
+    private void DisposePendingSend(CancellationTokenSource sendCancellation)
+    {
+        lock (_gate)
+        {
+            if (ReferenceEquals(_pendingSend, sendCancellation))
+            {
+                _pendingSend = null;
+            }
+
+            // 取消源和它的释放都在同一把锁里，CancelPendingSend 不会碰见已释放的对象。
+            sendCancellation.Dispose();
+        }
+    }
+
+    private string AbandonWaitText(SecsHeader header, int systemBytes, CancellationTokenSource linkCancellation)
+    {
+        // 两种叫停都以「已发出」开头：消息确实上线了，界面据此不写成红色报错。
+        // 断开叫停的不改写记录：DisconnectAsync 收尾时统一落到「连接已断开」。
+        if (linkCancellation.IsCancellationRequested)
+        {
+            Log?.EnqueueDetail($"连接已断开，不再等 {header.Signature} sys={systemBytes:X8} 的回复");
+            return $"{SentPrefix} {header.Signature}，连接已断开，没等到回复。";
+        }
+
+        Transcript.MarkWaitAbandoned(systemBytes, DateTimeOffset.Now);
+        Log?.EnqueueDetail($"取消等待 {header.Signature} sys={systemBytes:X8} 的回复");
+        return $"{SentPrefix} {header.Signature}，已取消等待回复。";
+    }
+
+    private static string NotSentText(SecsHeader header, CancellationTokenSource linkCancellation) =>
+        $"{header.Signature} 未发出：{StopReason(linkCancellation)}。";
+
+    private static string StopReason(CancellationTokenSource linkCancellation) =>
+        linkCancellation.IsCancellationRequested ? "连接已断开" : "已取消等待";
+
 
     /// <summary>
     /// Start 失败后的端口清理：字段已经在抛出前摘掉了，这里只碰局部引用，不会干扰下一次连接。

@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using QoderSecs.Core.Messages;
+using Secs4Net;
 
 namespace QoderSecs.Tests;
 
@@ -82,13 +83,46 @@ public sealed class SmlTests
         StringAssert.Contains(error!, "abc");
     }
 
+    /// <summary>
+    /// 数组要发得出去：data 元素和 wafer map 的 &lt;I2[2] 0 0&gt; 就是这个形状
+    /// （跟 SecsExpress 导出的 arrays.sxml 保持一致）。
+    /// </summary>
     [TestMethod]
-    public void TryToSml_ReportsNumericArray()
+    public void TryToSml_WritesEveryValueOfANumericArray()
     {
-        var entry = Entry("<Structure><U4><Value>1</Value><Value>2</Value></U4></Structure>");
+        var entry = Entry("<Structure><U4><Value>1 2 3</Value></U4></Structure>");
 
-        Assert.IsFalse(SmlConverter.TryToSml(entry, out _, out var error));
-        StringAssert.Contains(error!, "数组");
+        Assert.IsTrue(SmlConverter.TryToSml(entry, out var sml, out var error), error);
+        StringAssert.Contains(Nl(sml), "<U4 [3] 1 2 3>");
+    }
+
+    [TestMethod]
+    public void TryToMessage_BuildsOneItemPerArrayValue()
+    {
+        var entry = Entry("<Structure><L><I2><Value>0 0</Value></I2><Boolean><Value>True False</Value></Boolean></L></Structure>");
+
+        Assert.IsTrue(SmlConverter.TryToMessage(entry, out var message, out var error), error);
+        using (message)
+        {
+            Assert.AreEqual(SecsFormat.List, message.SecsItem!.Format);
+            Assert.HasCount(2, message.SecsItem!.Items);
+
+            var sml = Nl(SmlConverter.ToSml(message));
+            StringAssert.Contains(sml, "<I2 [2] 0 0>");
+            StringAssert.Contains(sml, "<Boolean [2] True False>");
+        }
+    }
+
+    /// <summary>越界的数组值要拦住，并报出是第几个。</summary>
+    [TestMethod]
+    public void TryToSml_ReportsWhichArrayValueIsWrong()
+    {
+        var entry = Entry("<Structure><U1><Value>1 2 999</Value></U1></Structure>");
+
+        Assert.IsFalse(SmlConverter.TryToSml(entry, out var sml, out var error));
+        Assert.AreEqual(string.Empty, sml);
+        StringAssert.Contains(error!, "第 3 个值");
+        StringAssert.Contains(error!, "999");
     }
 
     [TestMethod]
@@ -344,10 +378,23 @@ public sealed class SmlTests
         StringAssert.Contains(ParseError("S2F33 W\n<L [1]\n  <U4AUTO [1] >\n>\n.")!, "U4AUTO");
     }
 
+    /// <summary>粘贴 S12 那种 &lt;I2[2] 0 0&gt; 要收，各个值存进同一个 &lt;Value&gt;、空格分隔。</summary>
     [TestMethod]
-    public void TryParse_RejectsNumericArray()
+    public void TryParse_KeepsEveryValueOfANumericArray()
     {
-        StringAssert.Contains(ParseError("S1F1 W\n<U4 [3] 1 2 3>\n.")!, "数组");
+        var parsed = Parse("S1F1 W\n<L\n  <U4 [3] 1 2 3>\n  <I2 [2] 0 0>\n>.");
+
+        var list = parsed.Structure.Element("L")!;
+        Assert.AreEqual("1 2 3", list.Element("U4")!.Element("Value")!.Value);
+        Assert.AreEqual("0 0", list.Element("I2")!.Element("Value")!.Value);
+        Assert.HasCount(3, new StructureNode(list.Element("U4")!).Items);
+    }
+
+    /// <summary>A 后面那个数字是字节数，不是元素个数，所以给它两个值仍然要拒。</summary>
+    [TestMethod]
+    public void TryParse_RejectsMoreThanOneValueForATextItem()
+    {
+        StringAssert.Contains(ParseError("S1F1 W\n<A [4] 'AB' 'CD'>\n.")!, "只能有一个值");
     }
 
     [TestMethod]

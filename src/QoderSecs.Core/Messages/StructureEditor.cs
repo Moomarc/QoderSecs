@@ -6,7 +6,7 @@ namespace QoderSecs.Core.Messages;
 /// 结构树的增删改。直接改 XElement——StructureNode 包的就是 XDocument 里的活节点，
 /// 改完 Export 立刻生效，不用重新解析消息库。
 ///
-/// 代价是手上的 StructureNode 在构造时就把 Children 和 Values 拍成了快照，
+/// 代价是手上的 StructureNode 在构造时就把 Children 和拆出来的各个值拍成了快照，
 /// 改完必须重新包一次才看得见新内容。
 /// </summary>
 public static class StructureEditor
@@ -307,17 +307,20 @@ public static class StructureEditor
     }
 
     /// <summary>
-    /// 改单个值。返回 false 表示这个位置没有值可改（L、数组、未知类型），
+    /// 改值。数组写成同一个 &lt;Value&gt; 里空格分隔的多个值（照 SecsExpress 的 arrays.sxml），
+    /// 所以这里写的始终是整段文本。返回 false 表示这个位置没有值可改（L、未知类型），
     /// 界面输入框显不显示和这里必须是同一条判断，见 StructureNode.IsValueEditable。
     /// </summary>
     public static bool SetValue(XElement element, string value)
     {
-        if (!new StructureNode(element).IsValueEditable)
+        var node = new StructureNode(element);
+        if (!node.IsValueEditable)
         {
             return false;
         }
 
-        var valueElement = element.Element("Value");
+        var values = element.Elements("Value").ToList();
+        var valueElement = values.FirstOrDefault();
         if (valueElement is null)
         {
             // 手写 SXML 可能漏了 <Value>；补的时候放在 Maps 前面，和 SecsExpress 的写法一致。
@@ -331,6 +334,13 @@ public static class StructureEditor
             {
                 maps.AddBeforeSelf(valueElement);
             }
+        }
+
+        // 读入时容忍多个 <Value>（拼成一段文本看），改完只能留一个，
+        // 否则界面上改一次就把第二种形状留下一份，同事那边读回去的样子和这里显示的对不上。
+        foreach (var extra in values.Skip(1))
+        {
+            extra.Remove();
         }
 
         valueElement.Value = value;

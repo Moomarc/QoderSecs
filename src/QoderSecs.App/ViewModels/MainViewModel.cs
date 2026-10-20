@@ -19,9 +19,6 @@ namespace QoderSecs.App.ViewModels;
 
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
-    /// <summary>自动回复下拉框里代表「没有」的那一项。XML 里的表示是整个 AutoReply 元素不存在。</summary>
-    private const string NoAutoReply = "（不自动回复）";
-
     /// <summary>详情区一次最多灌这么多字符，再多 TextBox 就画不动了；剩下的指路到 sml.log。</summary>
     private const int DetailCharacterCap = 512 * 1024;
 
@@ -44,6 +41,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly ConnectionSettingsStore _settingsStore;
     private readonly HsmsLink _link = new();
     private bool _isLinkBusy;
+    private bool _isSendWaiting;
     private LinkPhase _phase = LinkPhase.Offline;
     private CommunicationRecord? _selectedRecord;
     private readonly SemaphoreSlim _saveGate = new(1, 1);
@@ -80,8 +78,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _streamText = string.Empty;
     private string _functionText = string.Empty;
     private bool _messageWBit;
-    private string _messageAutoReply = NoAutoReply;
-    private IReadOnlyList<string> _autoReplyOptions = [NoAutoReply];
+    private AutoReplyOption _messageAutoReply = AutoReplyOptions.None;
+    private IReadOnlyList<AutoReplyOption> _autoReplyCandidates = [AutoReplyOptions.None];
     private EndpointRole _role;
     private ConnectionMode _mode;
     private string _ipAddress = string.Empty;
@@ -141,6 +139,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             () => SelectedMessage is not null && PasteSmlText.Trim().Length > 0);
         ConnectCommand = AsyncCommand(ToggleConnectionAsync, () => CanToggleConnection);
         SendCommand = AsyncCommand(SendMessageAsync, () => CanSend);
+        CancelSendCommand = new RelayCommand(CancelPendingWait, () => _isSendWaiting);
         _link.PhaseChanged += OnLinkPhaseChanged;
         _link.Transcript.RecordAdded += OnRecordAdded;
         _link.Transcript.RecordRemoved += OnRecordRemoved;
@@ -184,6 +183,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand ConnectCommand { get; }
 
     public AsyncRelayCommand SendCommand { get; }
+
+    public RelayCommand CancelSendCommand { get; }
 
     public IReadOnlyList<ItemTypeOption> ItemTypeOptions { get; } = ItemTypeOption.All;
 
@@ -700,11 +701,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string MessageAutoReply
+    /// <summary>下拉框选中的一项。存进库的还是名字（TargetName），界面上看的是 Display。</summary>
+    public AutoReplyOption MessageAutoReply
     {
         get => _messageAutoReply;
         set
         {
+            // 换候选列表时 ComboBox 会先把选中项清成 null，那一下不是用户操作，不能拿去改写库。
+            if (value is null)
+            {
+                return;
+            }
+
             if (SetProperty(ref _messageAutoReply, value) && !_loadingMessageEditor)
             {
                 CommitAutoReply();
@@ -712,7 +720,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public IReadOnlyList<string> AutoReplyOptions => _autoReplyOptions;
+    public IReadOnlyList<AutoReplyOption> AutoReplyCandidates => _autoReplyCandidates;
+
+    /// <summary>字段标题带上本条的 SxF（和 W），用户不用回左栏去核对这条是几号。</summary>
+    public string AutoReplyFieldLabel => SelectedMessage is { } entry
+        ? $"自动回复（本条 {entry.Signature}{(entry.WBit ? " W" : string.Empty)}）"
+        : "自动回复";
 
     public bool HasMessages => Messages.Count > 0;
 
@@ -870,6 +883,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // 带 W 的消息在途时间是 T3，最长能配到一天。这段时间不写出「正在等、可以取消」，
+        // 发送按键变灰就又被读成程序卡死，这句提示不能省。
+        SetSendWaiting(true);
+        StatusMessage = entry.WBit
+            ? $"正在等 {entry.Signature} 的回复（T3 {_t3Seconds} 秒），可点「取消等待」。"
+            : $"正在发送 {entry.Signature}。";
+
         try
         {
             var outcome = await _link.SendAsync(message);
@@ -890,9 +910,40 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
+            SetSendWaiting(false);
             message.Dispose();
         }
     }
+
+    /// <summary>
+    /// 「取消等待」按下去之后消息已经在线上了，取消的只是等回复这件事，
+    /// 所以说法要说清结果，不能只写「已取消」让人以为没发出去。
+    /// Core 没在等（回复正好到了）时不改写状态栏那一句结果。
+    /// </summary>
+    private void CancelPendingWait()
+    {
+        // 按下去马上给一句反馈，Core 那边「已发出…已取消等待回复」随后覆盖它。
+        // 返回 false 是回复正好到了，那一句话已经在路上，这里不抢着改写。
+        if (_link.CancelPendingSend())
+        {
+            StatusMessage = "已取消等待回复。";
+        }
+    }
+
+    private void SetSendWaiting(bool value)
+    {
+        if (_isSendWaiting == value)
+        {
+            return;
+        }
+
+        _isSendWaiting = value;
+        OnPropertyChanged(nameof(CancelSendVisibility));
+        CancelSendCommand.RaiseCanExecuteChanged();
+    }
+
+    /// <summary>按钮只在真有等待时出现；跟命令的可用条件用同一个字段，不另找一遍状态。</summary>
+    public Visibility CancelSendVisibility => _isSendWaiting ? Visibility.Visible : Visibility.Collapsed;
 
     private void OnRecordAdded(CommunicationRecord record)
     {
@@ -1210,8 +1261,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// 删掉选中的那条消息。没有撤销（用户 2026-10-18 定），确认框是唯一防线：默认焦点落在「否」上。
     /// 正文只说两件必须说的事：不可恢复、有几条自动回复指向它。
-    /// 断指只提示不改（同一批决定）：指向的文本原样留着，后果是自动回复不再命中，
-    /// 这条行为 Core 侧有测试兜着（AutoReplyResolver 找不到名字就返回 null）。
+    /// 指着它的引用由 Core 在删除时一并置空（不是只提示不改），
+    /// 所以确认框说的是「删完之后会被置空」，不是「留着但不再命中」。
     /// </summary>
     private void DeleteMessage()
     {
@@ -1223,18 +1274,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var label = entry.Name.Length == 0 ? entry.Signature : $"{entry.Name}（{entry.Signature}）";
 
-        // 空名称的消息不可能被指向：AutoReplyResolver 把空目标当成没配（AutoReplyResolver.cs:20）。
-        // 比名字用 Ordinal，和它查目标时用的是同一条口径。
-        var brokenReferences = entry.Name.Length == 0
-            ? 0
-            : _library.Messages.Count(message =>
-                !ReferenceEquals(message, entry)
-                && string.Equals(message.AutoReply?.Trim(), entry.Name, StringComparison.Ordinal));
+        // 数指向它的自动回复改用 Core 那一条口径（和 FindTarget 取目标是同一比法），
+        // 界面不自己数第二遍：数法不一致的话提醒说没有、实际已经断了。
+        // 空名字的消息不可能被指向，Core 那边空目标直接给空列表。
+        var brokenReferences = AutoReplyResolver.FindReferrers(_library, entry.Name, entry);
 
         var lines = new List<string> { $"确定删除 {label}？不可恢复。" };
-        if (brokenReferences > 0)
+        if (brokenReferences.Count > 0)
         {
-            lines.Add($"{brokenReferences} 条自动回复指向它，删完之后不会回复。");
+            lines.Add($"{brokenReferences.Count} 条自动回复指向它，删完之后这些引用会被置空。");
         }
 
         var answer = MessageBox.Show(
@@ -1261,9 +1309,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // 删完之后 SelectedMessage 手上那条已经不在库里了，但它的 Index 正好落到原来那条的下一条上，
         // RefreshMessages 按 Index 找回选中，效果就是选中往下走一格；删的是最后一条时选中变空。
         RefreshMessages();
-        StatusMessage = brokenReferences == 0
+        StatusMessage = brokenReferences.Count == 0
             ? $"已删除 {label}。"
-            : $"已删除 {label}，{brokenReferences} 条自动回复指向失效。";
+            : $"已删除 {label}，{brokenReferences.Count} 条自动回复已置空。";
     }
 
     /// <summary>
@@ -1785,41 +1833,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             StreamText = entry?.Stream.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             FunctionText = entry?.Function.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             MessageWBit = entry?.WBit ?? false;
-            _autoReplyOptions = BuildAutoReplyOptions(entry);
-            OnPropertyChanged(nameof(AutoReplyOptions));
-            MessageAutoReply = string.IsNullOrWhiteSpace(entry?.AutoReply) ? NoAutoReply : entry!.AutoReply!;
+            _autoReplyCandidates = AutoReplyOptions.Build(_library, entry);
+            OnPropertyChanged(nameof(AutoReplyCandidates));
+            OnPropertyChanged(nameof(AutoReplyFieldLabel));
+            MessageAutoReply = AutoReplyOptions.Find(_autoReplyCandidates, entry?.AutoReply);
         }
         finally
         {
             _loadingMessageEditor = false;
         }
-    }
-
-    /// <summary>
-    /// 自动回复存的是另一条消息的 Name，所以下拉框列库里所有有名字的消息（不列自己）。
-    /// 指向已经改名或删掉的消息时，也把那个名字列进去，
-    /// 否则界面上显示空白，XML 里的值却被悄悄留着。
-    /// </summary>
-    private IReadOnlyList<string> BuildAutoReplyOptions(MessageEntry? entry)
-    {
-        var options = new List<string> { NoAutoReply };
-        foreach (var message in _library.Query(null))
-        {
-            if (message.Index == entry?.Index || message.Name.Length == 0 || options.Contains(message.Name))
-            {
-                continue;
-            }
-
-            options.Add(message.Name);
-        }
-
-        var current = entry?.AutoReply?.Trim();
-        if (current is { Length: > 0 } && !options.Contains(current))
-        {
-            options.Add(current);
-        }
-
-        return options;
     }
 
     private void CommitMessageName()
@@ -1840,9 +1862,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
+            var oldName = entry.Name;
+            // 指着旧名的引用会被 SetName 一并置空，所以名单必须在改之前取，改完再数就是 0 了。
+            var cleared = AutoReplyResolver.FindReferrers(_library, oldName);
             var updated = _library.SetName(entry, name);
             RefreshAfterMessageEdit(updated.Index);
-            StatusMessage = $"已把 {updated.Signature} 的名称改成「{updated.Name}」。";
+            StatusMessage = $"已把 {updated.Signature} 的名称改成「{updated.Name}」。{ClearedAutoReplyNote(cleared, oldName)}";
         }
         catch (ArgumentException exception)
         {
@@ -1851,6 +1876,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Fail($"改名失败：{exception.Message}");
             SyncMessageEditor();
         }
+    }
+
+    /// <summary>
+    /// 改名会把指着旧名的自动回复置空（Core 里做的），置空了几条、是哪几条得当场说一句：
+    /// 不然用户只看到目标名字变了，不知道自己顺手关掉了别人的回复。
+    /// 状态栏那句带省略号和 ToolTip，名单长了悬停能看全。
+    /// </summary>
+    private static string ClearedAutoReplyNote(IReadOnlyList<MessageEntry> cleared, string oldName)
+    {
+        if (cleared.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var who = string.Join("、", cleared.Select(entry => $"{entry.Signature} {entry.Name}"));
+        return $"另有 {cleared.Count} 条自动回复原来指着「{oldName}」，已置空：{who}。";
     }
 
     private void CommitHeader()
@@ -1895,7 +1936,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var target = MessageAutoReply == NoAutoReply ? null : MessageAutoReply;
+        var target = MessageAutoReply.TargetName;
         if (target == entry.AutoReply)
         {
             return;
@@ -1905,7 +1946,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshAfterMessageEdit(updated.Index);
         StatusMessage = target is null
             ? $"已取消 {updated.Signature} 的自动回复。"
-            : $"已把 {updated.Signature} 的自动回复设成「{target}」。";
+            : $"已把 {updated.Signature} 的自动回复设成「{MessageAutoReply.Display}」。";
     }
 
     /// <summary>

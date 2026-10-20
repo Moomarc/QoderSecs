@@ -69,7 +69,7 @@ public sealed class StructureNodeTests
         Assert.HasCount(2, list.Children);
         Assert.AreEqual("Id", list.Children[0].Name);
         Assert.IsEmpty(list.Children[0].Children);
-        Assert.HasCount(1, list.Children[0].Values);
+        Assert.HasCount(1, list.Children[0].Items);
     }
 
     [TestMethod]
@@ -134,14 +134,55 @@ public sealed class StructureNodeTests
         StringAssert.Contains(Node("<Boolean><Value>1</Value></Boolean>").ValidationError!, "Boolean");
     }
 
+    /// <summary>数组照 SecsExpress 的写法来：单个 &lt;Value&gt;、值之间空格分隔，可以编辑也能发送。</summary>
     [TestMethod]
-    public void Array_IsKeptButNotEditable()
+    public void NumericArray_IsEditableAndValidatesEachValue()
+    {
+        var array = Node("<I2><Value>0 0 -1 300</Value></I2>");
+
+        Assert.IsTrue(array.IsArray);
+        Assert.IsTrue(array.IsEditable);
+        Assert.IsTrue(array.IsValueEditable);
+        Assert.HasCount(4, array.Items);
+        Assert.IsNull(array.ValidationError);
+
+        StringAssert.Contains(Node("<I1><Value>0 300</Value></I1>").ValidationError!, "第 2 个值");
+        StringAssert.Contains(Node("<I1><Value>300 0</Value></I1>").ValidationError!, "第 1 个值");
+        StringAssert.Contains(Node("<Boolean><Value>True 1</Value></Boolean>").ValidationError!, "第 2 个值");
+    }
+
+    /// <summary>真碰上多个 &lt;Value&gt; 也拼成一段文本，不让它变成界面里没有的第二种形状。</summary>
+    [TestMethod]
+    public void RepeatedValueElements_FoldIntoOneEditableArray()
     {
         var array = Node("<U4><Value>1</Value><Value>2</Value></U4>");
 
         Assert.IsTrue(array.IsArray);
-        Assert.IsFalse(array.IsEditable);
-        StringAssert.Contains(array.ValidationError!, "数值数组");
+        Assert.IsTrue(array.IsValueEditable);
+        Assert.AreEqual("1 2", array.ValueText);
+        Assert.IsNull(array.ValidationError);
+    }
+
+    /// <summary>单值不算数组，界面上不带「N 个值」的标记，也不走逐个校验那条路。</summary>
+    [TestMethod]
+    public void SingleValue_IsNotAnArray()
+    {
+        Assert.IsFalse(Node("<U4><Value>1</Value></U4>").IsArray);
+        Assert.IsFalse(Node("<U4><Value></Value></U4>").IsArray);
+    }
+
+    /// <summary>
+    /// A / B 的那一段数字是字节数不是元素个数（wafer map 就是 &lt;A[7482] '图'&gt;），
+    /// 拆了会把正文切成两半，所以这几个类型永远不算数组。
+    /// </summary>
+    [TestMethod]
+    public void ByteTextTypes_NeverSplitIntoItems()
+    {
+        foreach (var xml in new[] { "<A><Value>AA BB CC</Value></A>", "<B><Value>00 FF 01</Value></B>", "<J><Value>x y</Value></J>" })
+        {
+            Assert.IsFalse(Node(xml).IsArray, xml);
+            Assert.IsEmpty(Node(xml).Items, xml);
+        }
     }
 
     [TestMethod]

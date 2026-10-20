@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Xml.Linq;
 using Microsoft.Extensions.Options;
 using QoderSecs.Core.Connection;
 using QoderSecs.Core.Messages;
@@ -230,6 +231,137 @@ public sealed class HsmsLinkLoopbackTests
             outbound.Select(record => record.MessageText).ToList());
         Assert.AreEqual(inbound[0].SystemBytes, outbound[0].SystemBytes);
         Assert.AreEqual(inbound[1].SystemBytes, outbound[1].SystemBytes);
+    }
+
+    /// <summary>
+    /// 上下图第 6 条，本端当 Equipment：Host 发来带 7482 字符地图的 S12F9W，按库里的 AutoReply
+    /// 回一张同样的图出去。连发 10 轮，每一轮都要回得来、正文一个字不能少，
+    /// 跑完连接还得是 Online——大图不许把链路带崩，也不许把发送闸门卡住（第 4 条那个坑）。
+    /// </summary>
+    [TestMethod]
+    public async Task AWaferMapComesInAndGoesBackOutWhole()
+    {
+        await using var equipment = new HsmsLink { LibraryProvider = WaferMapLibrary };
+        var records = Watch(equipment);
+        equipment.Connect(LargeTransfer(Passive(ReservePort())));
+
+        await using var peer = await SecsPeer.ConnectAsync("127.0.0.1", PortOf(equipment));
+
+        var library = WaferMapLibrary();
+        var map = WaferMapBody(library);
+        var inbound = new List<CommunicationRecord>();
+        var outbound = new List<CommunicationRecord>();
+
+        for (var round = 0; round < 10; round++)
+        {
+            Assert.IsTrue(
+                SmlConverter.TryToMessage(library.Messages[0], replyExpected: true, out var request, out var error),
+                error);
+
+            using (request)
+            {
+                using var reply = await peer.SendAsync(request);
+
+                Assert.IsFalse(reply.ReplyExpected, "回出去的是 Secondary，不能带 W。");
+                Assert.AreEqual((byte)12, reply.S);
+                Assert.AreEqual((byte)16, reply.F);
+                Assert.AreEqual(map, reply.SecsItem!.Items[3].GetString(), "地图正文少了或改了。");
+            }
+
+            inbound.Add(await TakeAsync(records));
+            outbound.Add(await TakeAsync(records));
+        }
+
+        // 记录状态由 Secs4Net 的回调线程写，回复到手不等于状态已经落定，所以先等再断言
+        // （本文件其它状态断言也是这个口径）。等不到就是真断了，断言会把每条状态打出来。
+        await WaitFor("十条入站都记成已自动回复", () => inbound.All(record => record.Status == RecordStatus.Answered));
+        await WaitFor("十条出站都记成已发送", () => outbound.All(record => record.Status == RecordStatus.Sent));
+
+        CollectionAssert.AreEqual(
+            Enumerable.Repeat("S12F9W", inbound.Count).ToList(),
+            inbound.Select(record => record.Signature).ToList());
+        Assert.IsTrue(inbound.All(record => record.Status == RecordStatus.Answered), $"入站状态不对：{Describe(inbound)}");
+        CollectionAssert.AreEqual(
+            Enumerable.Repeat("S12F16 S12F16_WaferMap", outbound.Count).ToList(),
+            outbound.Select(record => record.MessageText).ToList());
+        Assert.IsTrue(outbound.All(record => record.Status == RecordStatus.Sent), $"出站状态不对：{Describe(outbound)}");
+        CollectionAssert.AreEqual(
+            inbound.Select(record => record.SystemBytes).ToList(),
+            outbound.Select(record => record.SystemBytes).ToList(),
+            "每一张回的图都得挂在它自己那一条请求上。");
+        Assert.IsTrue(outbound.All(record => record.Sml!.Contains(map, StringComparison.Ordinal)));
+        await WaitFor("本端还在线", () => equipment.Phase == LinkPhase.Online);
+        Assert.AreEqual(LinkPhase.Online, equipment.Phase);
+    }
+
+    /// <summary>
+    /// 反过来，本端当 Host：把整张图发出去，对端按库里的配置回一张同样的图回来。
+    /// 7.6 KB 在 16 KB 内联上限之内，所以记录里就该带着完整正文，不用去 sml.log 捞。
+    /// </summary>
+    [TestMethod]
+    public async Task AHostSendsTheWaferMapAndGetsTheSameOneBack()
+    {
+        var port = ReservePort();
+        await using var equipment = new HsmsLink { LibraryProvider = WaferMapLibrary };
+        await using var host = new HsmsLink { LibraryProvider = WaferMapLibrary };
+        equipment.Connect(LargeTransfer(Passive(port)));
+        host.Connect(LargeTransfer(Active(port)));
+        await WaitFor("两端就绪", () => equipment.Phase == LinkPhase.Online && host.Phase == LinkPhase.Online);
+
+        var library = WaferMapLibrary();
+        var map = WaferMapBody(library);
+
+        for (var round = 0; round < 10; round++)
+        {
+            Assert.IsTrue(SmlConverter.TryToMessage(library.Messages[0], out var request, out var error), error);
+
+            using (request)
+            {
+                StringAssert.Contains(await host.SendAsync(request), "S12F16");
+            }
+        }
+
+        // 记录条数和状态都由 Secs4Net 的回调线程写，SendAsync 落定不等于它们已经写完，
+        // 所以先等再断言（本文件其它状态断言也是这个口径）。等不到才是真出问题，
+        // 断言会把每条记录的状态打出来。
+        await WaitFor(
+            "十条收发记录都登记完",
+            () =>
+                host.Transcript.Records.Count(record => record.Direction == SecsDirection.Out) == 10 &&
+                host.Transcript.Records.Count(record => record.Direction == SecsDirection.In) == 10,
+            () => $"out={host.Transcript.Records.Count(record => record.Direction == SecsDirection.Out)} " +
+                $"in={host.Transcript.Records.Count(record => record.Direction == SecsDirection.In)}");
+
+        var sent = host.Transcript.Records.Where(record => record.Direction == SecsDirection.Out).ToList();
+        var received = host.Transcript.Records.Where(record => record.Direction == SecsDirection.In).ToList();
+
+        await WaitFor(
+            "十条出站都收到回复",
+            () => sent.All(record => record.Status == RecordStatus.SecondaryReceived),
+            () => Describe(sent));
+        await WaitFor(
+            "十条入站都配上对",
+            () => received.All(record => record.Status == RecordStatus.PairedSecondary),
+            () => Describe(received));
+        await WaitFor(
+            "两端都还在线",
+            () => host.Phase == LinkPhase.Online && equipment.Phase == LinkPhase.Online,
+            () => $"host={host.Phase} equipment={equipment.Phase}");
+
+        Assert.HasCount(10, sent);
+        Assert.IsTrue(
+            sent.All(record => record.Status == RecordStatus.SecondaryReceived),
+            $"出站状态不对：{Describe(sent)}");
+        Assert.IsTrue(
+            received.All(record => record.Status == RecordStatus.PairedSecondary),
+            $"入站状态不对：{Describe(received)}");
+        CollectionAssert.AreEqual(
+            sent.Select(record => record.SystemBytes).ToList(),
+            received.Select(record => record.SystemBytes).ToList());
+        Assert.IsTrue(received.All(record => record.Sml!.Contains(map, StringComparison.Ordinal)),
+            "收到的那张图必须和发出去的一字不差。");
+        Assert.AreEqual(LinkPhase.Online, host.Phase);
+        Assert.AreEqual(LinkPhase.Online, equipment.Phase);
     }
 
     /// <summary>
@@ -503,6 +635,84 @@ public sealed class HsmsLinkLoopbackTests
         }
     }
 
+    /// <summary>
+    /// 等待回复途中取消，调用要立刻落定，不能一直握着发送闸门到 T3。
+    /// 这条是第 4 条修改意见（发送按键变灰不能操作）的最小验证。
+    /// </summary>
+    [TestMethod]
+    public async Task CancellingTheWaitReleasesTheSendGate()
+    {
+        var port = ReservePort();
+        await using var server = new HsmsLink();
+        await using var client = new HsmsLink();
+
+        // T3 放到 30 秒：对端不回，等待就只能靠取消结束。
+        server.Connect(Passive(port) with { T3Seconds = 30 });
+        client.Connect(Active(port) with { T3Seconds = 30 });
+        await WaitFor("两端就绪", () => server.Phase == LinkPhase.Online && client.Phase == LinkPhase.Online);
+
+        using var request = new SecsMessage(2, 41, replyExpected: true)
+        {
+            SecsItem = Item.U4(1)
+        };
+        using var cancellation = new CancellationTokenSource();
+        var sendTask = client.SendAsync(request, cancellation.Token);
+        await WaitFor("请求已发出", () => client.Transcript.Records.Count > 0);
+
+        cancellation.Cancel();
+        var outcome = await sendTask;
+
+        Assert.IsFalse(string.IsNullOrEmpty(outcome), "取消也要给界面一句话");
+        Assert.IsTrue(outcome.StartsWith(HsmsLink.SentPrefix, StringComparison.Ordinal),
+            $"取消等待得说成「已发出…」，界面才不会把它写成红色报错：{outcome}");
+
+        // 闸门已经放开：紧接着再发一条不等回复的消息，几秒内就该返回。
+        using var next = new SecsMessage(2, 41, replyExpected: false)
+        {
+            SecsItem = Item.U4(2)
+        };
+        var followUp = client.SendAsync(next);
+        var finished = await Task.WhenAny(followUp, Task.Delay(5000));
+        Assert.AreSame(followUp, finished, "取消之后闸门没放开，下一条还堵着");
+
+        Assert.AreNotEqual(RecordStatus.AwaitingSecondary, client.Transcript.Records[0].Status, "取消的那条要落到一个说得住的状态");
+    }
+
+    /// <summary>
+    /// 第 4 条的另一半：等回复途中点「断开」，在途发送要马上落定，不能握着发送闸门到 T3。
+    /// 不盯这一条的话，断开再重连之后按键还是灰的，用户看到的还是「程序卡死」。
+    /// </summary>
+    [TestMethod]
+    public async Task DisconnectingReleasesTheSendGateWithoutWaitingForT3()
+    {
+        var port = ReservePort();
+        await using var server = new HsmsLink();
+        await using var client = new HsmsLink();
+
+        // T3 放到 30 秒：要是没人取消，这条等待就一定会超过下面的 5 秒门槛。
+        server.Connect(Passive(port) with { T3Seconds = 30 });
+        client.Connect(Active(port) with { T3Seconds = 30 });
+        await WaitFor("两端就绪", () => server.Phase == LinkPhase.Online && client.Phase == LinkPhase.Online);
+
+        using var request = new SecsMessage(2, 41, replyExpected: true)
+        {
+            SecsItem = Item.U4(1)
+        };
+        var sendTask = client.SendAsync(request);
+        await WaitFor("请求已发出", () => client.Transcript.Records.Count > 0);
+
+        await client.DisconnectAsync();
+
+        var finished = await Task.WhenAny(sendTask, Task.Delay(5000));
+        Assert.AreSame(sendTask, finished, "断开之后在途发送没落定，发送按键会一直灰着");
+
+        var outcome = await sendTask;
+        Assert.IsTrue(outcome.StartsWith(HsmsLink.SentPrefix, StringComparison.Ordinal),
+            $"断开时消息已经上线，说法要按「已发出」开头，界面才不会报成红色：{outcome}");
+        StringAssert.Contains(outcome, "没等到回复", "要说清是没等到回复，不是没发出去");
+        Assert.AreEqual(RecordStatus.LinkClosed, client.Transcript.Records[0].Status);
+    }
+
     [TestMethod]
     public async Task SendingBeforeConnectIsRejected()
     {
@@ -707,6 +917,16 @@ public sealed class HsmsLinkLoopbackTests
     private static MessageLibrary CommonCommands() => MessageLibrary.Load(
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "common-commands.sxml")));
 
+    /// <summary>上下图素材：S12F9 带 7482 字符地图、AutoReply 指着 S12F16，两条正文同一张图。</summary>
+    private static MessageLibrary WaferMapLibrary() => MessageLibrary.Load(
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "wafer-map.sxml")));
+
+    /// <summary>地图正文只认素材里那一份，测试自己抄一份就对不上了。</summary>
+    private static string WaferMapBody(MessageLibrary library) => library.Messages[0].Structure!
+        .Descendants("A")
+        .Single(element => (string?)element.Attribute("Name") == "WAFER_MAP")
+        .Element("Value")!.Value;
+
     private static BlockingCollection<CommunicationRecord> Watch(HsmsLink link)
     {
         var sink = new BlockingCollection<CommunicationRecord>();
@@ -726,6 +946,10 @@ public sealed class HsmsLinkLoopbackTests
 
         throw new AssertFailedException($"{timeout / 1000} 秒内没有收到通信记录。");
     }
+
+    /// <summary>断言失败时把每条记录的状态打出来，不然只知道「有一条不对」，查不下去。</summary>
+    private static string Describe(IEnumerable<CommunicationRecord> records) =>
+        string.Join(" | ", records.Select(record => $"{record.Signature}={record.Status}"));
 
     /// <summary>大消息跑起来慢，定时器的余量也要跟着放大，不然测的是超时不是收发。</summary>
     private static ConnectionProfile LargeTransfer(ConnectionProfile profile) => profile with
@@ -839,7 +1063,8 @@ public sealed class HsmsLinkLoopbackTests
         throw new AssertFailedException("5 分钟内对端没有收到消息。");
     }
 
-    private static async Task WaitFor(string what, Func<bool> condition)    {
+    private static async Task WaitFor(string what, Func<bool> condition, Func<string>? detail = null)
+    {
         for (var i = 0; i < 100 && !condition(); i++)
         {
             await Task.Delay(50);
@@ -847,7 +1072,7 @@ public sealed class HsmsLinkLoopbackTests
 
         if (!condition())
         {
-            throw new AssertFailedException($"等待“{what}”超时。");
+            throw new AssertFailedException($"等待“{what}”超时。{detail?.Invoke()}");
         }
     }
 

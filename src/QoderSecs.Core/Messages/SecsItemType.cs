@@ -69,4 +69,15 @@ public static class SecsItemTypes
 
     /// <summary>类型对应的元素名。从 Known 反过来建，两边不会跑偏。</summary>
     public static string ElementName(SecsItemType type) => NamesByType[type];
+
+    /// <summary>
+    /// 这个类型能不能由多个元素组成数组。数值和 Boolean 能；
+    /// A / J / B 是一段字节文本，<c>&lt;A[7482] '图'></c> 里的 7482 是字节数不是元素个数，
+    /// 把它当数组拆会把机台的 wafer map 正文切成两半。L 的子项走 Children，不走值数组。
+    /// </summary>
+    public static bool IsElementArray(SecsItemType? type) => type switch
+    {
+        null or SecsItemType.List or SecsItemType.A or SecsItemType.J or SecsItemType.B => false,
+        _ => true
+    };
 }

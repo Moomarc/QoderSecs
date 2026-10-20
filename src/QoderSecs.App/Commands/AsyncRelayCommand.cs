@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Input;
 
 namespace QoderSecs.App.Commands;
@@ -48,6 +49,21 @@ public sealed class AsyncRelayCommand : ICommand
 
     public void RaiseCanExecuteChanged()
     {
-        CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        var handler = CanExecuteChanged;
+        if (handler is null)
+        {
+            return;
+        }
+
+        // 按钮的可用性只能在 UI 线程改。收发回调哪天从别的线程调进来，
+        // 直接触发事件会抛跨线程异常，把那条回调连同连接一起带崩。
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.BeginInvoke(() => handler(this, EventArgs.Empty));
+            return;
+        }
+
+        handler(this, EventArgs.Empty);
     }
 }

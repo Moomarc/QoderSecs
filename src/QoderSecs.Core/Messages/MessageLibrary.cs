@@ -11,6 +11,7 @@ public sealed class MessageLibrary
     private MessageLibrary(XDocument document)
     {
         _document = document;
+        EnsureDataDictionary(document);
         Messages = ParseMessages(document);
         DataEntries = ParseDataEntries(document);
     }
@@ -189,7 +190,24 @@ public sealed class MessageLibrary
             dictionary.RemoveNodes();
         }
 
+        // 指着这条名字的 AutoReply 一并置空，和 SetName 同一条口径：目标没了，引用留着也指不到。
+        ClearAutoRepliesPointingAt(entry.Name, entry);
+
         Messages = ParseMessages(_document);
+    }
+
+    /// <summary>
+    /// 把指着这个名字的 AutoReply 全部置空——整个元素删掉，不留空元素，
+    /// 和 <see cref="SetAutoReply"/> 传 null 时的形状一致。
+    /// 谁指着它走 <see cref="AutoReplyResolver.FindReferrers"/>，和运行时取目标是同一份比法，
+    /// 这里不另写第二遍（两处数法不一致就会出现「置空了但界面还显示指着」）。
+    /// </summary>
+    private void ClearAutoRepliesPointingAt(string? name, MessageEntry? except = null)
+    {
+        foreach (var referrer in AutoReplyResolver.FindReferrers(this, name, except))
+        {
+            referrer.Element.Element("AutoReply")?.Remove();
+        }
     }
 
     /// <summary>
@@ -219,12 +237,22 @@ public sealed class MessageLibrary
     /// <summary>
     /// 改消息名称。名字非空、且不许多条消息共用（<see cref="RequireMessageName"/>），
     /// 所以这里不再像早先那样「留空就把 Name 属性去掉」。
+    /// 指着旧名的那些 AutoReply 一并置空：引用是按名字存的，
+    /// 名字一改它就指不到了，留着的话界面上看不出来、运行时也不会回，等于埋一个哑弹。
     /// </summary>
     public MessageEntry SetName(MessageEntry entry, string name)
     {
         var checkedName = RequireMessageName(name, entry.Element);
+        var oldName = entry.Name;
 
         entry.Element.SetAttributeValue("Name", checkedName);
+        if (!string.Equals(oldName.Trim(), checkedName, StringComparison.Ordinal))
+        {
+            // 名字没真变（只多敲了空格、或者改回原名）就不动别人的引用，
+            // 否则「改回自己原来的名字」这一下会把指着它的自动回复全清掉。
+            ClearAutoRepliesPointingAt(oldName);
+        }
+
         return Reparse(entry);
     }
 
@@ -474,26 +502,27 @@ public sealed class MessageLibrary
     /// </summary>
     public void SyncDataEntries() => DataEntries = ParseDataEntries(_document);
 
-    /// <summary>参考件三份都是字典段在消息段之前，缺这一段时就按这个次序补。</summary>
-    private XElement RequireDataDictionary()
+    /// <summary>字典段在 <see cref="Load"/> 时就保证有了，这里只取。</summary>
+    private XElement RequireDataDictionary() => _document.Root!.Element("DataDictionary")!;
+
+    /// <summary>
+    /// 缺 <c>&lt;DataDictionary&gt;</c> 这一段的文件，SecsExpress 直接打不开：拿
+    /// 单变量对照件在 SecsExpress 里实测过，六份里只有删掉这一段的和我们的样例库失败，
+    /// 中文描述、LF 行尾、自闭合写法都打得开。所以读进来就把它补上，导出的文件一定带这一段。
+    /// 写法照抄 SecsExpress 的空字典（两行、不自闭合），换行缩进沿用 <c>&lt;MessageDictionary&gt;</c>
+    /// 前面那个文本节点，好让 CRLF 的文件不会被补进 LF。位置也跟着参考件放在消息段之前。
+    /// </summary>
+    private static void EnsureDataDictionary(XDocument document)
     {
-        var root = _document.Root!;
-        var dictionary = root.Element("DataDictionary");
-        if (dictionary is not null)
+        var root = document.Root;
+        var messages = root?.Element("MessageDictionary");
+        if (messages is null || root!.Element("DataDictionary") is not null)
         {
-            return dictionary;
+            return;
         }
 
-        var messages = root.Element("MessageDictionary")!;
-        messages.AddBeforeSelf(dictionary = new XElement("DataDictionary"));
-        if (dictionary.PreviousNode is XText indent)
-        {
-            // 补出来的这一段还没有条目，先把它自己包起来那段缩进照着消息段抄一份，
-            // 免得 </DataDictionary> 和 <MessageDictionary> 挤在同一行。
-            dictionary.AddAfterSelf(new XText(indent.Value));
-        }
-
-        return dictionary;
+        var indent = messages.PreviousNode is XText text && text.Value.Contains('\n') ? text.Value : "\n";
+        messages.AddBeforeSelf(new XElement("DataDictionary", new XText(indent)), new XText(indent));
     }
 
     private static void AddEntryNode(XElement dictionary, XElement entry)
@@ -576,8 +605,7 @@ public sealed class MessageLibrary
 
     private static IReadOnlyList<DataEntry> ParseDataEntries(XDocument document)
     {
-        // 缺 DataDictionary 不算坏文件：ParseMessages 只强制要求 MessageDictionary，
-        // 参考件里也有整段是空的。当空列表处理，第一个条目存进去时再补出这一段。
+        // 整段是空的、或者原来就没有这一段（Load 时已经补上了）都当空列表处理。
         var entries = document.Root?.Element("DataDictionary")?.Elements().ToList();
         if (entries is null)
         {
@@ -595,7 +623,9 @@ public sealed class MessageLibrary
 
     private static XDocument CreateEmptyDocument() => new(
         new XElement("SXML",
-            new XElement("DataDictionary"),
+            // 空的也写成两行，和 SecsExpress 自己的空字典一个写法；一份都没导入过的库
+            // 存出来同事也要能打开。
+            new XElement("DataDictionary", new XText("\n")),
             new XElement("MessageDictionary")));
 
     private static IReadOnlyList<MessageEntry> ParseMessages(XDocument document)

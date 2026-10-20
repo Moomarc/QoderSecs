@@ -59,10 +59,33 @@ public sealed class SampleLibraryTests
     /// 用的时候在字典页自己加。
     /// </summary>
     [TestMethod]
-    public void CarriesNoDataDictionary()
+    public void CarriesNoDataDictionaryEntries()
     {
         Assert.IsEmpty(Sample().DataEntries, "样例库不该预置数据字典条目。");
     }
+
+    /// <summary>
+    /// 条目可以没有，但 <c>&lt;DataDictionary&gt;</c> 这一段不能没有：SecsExpress 见到缺这一段的文件
+    /// 直接打不开（实测过）。样例库是手工改的文本文件，所以盯住原文，别哪天被删掉。
+    /// </summary>
+    [TestMethod]
+    public void TheFileCarriesTheSectionSecsExpressRequires()
+    {
+        var text = ReadSample();
+
+        StringAssert.Contains(text, "<DataDictionary>");
+        var root = XDocument.Parse(text, LoadOptions.PreserveWhitespace).Root!;
+        Assert.AreEqual("DataDictionary", root.Elements().First().Name.LocalName, "字典段得在消息段之前。");
+        Assert.IsFalse(root.Element("DataDictionary")!.IsEmpty, "按 SecsExpress 的写法是两行，不是自闭合。");
+        Assert.AreEqual(
+            Flat(text),
+            Flat(Sample().Export()),
+            "样例库读进再导出应该一个字不变——同事比对文件时不该看到一屏假改动。");
+    }
+
+    /// <summary>比对排版前先统一两种写法：自闭合的空元素和行尾，理由同 MessageLibraryTests.Normalize。</summary>
+    private static string Flat(string xml) =>
+        xml.Replace(" />", "/>").Replace("\r\n", "\n").TrimEnd('\n');
 
     /// <summary>
     /// 这份库是按「留结构、不填数据」的口径给的：叶子节点的 &lt;Value&gt; 一律空着，
@@ -111,10 +134,13 @@ public sealed class SampleLibraryTests
                 "S10F3", "S1F1", "S1F11", "S1F13", "S1F14", "S1F2", "S1F3", "S1F4",
                 "S2F33", "S2F35", "S2F37", "S2F41", "S2F42",
                 "S5F1", "S5F2", "S6F11", "S6F12", "S7F17", "S7F19", "S7F3", "S7F5",
+                "S12F9", "S12F16",
             }.OrderBy(signature => signature, StringComparer.Ordinal).ToList(),
             actual);
     }
 
-    private static MessageLibrary Sample() => MessageLibrary.Load(
-        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "common-commands.sxml")));
+    private static string ReadSample() =>
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "common-commands.sxml"));
+
+    private static MessageLibrary Sample() => MessageLibrary.Load(ReadSample());
 }

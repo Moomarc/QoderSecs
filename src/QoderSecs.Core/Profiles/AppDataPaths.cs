@@ -17,8 +17,19 @@ public sealed class AppDataPaths
     /// <summary>样本消息库放在 exe 旁的这个子目录里，导入对话框也停在这儿。</summary>
     public const string SampleSubdirectoryName = "samples";
 
-    /// <summary>内嵌在程序里的那份样本库解出来就叫这个名字。</summary>
-    public const string SampleLibraryFileName = "common-commands.sxml";
+    /// <summary>
+    /// 内嵌在程序里、启动时解到 samples/ 的样本库文件名，按解出来的先后排。
+    /// common-commands 是 GEM 常用命令的骨架（结构留着、数值一律空、不配 AutoReply）；
+    /// wafer-map 是 S12 上下图那两条，带一张合成图正文并且配好了 AutoReply，
+    /// 导进去就能直接走完一轮 Primary/Secondary——它要演示的就是收发这一轮，
+    /// 所以不受「骨架不预置数据」那条口径约束。
+    /// 这两个名字同时是 exe 里内嵌资源的后缀，改一处要改两处（见 QoderSecs.App.csproj）。
+    /// </summary>
+    public static readonly IReadOnlyList<string> SampleFileNames =
+    [
+        "common-commands.sxml",
+        "wafer-map.sxml",
+    ];
 
     public AppDataPaths(string executableDirectory)
     {
@@ -29,7 +40,7 @@ public sealed class AppDataPaths
         SettingsPath = Path.Combine(DataDirectory, "settings.json");
         LogsDirectory = Path.Combine(DataDirectory, "logs");
         SampleDirectory = Path.Combine(root, SampleSubdirectoryName);
-        SampleLibraryPath = Path.Combine(SampleDirectory, SampleLibraryFileName);
+        SampleFilePaths = [.. SampleFileNames.Select(name => Path.Combine(SampleDirectory, name))];
     }
 
     /// <summary>exe 所在目录，所有伴生文件都以这儿为根。</summary>
@@ -44,10 +55,11 @@ public sealed class AppDataPaths
 
     public string LogsDirectory { get; }
 
-    /// <summary>样本消息库所在目录。程序只负责在它不存在时解出来一份，之后不再管。</summary>
+    /// <summary>样本消息库所在目录。程序只负责在文件不存在时解出来一份，之后不再管。</summary>
     public string SampleDirectory { get; }
 
-    public string SampleLibraryPath { get; }
+    /// <summary>每份内嵌样本解出来之后的完整路径，和 <see cref="SampleFileNames"/> 同序。</summary>
+    public IReadOnlyList<string> SampleFilePaths { get; }
 
     /// <summary>
     /// 建目录，顺手把老名字的 data 整体改名过来。

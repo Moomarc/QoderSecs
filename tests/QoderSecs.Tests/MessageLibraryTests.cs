@@ -69,6 +69,57 @@ public sealed class MessageLibraryTests
         Assert.IsNotNull(reloaded.Document.Root!.Element("DataDictionary")!.Element("UnknownEntry"));
     }
 
+    /// <summary>
+    /// SecsExpress 只认带 <c>&lt;DataDictionary&gt;</c> 段的文件——单变量对照件实测过，
+    /// 六个变体里只有删掉这一段的那份和我们的样例库打不开。这一段是导出的硬条件，
+    /// 缺了就在读的时候补上，不能等到存文件。
+    /// </summary>
+    [TestMethod]
+    public void Load_AddsTheDataDictionarySectionWhenTheFileLacksIt()
+    {
+        const string xml = """
+            <SXML>
+                <MessageDictionary>
+                    <Message Name="S1F1">
+                        <Stream>1</Stream>
+                        <Function>1</Function>
+                        <Structure />
+                    </Message>
+                </MessageDictionary>
+            </SXML>
+            """;
+        var library = MessageLibrary.Load(xml);
+
+        var exported = library.Export();
+        Assert.IsEmpty(library.DataEntries);
+        Assert.IsFalse(
+            exported.Contains("<DataDictionary />", StringComparison.Ordinal),
+            "补出来的要照 SecsExpress 的两行写法，不能塌成自闭合。");
+
+        var root = library.Document.Root!;
+        Assert.AreEqual("DataDictionary", root.Elements().First().Name.LocalName, "字典段得在消息段之前。");
+        Assert.IsFalse(root.Element("DataDictionary")!.IsEmpty);
+
+        // 再读一遍不该又长出第二段，也不该改一个字节。
+        var reloaded = MessageLibrary.Load(exported);
+        Assert.HasCount(1, reloaded.Document.Root!.Elements("DataDictionary"));
+        Assert.AreEqual(exported, reloaded.Export());
+    }
+
+    [TestMethod]
+    public void ANewLibraryFromScratchExportsThatSectionToo()
+    {
+        var library = MessageLibrary.Empty;
+
+        StringAssert.Contains(library.Export(), "<DataDictionary>");
+
+        library.NewMessage(1, 1, "S1F1");
+        var reloaded = MessageLibrary.Load(library.Export());
+
+        Assert.HasCount(1, reloaded.Messages);
+        Assert.IsEmpty(reloaded.DataEntries);
+    }
+
     [TestMethod]
     public void Load_RejectsMessageWithoutFunction()
     {
@@ -295,16 +346,23 @@ public sealed class MessageLibraryTests
         Assert.HasCount(2, library.Document.Descendants("Message").ToList());
     }
 
+    /// <summary>
+    /// 口径是置空，不是只提示：目标都删了，指着它的引用
+    /// 留在文件里也指不到，界面上还看不出来，所以整个 AutoReply 元素一起删掉。
+    /// </summary>
     [TestMethod]
-    public void RemoveMessage_DoesNotRewriteThePointersThatBreak()
+    public void RemoveMessage_ClearsThePointersThatBreak()
     {
         var library = MessageLibrary.Load(ReadFixture());
 
-        // 被指向的是 S1F2_OnlineData；删掉它，指向它的那条文本必须一个字都不动（用户 2026-10-18 定：只提示不改）。
+        // 被指向的是 S1F2_OnlineData。
         library.RemoveMessage(library.Messages[1]);
 
-        Assert.AreEqual("S1F2_OnlineData", library.Messages[0].AutoReply);
+        Assert.IsNull(library.Messages[0].AutoReply);
         Assert.IsNull(AutoReplyResolver.FindTarget(library, 1, 1));
+        Assert.IsFalse(
+            library.Export().Contains("<AutoReply></AutoReply>", StringComparison.Ordinal),
+            "置空是把元素删掉，不是留一个空壳");
     }
 
     [TestMethod]

@@ -128,6 +128,7 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
         RecordStatus.LateSecondary => "迟到回复",
         RecordStatus.OrphanSecondary => "无人等待的回复",
         RecordStatus.LinkClosed => "连接已断开",
+        RecordStatus.WaitAbandoned => "已取消等待",
         _ => _status.ToString()
     };
 

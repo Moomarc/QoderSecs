@@ -113,7 +113,7 @@ public sealed class LibraryFileTests
         StringAssert.Contains(await File.ReadAllTextAsync(path), "注释必须原样保留");
         Assert.AreEqual(
             "日本語テスト",
-            StructureNode.FromStructure(loaded.Messages[0].Structure)!.Values.Single());
+            StructureNode.FromStructure(loaded.Messages[0].Structure)!.ValueText);
     }
 
     [TestMethod]

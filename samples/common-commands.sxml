@@ -1,4 +1,6 @@
 <SXML>
+    <DataDictionary>
+    </DataDictionary>
     <MessageDictionary>
         <Message Name="S1F1_AreYouThere" Description="在位查询，不带正文">
             <Stream>1</Stream>
@@ -350,6 +352,59 @@
                         </Maps>
                     </B>
                     <A Name="TEXT">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="S12F9_WaferMap" Description="上报一张上下图：批号、晶圆号、坐标对、整张图">
+            <Stream>12</Stream>
+            <Function>9</Function>
+            <WBit>1</WBit>
+            <Structure>
+                <L>
+                    <A Name="LOT ID">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <B Name="WAFER NO">
+                        <Value />
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <I2 Name="MAP_XY">
+                        <Value />
+                    </I2>
+                    <A Name="WAFER_MAP">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="S12F16_WaferMap" Description="回一张上下图，正文形状和 S12F9 同一条">
+            <Stream>12</Stream>
+            <Function>16</Function>
+            <Structure>
+                <L>
+                    <A Name="LOT ID">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <B Name="WAFER NO">
+                        <Value />
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <I2 Name="MAP_XY">
+                        <Value />
+                    </I2>
+                    <A Name="WAFER_MAP">
                         <Value />
                         <Maps Type="4096">
                         </Maps>
