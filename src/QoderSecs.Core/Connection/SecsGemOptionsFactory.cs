@@ -7,6 +7,11 @@ public static class SecsGemOptionsFactory
 {
     public static SecsGemOptions Create(ConnectionProfile profile)
     {
+        if (profile.Transport != TransportKind.Hsms)
+        {
+            throw new ArgumentException("这份连接参数不是 HSMS 的。", nameof(profile));
+        }
+
         var errors = ConnectionProfileValidator.Validate(profile);
         if (errors.Count > 0)
         {

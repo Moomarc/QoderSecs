@@ -126,6 +126,28 @@ public sealed class StructureNodeTests
         StringAssert.Contains(Node("<B><Value>ZZ 00</Value></B>").ValidationError!, "十六进制");
     }
 
+    /// <summary>
+    /// 旧程序把 B 里的高位字节显示成 -45 这类十进制数。这里只认 -1 到 -127：
+    /// 按 8 位二补码换成两位大写十六进制；-128 及以外的值原样留着，让校验报红。
+    /// </summary>
+    [TestMethod]
+    public void Binary_NegativeBytesBecomeTwosComplementHex()
+    {
+        Assert.AreEqual("D3", StructureNode.ConvertNegativeBytes("-45"));
+        Assert.AreEqual("FF", StructureNode.ConvertNegativeBytes("-1"));
+        Assert.AreEqual("81", StructureNode.ConvertNegativeBytes("-127"));
+        Assert.AreEqual("12 D3 FF", StructureNode.ConvertNegativeBytes("12 -45 -1"));
+        Assert.AreEqual("12D3FF", StructureNode.NormalizeBinary("12 -45 -1"));
+
+        Assert.AreEqual("-128", StructureNode.ConvertNegativeBytes("-128"));
+        Assert.AreEqual("45", StructureNode.ConvertNegativeBytes("45"));
+        Assert.AreEqual("-45x", StructureNode.ConvertNegativeBytes("-45x"), "只有单独成项的负数才转");
+
+        Assert.IsNull(Node("<B><Value>-45</Value></B>").ValidationError);
+        Assert.IsNull(Node("<B><Value>12 -45 -1</Value></B>").ValidationError);
+        StringAssert.Contains(Node("<B><Value>-128</Value></B>").ValidationError!, "十六进制");
+    }
+
     [TestMethod]
     public void Boolean_AcceptsTrueAndFalseOnly()
     {

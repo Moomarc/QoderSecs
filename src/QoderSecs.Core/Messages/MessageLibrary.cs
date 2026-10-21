@@ -256,6 +256,19 @@ public sealed class MessageLibrary
         return Reparse(entry);
     }
 
+    /// <summary>
+    /// 改消息的 Description 属性。留空写成空的 Description=""，不删属性——
+    /// SecsExpress 自己的文件里空描述也是这么写的，读进再导出不该出现一次假改动。
+    /// </summary>
+    public MessageEntry SetDescription(MessageEntry entry, string description)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(description);
+
+        entry.Element.SetAttributeValue("Description", description.Trim());
+        return Reparse(entry);
+    }
+
     /// <summary>库里有没有这个名字的消息（首尾空格不算）。</summary>
     public bool HasMessageName(string name)
     {
@@ -659,6 +672,7 @@ public sealed class MessageLibrary
         return new MessageEntry(
             message,
             name,
+            message.Attribute("Description")?.Value ?? string.Empty,
             ReadInt(message, "Stream", name),
             ReadInt(message, "Function", name),
             message.Element("WBit")?.Value.Trim() == "1",

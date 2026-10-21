@@ -118,7 +118,7 @@ public sealed class WaferMapTests
         var library = Library();
         var target = AutoReplyResolver.FindTarget(library, 12, 9);
 
-        Assert.AreEqual("S12F16_WaferMap", target?.Name);
+        Assert.AreEqual("WaferMapAck", target?.Name);
         Assert.IsTrue(SmlConverter.TryToMessage(target!, replyExpected: false, out var reply, out var error), error);
 
         using (reply)

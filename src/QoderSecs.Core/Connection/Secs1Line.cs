@@ -753,6 +753,12 @@ public sealed class Secs1Line : IAsyncDisposable
         }
 
         cts?.Cancel();
+
+        // 先关流再等读线程：串口的 ReadAsync 是同步包异步，取消令牌要等下一个字节才生效。
+        // 只取消不关流，读线程会一直挂在 Read 上，断开窗口就永远关不掉。
+        // 内存管道上先关也一样：读那边会拿到取消或 ObjectDisposed，PumpAsync 自己收住。
+        _stream.Dispose();
+
         if (pump is not null)
         {
             try
@@ -768,8 +774,7 @@ public sealed class Secs1Line : IAsyncDisposable
             }
         }
 
-        _stream.Dispose();
-        _writeGate.Dispose();
-        _transferGate.Dispose();
+        // 两个闸门故意不 Dispose：断开时可能还有一条发送正在 finally 里 Release，
+        // 提前销毁会让它抛 ObjectDisposedException 冒到界面上。SemaphoreSlim 不持有系统句柄，放着不碍事。
     }
 }

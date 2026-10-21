@@ -26,12 +26,16 @@ public sealed class MessageLibraryTests
         Assert.IsFalse(first.Structure!.HasElements);
         Assert.AreEqual("S1F1", first.Signature);
         Assert.AreEqual("W", first.WBitMark);
+        Assert.AreEqual("link test", first.Description);
+        Assert.IsTrue(first.HasDescription);
 
         var second = library.Messages[1];
         Assert.IsFalse(second.WBit);
         Assert.AreEqual("-", second.WBitMark);
         Assert.IsNull(second.AutoReply);
         Assert.IsNotNull(second.Structure);
+        Assert.AreEqual(string.Empty, second.Description);
+        Assert.IsFalse(second.HasDescription);
 
         var third = library.Messages[2];
         Assert.AreEqual(7, third.Stream);
@@ -193,6 +197,34 @@ public sealed class MessageLibraryTests
 
         // 改回自己原来那个名字不算撞自己。
         Assert.AreEqual(first.Name, library.SetName(first, first.Name).Name);
+    }
+
+    [TestMethod]
+    public void SetDescription_RewritesTheAttributeAndSurvivesExport()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        var updated = library.SetDescription(library.Messages[1], "  新的说明  ");
+
+        Assert.AreEqual("新的说明", updated.Description);
+        Assert.IsTrue(updated.HasDescription);
+        Assert.AreEqual("新的说明", updated.Element.Attribute("Description")!.Value);
+
+        var reloaded = MessageLibrary.Load(library.Export());
+        Assert.AreEqual("新的说明", reloaded.Messages[1].Description);
+    }
+
+    [TestMethod]
+    public void SetDescription_EmptyStaysAsAnEmptyAttribute()
+    {
+        var library = MessageLibrary.Load(ReadFixture());
+
+        var updated = library.SetDescription(library.Messages[0], "   ");
+
+        Assert.AreEqual(string.Empty, updated.Description);
+        Assert.IsFalse(updated.HasDescription);
+        Assert.AreEqual(string.Empty, updated.Element.Attribute("Description")!.Value);
+        StringAssert.Contains(library.Export(), "Description=\"\"");
     }
 
     [TestMethod]

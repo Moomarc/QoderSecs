@@ -32,6 +32,9 @@ public sealed class TranscriptLogTests
             }
 
             var indexLine = (await File.ReadAllLinesAsync(smlLogPath))[0];
+            StringAssert.Matches(
+                indexLine,
+                new Regex(@"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d "));
             StringAssert.Contains(indexLine, $"# seq={sequence} sys=00000009 dir=Out S1F1W 在线确认");
         }
         finally
@@ -59,7 +62,7 @@ public sealed class TranscriptLogTests
 
             var lines = await File.ReadAllLinesAsync(detailLogPath);
             Assert.HasCount(2, lines);
-            StringAssert.Matches(lines[0], new Regex(@"^\d\d:\d\d:\d\d\.\d\d\d "));
+            StringAssert.Matches(lines[0], new Regex(@"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d\d\d "));
             StringAssert.EndsWith(lines[0], " 连接状态 Online");
             StringAssert.EndsWith(lines[1], "（同 sys）");
         }

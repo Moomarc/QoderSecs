@@ -191,7 +191,7 @@ public sealed class StructureNodeViewModel : ObservableObject
     public string? ValueEditorTip => ValidationError ?? (Node.ItemType switch
     {
         SecsItemType.A or SecsItemType.J => "一段文本，可以换行。",
-        SecsItemType.B => "十六进制字节，成对写，可以用空格分隔。",
+        SecsItemType.B => "十六进制字节，成对写，可以用空格分隔；-127 到 -1 会按二补码转成两位十六进制（-45 → D3）。",
         _ when Node.CanHoldArray => "可以填多个值，用空格分隔，例如 0 0 1。",
         _ => null
     });
@@ -225,6 +225,24 @@ public sealed class StructureNodeViewModel : ObservableObject
             StructureEditor.SetValue(Element, value);
             RefreshSnapshot();
             Owner.OnStructureEdited(this);
+        }
+    }
+
+    /// <summary>
+    /// 收框或失焦时把 B 值里的负数换成十六进制。不能放在 EditValue 的 setter 里逐字转换：
+    /// 刚敲下 '-' 的时候后面的数字还没输入，值就已经被改写，-45 永远打不进来。
+    /// </summary>
+    public void CommitValue()
+    {
+        if (Node.ItemType != SecsItemType.B)
+        {
+            return;
+        }
+
+        var converted = StructureNode.ConvertNegativeBytes(EditValue);
+        if (converted != EditValue)
+        {
+            EditValue = converted;
         }
     }
 

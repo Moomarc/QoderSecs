@@ -102,23 +102,17 @@ public sealed class AppDataPathsTests
     }
 
     [TestMethod]
-    public void SampleLibrariesLiveNextToTheExecutable()
+    public void SampleLibraryLivesInTheDataDirectory()
     {
         var paths = new AppDataPaths(_testDirectory);
 
         // 导入对话框停在哪儿、启动时往哪儿解，都只看这一份路径，不能各算各的。
-        Assert.AreEqual(
-            Path.Combine(_testDirectory, AppDataPaths.SampleSubdirectoryName),
-            paths.SampleDirectory);
+        Assert.AreEqual(paths.DataDirectory, paths.SampleDirectory);
 
-        // 每一份内嵌样本都落在 samples/ 底下，文件名和顺序照清单来：
-        // 解包是按清单逐个去找内嵌资源的，清单和 csproj 里的文件对不上就会静默少解一份。
-        Assert.HasCount(AppDataPaths.SampleFileNames.Count, paths.SampleFilePaths);
-        for (var index = 0; index < AppDataPaths.SampleFileNames.Count; index++)
-        {
-            StringAssert.EndsWith(
-                paths.SampleFilePaths[index],
-                Path.Combine(AppDataPaths.SampleSubdirectoryName, AppDataPaths.SampleFileNames[index]));
-        }
+        // 样本和 settings.json 并排，不再单独占一个 samples 文件夹；
+        // 解包按这个文件名去找内嵌资源，它和 csproj 里的文件对不上就会静默少解一份。
+        Assert.AreEqual(
+            Path.Combine(paths.DataDirectory, AppDataPaths.SampleFileName),
+            paths.SampleFilePath);
     }
 }

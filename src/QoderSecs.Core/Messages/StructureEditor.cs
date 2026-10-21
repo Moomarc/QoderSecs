@@ -176,7 +176,14 @@ public static class StructureEditor
     /// 跨段搬（消息段和字典段之间只开复制，不搬活节点）。
     /// 两个节点必须挂在同一份文档里，不然搬过去就是跨消息改结构，界面那层不该给这条路。
     /// </summary>
-    public static PastePlacement DropPlacementOf(XElement dragged, XElement target)
+    public static PastePlacement DropPlacementOf(XElement dragged, XElement target) =>
+        DropPlacementOf(dragged, target, DropZone.Middle);
+
+    /// <summary>
+    /// 带落点区域的版本。上段和下段只走同级，目标没有同级位置（根元素）时不收；
+    /// 中段照原来的判断，先试子项、再退同级。前面那几道拦截（能不能动、自己、子树、同文档、同段）一视同仁。
+    /// </summary>
+    public static PastePlacement DropPlacementOf(XElement dragged, XElement target, DropZone zone)
     {
         if (dragged is null || target is null || !CanMove(dragged))
         {
@@ -208,7 +215,17 @@ public static class StructureEditor
             return PastePlacement.Nowhere;
         }
 
-        return PlacementOf(target);
+        if (zone == DropZone.Middle)
+        {
+            return PlacementOf(target);
+        }
+
+        if (!CanAddSibling(target))
+        {
+            return PastePlacement.Nowhere;
+        }
+
+        return zone == DropZone.Top ? PastePlacement.AsSiblingBefore : PastePlacement.AsSibling;
     }
 
     /// <summary>
@@ -217,25 +234,33 @@ public static class StructureEditor
     /// 从字典的一个条目里把活节点挖进另一个条目，等于偷偷改掉来源那一条。
     /// 返回 false 表示这个落点不收或者只准复制，树保持原样。
     /// </summary>
-    public static bool Move(XElement dragged, XElement target)
+    public static bool Move(XElement dragged, XElement target) =>
+        Move(dragged, target, DropZone.Middle);
+
+    /// <summary>带落点区域的搬动。上段插到目标前面，下段插到后面，中段照旧。</summary>
+    public static bool Move(XElement dragged, XElement target, DropZone zone)
     {
         ArgumentNullException.ThrowIfNull(dragged);
         ArgumentNullException.ThrowIfNull(target);
 
-        var placement = DropPlacementOf(dragged, target);
-        if (placement == PastePlacement.Nowhere || DropWayOf(dragged, target) != DropWay.Move)
+        var placement = DropPlacementOf(dragged, target, zone);
+        if (placement == PastePlacement.Nowhere || DropWayOf(dragged, target, zone) != DropWay.Move)
         {
             return false;
         }
 
         dragged.Remove();
-        if (placement == PastePlacement.AsChild)
+        switch (placement)
         {
-            target.Add(dragged);
-        }
-        else
-        {
-            target.AddAfterSelf(dragged);
+            case PastePlacement.AsChild:
+                target.Add(dragged);
+                break;
+            case PastePlacement.AsSiblingBefore:
+                target.AddBeforeSelf(dragged);
+                break;
+            default:
+                target.AddAfterSelf(dragged);
+                break;
         }
 
         return true;
@@ -248,9 +273,13 @@ public static class StructureEditor
     /// 把别的条目里的东西落到这个条目底下，给的是副本，来源那一条一个字都不少；
     /// 同一个条目内部还是搬。顶层条目在字典那一层重排也算搬——落点容器就是它自己待的那一层。
     /// </summary>
-    public static DropWay DropWayOf(XElement dragged, XElement target)
+    public static DropWay DropWayOf(XElement dragged, XElement target) =>
+        DropWayOf(dragged, target, DropZone.Middle);
+
+    /// <summary>带落点区域的那一版；上段和下段的落点层都是目标的父元素，判搬还是判复制照旧。</summary>
+    public static DropWay DropWayOf(XElement dragged, XElement target, DropZone zone)
     {
-        var placement = DropPlacementOf(dragged, target);
+        var placement = DropPlacementOf(dragged, target, zone);
         if (placement == PastePlacement.Nowhere)
         {
             return DropWay.Nowhere;
@@ -272,12 +301,36 @@ public static class StructureEditor
     /// 按 <see cref="DropWayOf"/> 判成复制的那个落点，插一份克隆，原节点不动。
     /// 判成移动或拒收的落点返回 null——那两条各有自己的走法，不能在这里悄悄把原节点搬走。
     /// </summary>
-    public static XElement? CopyForDrop(XElement dragged, XElement target)
-    {
-        ArgumentNullException.ThrowIfNull(dragged);
-        ArgumentNullException.ThrowIfNull(target);
+    public static XElement? CopyForDrop(XElement dragged, XElement target) =>
+        CopyForDrop(dragged, target, DropZone.Middle);
 
-        return DropWayOf(dragged, target) == DropWay.Copy ? PasteInto(CloneSubtree(dragged), target) : null;
+    /// <summary>带落点区域的复制。上段插到目标前面，下段插到后面，中段照旧。</summary>
+    public static XElement? CopyForDrop(XElement dragged, XElement target, DropZone zone)
+    {
+        if (DropWayOf(dragged, target, zone) != DropWay.Copy)
+        {
+            return null;
+        }
+
+        var clone = CloneSubtree(dragged);
+        return DropPlacementOf(dragged, target, zone) switch
+        {
+            PastePlacement.AsChild => InsertClone(clone, target, asChild: true),
+            PastePlacement.AsSiblingBefore => InsertCloneBefore(clone, target),
+            PastePlacement.AsSibling => InsertClone(clone, target, asChild: false),
+            _ => null
+        };
+    }
+
+    private static XElement? InsertCloneBefore(XElement clone, XElement target)
+    {
+        if (!CanAddSibling(target))
+        {
+            return null;
+        }
+
+        target.AddBeforeSelf(clone);
+        return clone;
     }
 
     /// <summary>沿祖先走到直接挂在 &lt;DataDictionary&gt; 下面的那一个元素，那就是字典里的顶层条目。</summary>

@@ -17,6 +17,9 @@ using QoderSecs.Core.Profiles;
 
 namespace QoderSecs.App.ViewModels;
 
+/// <summary>传输方式下拉框的一行。显示文字和枚举分开，界面上写「SECS I」，代码里仍是 TransportKind.Secs1。</summary>
+public sealed record TransportOption(TransportKind Kind, string Display);
+
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
     /// <summary>详情区一次最多灌这么多字符，再多 TextBox 就画不动了；剩下的指路到 sml.log。</summary>
@@ -39,9 +42,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static readonly Brush StatusErrorBrush = Frozen("#DC2626");
 
     private readonly ConnectionSettingsStore _settingsStore;
-    private readonly HsmsLink _link = new();
+    private readonly ConnectionLink _link = new();
     private bool _isLinkBusy;
     private bool _isSendWaiting;
+    private Task? _connectInFlight;
     private LinkPhase _phase = LinkPhase.Offline;
     private CommunicationRecord? _selectedRecord;
     private readonly SemaphoreSlim _saveGate = new(1, 1);
@@ -74,7 +78,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _pasteSmlText = string.Empty;
     private bool _loadingMessageEditor;
     private bool _refreshingMessages;
+    private bool _deferMessageListRefresh;
+    private int? _deferredMessageIndex;
     private string _messageName = string.Empty;
+    private string _messageDescription = string.Empty;
     private string _streamText = string.Empty;
     private string _functionText = string.Empty;
     private bool _messageWBit;
@@ -82,10 +89,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private IReadOnlyList<AutoReplyOption> _autoReplyCandidates = [AutoReplyOptions.None];
     private EndpointRole _role;
     private ConnectionMode _mode;
+    private TransportKind _transport;
     private string _ipAddress = string.Empty;
     private int _port;
+    private string _serialPortName = string.Empty;
+    private int _baudRate;
+    private int _dataBits;
+    private SerialParity _parity;
+    private SerialStopBits _stopBits;
+    private SerialFlowControl _flowControl;
     private int _deviceId;
+    private int _t1Seconds;
+    private int _t2Seconds;
     private int _t3Seconds;
+    private int _t4Seconds;
     private int _t5Seconds;
     private int _t6Seconds;
     private int _t7Seconds;
@@ -153,6 +170,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<EndpointRole> EndpointRoles { get; } = Enum.GetValues<EndpointRole>();
 
     public IReadOnlyList<ConnectionMode> ConnectionModes { get; } = Enum.GetValues<ConnectionMode>();
+
+    public IReadOnlyList<TransportOption> TransportOptions { get; } =
+    [
+        new(TransportKind.Hsms, "HSMS"),
+        new(TransportKind.Secs1, "SECS I")
+    ];
+
+    public IReadOnlyList<SerialParity> SerialParities { get; } = Enum.GetValues<SerialParity>();
+
+    public IReadOnlyList<SerialStopBits> SerialStopBitOptions { get; } = Enum.GetValues<SerialStopBits>();
+
+    public IReadOnlyList<SerialFlowControl> SerialFlowControls { get; } = Enum.GetValues<SerialFlowControl>();
 
     public AsyncRelayCommand CloseConfigPanelCommand { get; }
 
@@ -501,6 +530,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetEditorProperty(ref _mode, value);
     }
 
+    public TransportKind Transport
+    {
+        get => _transport;
+        set
+        {
+            if (SetEditorProperty(ref _transport, value))
+            {
+                OnPropertyChanged(nameof(HsmsSettingsVisibility));
+                OnPropertyChanged(nameof(Secs1SettingsVisibility));
+            }
+        }
+    }
+
+    /// <summary>参数面板按传输方式分成两套，同一时刻只露一套。</summary>
+    public Visibility HsmsSettingsVisibility =>
+        _transport == TransportKind.Hsms ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility Secs1SettingsVisibility =>
+        _transport == TransportKind.Secs1 ? Visibility.Visible : Visibility.Collapsed;
+
     public string IpAddress
     {
         get => _ipAddress;
@@ -513,16 +562,70 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetEditorProperty(ref _port, value);
     }
 
+    public string SerialPortName
+    {
+        get => _serialPortName;
+        set => SetEditorProperty(ref _serialPortName, value);
+    }
+
+    public int BaudRate
+    {
+        get => _baudRate;
+        set => SetEditorProperty(ref _baudRate, value);
+    }
+
+    public int DataBits
+    {
+        get => _dataBits;
+        set => SetEditorProperty(ref _dataBits, value);
+    }
+
+    public SerialParity Parity
+    {
+        get => _parity;
+        set => SetEditorProperty(ref _parity, value);
+    }
+
+    public SerialStopBits StopBits
+    {
+        get => _stopBits;
+        set => SetEditorProperty(ref _stopBits, value);
+    }
+
+    public SerialFlowControl FlowControl
+    {
+        get => _flowControl;
+        set => SetEditorProperty(ref _flowControl, value);
+    }
+
     public int DeviceId
     {
         get => _deviceId;
         set => SetEditorProperty(ref _deviceId, value);
     }
 
+    public int T1Seconds
+    {
+        get => _t1Seconds;
+        set => SetEditorProperty(ref _t1Seconds, value);
+    }
+
+    public int T2Seconds
+    {
+        get => _t2Seconds;
+        set => SetEditorProperty(ref _t2Seconds, value);
+    }
+
     public int T3Seconds
     {
         get => _t3Seconds;
         set => SetEditorProperty(ref _t3Seconds, value);
+    }
+
+    public int T4Seconds
+    {
+        get => _t4Seconds;
+        set => SetEditorProperty(ref _t4Seconds, value);
     }
 
     public int T5Seconds
@@ -562,8 +665,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>顶栏上一眼能看到当前要连哪儿；详细参数在「连接参数」面板里改。</summary>
-    public string ConfigurationSummary =>
-        $"{Role} · {Mode} · {IpAddress}:{Port} · Dev {DeviceId} · T3 {T3Seconds}s";
+    public string ConfigurationSummary => _transport == TransportKind.Secs1
+        ? $"{Role} · SECS-I {SerialPortName} {BaudRate} · Dev {DeviceId} · T3 {T3Seconds}s"
+        : $"{Role} · HSMS {Mode} · {IpAddress}:{Port} · Dev {DeviceId} · T3 {T3Seconds}s";
 
     public string StatusMessage
     {
@@ -661,6 +765,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _messageName, value) && !_loadingMessageEditor)
             {
                 CommitMessageName();
+            }
+        }
+    }
+
+    public string MessageDescription
+    {
+        get => _messageDescription;
+        set
+        {
+            if (SetProperty(ref _messageDescription, value) && !_loadingMessageEditor)
+            {
+                CommitDescription();
             }
         }
     }
@@ -772,6 +888,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public async Task ShutdownAsync()
     {
         await FlushAsync();
+
+        // 连接跑在线程池上，关窗口可能正好撞上「正在打开串口」。
+        // 不等它结束就断开，会在连接刚建好之后把端口和日志丢给一次已经跑完的收尾。
+        if (_connectInFlight is { } connecting)
+        {
+            try
+            {
+                await connecting;
+            }
+            catch (Exception)
+            {
+                // 连接失败的原因由 ConnectAsync 那边写状态栏；这里只是等它结束。
+            }
+        }
+
         await DisconnectAsync();
     }
 
@@ -806,19 +937,36 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Records.Clear();
             OnPropertyChanged(nameof(RecordsHint));
             OnPropertyChanged(nameof(RecordsTitle));
+
+            // 这句要在 Connect 之前写：SECS-I 打开串口是同步的，连上以后阶段事件会把
+            // 「已连接」先写上去，事后再写「正在打开」就把它盖掉了。
+            StatusMessage = profile.Transport == TransportKind.Secs1
+                ? $"正在打开串口 {profile.SerialPortName}（{profile.BaudRate}，{profile.DataBits} 位数据）。"
+                : $"正在连接 {profile.IpAddress}:{profile.Port}（{profile.Mode}）。";
+
+            var connecting = Task.Run(() => _link.Connect(profile));
+            _connectInFlight = connecting;
             try
             {
-                _link.Connect(profile);
+                // 串口打开是同步调用，碰上不听话的驱动会把界面卡住；放到线程池上等，
+                // 上面那句「正在打开串口」才真能画出来。
+                await connecting;
             }
             catch (InvalidOperationException exception)
             {
                 Fail(exception.Message);
                 return;
             }
+            finally
+            {
+                if (ReferenceEquals(_connectInFlight, connecting))
+                {
+                    _connectInFlight = null;
+                }
+            }
 
             // 丢弃计数是 Core 在 Connect 里清的，这里再报一次面板标题才不会留旧数字。
             OnPropertyChanged(nameof(RecordsTitle));
-            StatusMessage = $"正在连接 {profile.IpAddress}:{profile.Port}（{profile.Mode}）。";
         }
         finally
         {
@@ -858,6 +1006,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             StatusMessage = phase switch
             {
                 LinkPhase.Online => $"已连接 {_link.Profile?.Label}。",
+                LinkPhase.PeerLost when _link.Profile?.Transport == TransportKind.Secs1 =>
+                    "串口不再有数据：对端已断开或端口被拔掉。点「断开」收尾后再重连。",
                 LinkPhase.PeerLost => "对方已断开；本端还在等对方回来，等不及就点「断开」再重连。",
                 LinkPhase.Retrying => "还没连上，正在按 T5 重试。",
                 _ => StatusMessage
@@ -895,7 +1045,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var outcome = await _link.SendAsync(message);
 
             // 发出去了和没发出去（T3 超时、发送失败）都是这一句返回值，靠开头那个词分开。
-            if (outcome.StartsWith(HsmsLink.SentPrefix, StringComparison.Ordinal))
+            if (outcome.StartsWith(ConnectionLink.SentPrefix, StringComparison.Ordinal))
             {
                 StatusMessage = outcome;
             }
@@ -1049,11 +1199,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             CheckFileExists = true
         };
 
-        // 这次会话还没导入过东西时，把对话框停在样本库目录（启动时从程序里解出来的那份），
-        // 用户不用自己去 exe 旁边翻。导入过了就按系统记住的位置走，别每次都跳回来。
+        // 这次会话还没导入过东西时，把对话框停在样本库所在的数据目录
+        // （启动时从程序里解出来的那份和 settings.json 并排）。
+        // 导入过了就按系统记住的位置走，别每次都跳回来。
         if (_libraryPath.Length == 0)
         {
-            var samples = Path.Combine(AppContext.BaseDirectory, AppDataPaths.SampleSubdirectoryName);
+            var samples = new AppDataPaths(AppContext.BaseDirectory).SampleDirectory;
             if (Directory.Exists(samples))
             {
                 dialog.InitialDirectory = samples;
@@ -1551,27 +1702,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// 拖动时这个落点收不收、以什么方式收（搬走还是复制一份）。光标形状和放下去那一步都问它，
-    /// 界面那层不再判第二遍。
+    /// 界面那层不再判第二遍。zone 是目标行的上/中/下三段。
     /// </summary>
-    public DropWay NodeDropWay(StructureNodeViewModel dragged, StructureNodeViewModel target) =>
-        StructureEditor.DropWayOf(dragged.Element, target.Element);
+    public DropWay NodeDropWay(StructureNodeViewModel dragged, StructureNodeViewModel target, DropZone zone) =>
+        StructureEditor.DropWayOf(dragged.Element, target.Element, zone);
 
-    /// <summary>把 dragged 放到 target 上。搬还是复制由 Core 判，界面只看它给的答案。</summary>
-    public void DropNode(StructureNodeViewModel dragged, StructureNodeViewModel target)
+    /// <summary>把 dragged 放到 target 的上段、中段或下段。搬还是复制由 Core 判，界面只看它给的答案。</summary>
+    public void DropNode(StructureNodeViewModel dragged, StructureNodeViewModel target, DropZone zone)
     {
         ArgumentNullException.ThrowIfNull(dragged);
         ArgumentNullException.ThrowIfNull(target);
 
-        switch (StructureEditor.DropWayOf(dragged.Element, target.Element))
+        switch (StructureEditor.DropWayOf(dragged.Element, target.Element, zone))
         {
             case DropWay.Move:
-                MoveNode(dragged, target);
+                MoveNode(dragged, target, zone);
                 return;
             case DropWay.Copy:
-                CopyNodeInto(dragged, target);
+                CopyNodeInto(dragged, target, zone);
                 return;
             default:
-                Fail(DropRefusalReason(dragged.Element, target.Element));
+                Fail(DropRefusalReason(dragged.Element, target.Element, zone));
                 return;
         }
     }
@@ -1580,11 +1731,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// 字典页跨条目那一种落点：在落点插一份克隆，来源那一条不动。
     /// 状态栏要说清这是复制，不然人会以为原来那条被挪走了。
     /// </summary>
-    private void CopyNodeInto(StructureNodeViewModel dragged, StructureNodeViewModel target)
+    private void CopyNodeInto(StructureNodeViewModel dragged, StructureNodeViewModel target, DropZone zone)
     {
         // 落点要在动之前问：插完之后 target 那一档可能就变了，照插完的状态会说错话。
-        var placement = StructureEditor.DropPlacementOf(dragged.Element, target.Element);
-        var copy = StructureEditor.CopyForDrop(dragged.Element, target.Element);
+        var placement = StructureEditor.DropPlacementOf(dragged.Element, target.Element, zone);
+        var copy = StructureEditor.CopyForDrop(dragged.Element, target.Element, zone);
         if (copy is null)
         {
             Fail("这个位置不收：复制一份也插不进去。");
@@ -1593,20 +1744,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         RefreshTreeOf(copy);
         SelectDropped(FindNode(copy));
-        StatusMessage = placement == PastePlacement.AsChild
-            ? $"已把 {dragged.TypeLabel} 复制一份放进 {target.TypeLabel} 里，原来那一条没动。"
-            : $"已把 {dragged.TypeLabel} 复制一份排到 {target.TypeLabel} 后面，原来那一条没动。";
+        StatusMessage = placement switch
+        {
+            PastePlacement.AsChild =>
+                $"已把 {dragged.TypeLabel} 复制一份放进 {target.TypeLabel} 里，原来那一条没动。",
+            PastePlacement.AsSiblingBefore =>
+                $"已把 {dragged.TypeLabel} 复制一份插到 {target.TypeLabel} 前面，原来那一条没动。",
+            _ => $"已把 {dragged.TypeLabel} 复制一份排到 {target.TypeLabel} 后面，原来那一条没动。"
+        };
     }
 
-    /// <summary>把 dragged 搬到 target 上。落点不收时树不动，状态栏说清为什么。</summary>
-    private void MoveNode(StructureNodeViewModel dragged, StructureNodeViewModel target)
+    /// <summary>把 dragged 搬到 target 的上段、中段或下段。落点不收时树不动，状态栏说清为什么。</summary>
+    private void MoveNode(StructureNodeViewModel dragged, StructureNodeViewModel target, DropZone zone)
     {
         // 落点要在搬之前问：搬完之后 target 那一档可能就变了（往空 <Structure> 里放一个节点，
         // 它就不再接收了），照搬完的状态会说错话。
-        var placement = StructureEditor.DropPlacementOf(dragged.Element, target.Element);
-        if (!StructureEditor.Move(dragged.Element, target.Element))
+        var placement = StructureEditor.DropPlacementOf(dragged.Element, target.Element, zone);
+        if (!StructureEditor.Move(dragged.Element, target.Element, zone))
         {
-            Fail(DropRefusalReason(dragged.Element, target.Element));
+            Fail(DropRefusalReason(dragged.Element, target.Element, zone));
             return;
         }
 
@@ -1615,6 +1771,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatusMessage = placement switch
         {
             PastePlacement.AsChild => $"已把 {dragged.TypeLabel} 放进 {target.TypeLabel} 里。",
+            PastePlacement.AsSiblingBefore => $"已把 {dragged.TypeLabel} 移到 {target.TypeLabel} 前面。",
             _ => $"已把 {dragged.TypeLabel} 移到 {target.TypeLabel} 后面。"
         };
     }
@@ -1633,8 +1790,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// 拒绝原因。判断顺序照 Core 的 DropPlacementOf：先能不能动，再是不是自己身上，
     /// 再是不是自己的子树，然后是不是跨段，最后才是这个位置两档都不收。
+    /// 上段和下段还要多一句：根元素没有同级位置。
     /// </summary>
-    private static string DropRefusalReason(XElement dragged, XElement target)
+    private static string DropRefusalReason(XElement dragged, XElement target, DropZone zone)
     {
         if (!StructureEditor.CanMove(dragged))
         {
@@ -1657,6 +1815,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (SecsSections.Of(dragged) != SecsSections.Of(target))
         {
             return "消息结构和数据字典之间不能拖，用右键的复制和粘贴。";
+        }
+
+        if (zone != DropZone.Middle && !StructureEditor.CanAddSibling(target))
+        {
+            return zone == DropZone.Top
+                ? "它上面没有同级位置：根元素不能再加兄弟。"
+                : "它下面没有同级位置：根元素不能再加兄弟。";
         }
 
         return "这个位置不收：它既不能当父项，也没有同级位置。";
@@ -1712,17 +1877,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// 把行内编辑收掉。名称和值是边敲边写进 XML 的，这里没有要提交的东西，只把「正在编辑」
     /// 这个状态交出去。点到正在编辑那一行以外（树的空白处、工具栏、别的页签）走这一条——
     /// 之前只有「选中挪到别的行」和「整棵树重建」两条路会收框，点空白处不改选中，
-    /// 那个框就一直开着。
+    /// 那个框就一直开着。行内按回车也走这一条，返回值让调用方知道确实是收了一个框。
     /// </summary>
-    internal void EndStructureEdit()
+    internal bool EndStructureEdit()
     {
         if (_editingNode is not { } editing)
         {
-            return;
+            return false;
         }
 
+        // B 类的负数到这一下才转十六进制：逐字输入时转换会把刚敲的 '-' 当成完整值。
+        editing.CommitValue();
         editing.IsEditing = false;
         _editingNode = null;
+        return true;
     }
 
     /// <summary>
@@ -1830,6 +1998,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             var entry = SelectedMessage;
             MessageName = entry?.Name ?? string.Empty;
+            MessageDescription = entry?.Description ?? string.Empty;
             StreamText = entry?.Stream.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             FunctionText = entry?.Function.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
             MessageWBit = entry?.WBit ?? false;
@@ -1876,6 +2045,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Fail($"改名失败：{exception.Message}");
             SyncMessageEditor();
         }
+    }
+
+    private void CommitDescription()
+    {
+        var entry = SelectedMessage;
+        if (entry is null)
+        {
+            return;
+        }
+
+        var description = MessageDescription.Trim();
+        if (description == entry.Description)
+        {
+            // 只多了首尾空格：把框里的字改回存下来的那一份。
+            OnPropertyChanged(nameof(MessageDescription));
+            return;
+        }
+
+        var updated = _library.SetDescription(entry, description);
+        RefreshAfterMessageEdit(updated.Index);
+        StatusMessage = description.Length == 0
+            ? $"已清空 {updated.Signature} 的描述。"
+            : $"已更新 {updated.Signature} 的描述。";
     }
 
     /// <summary>
@@ -1950,11 +2142,41 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// 鼠标按下时提交消息头，提交原本会立刻重建左栏；重建发生在 ListBox 处理这次点击之前，
+    /// 被点的行会被换掉，点击就丢了。先把重建压到这次输入事件处理完之后再做。
+    /// </summary>
+    internal void DeferMessageListRefresh() => _deferMessageListRefresh = true;
+
+    /// <summary>把推迟的重建补上；没有待办就只把开关落回去。</summary>
+    internal void FlushDeferredMessageListRefresh()
+    {
+        _deferMessageListRefresh = false;
+        if (_deferredMessageIndex is not { } index)
+        {
+            return;
+        }
+
+        _deferredMessageIndex = null;
+        RefreshAfterMessageEditCore(index);
+    }
+
+    /// <summary>
     /// MessageEntry 是一次性快照，改完属性必须重建列表，左栏的名字和 SxFy 才会跟着变。
     /// 改名或改头可能让这条消息不再匹配搜索词——用户正盯着它编辑，
     /// 让它从列表里消失太莫名，所以清掉搜索词再找回来。
     /// </summary>
     private void RefreshAfterMessageEdit(int index)
+    {
+        if (_deferMessageListRefresh)
+        {
+            _deferredMessageIndex = index;
+            return;
+        }
+
+        RefreshAfterMessageEditCore(index);
+    }
+
+    private void RefreshAfterMessageEditCore(int index)
     {
         RefreshMessages();
         if (SelectedMessage is not null)
@@ -2366,10 +2588,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             Role = profile.Role;
             Mode = profile.Mode;
+            Transport = profile.Transport;
             IpAddress = profile.IpAddress;
             Port = profile.Port;
+            SerialPortName = profile.SerialPortName;
+            BaudRate = profile.BaudRate;
+            DataBits = profile.DataBits;
+            Parity = profile.Parity;
+            StopBits = profile.StopBits;
+            FlowControl = profile.FlowControl;
             DeviceId = profile.DeviceId;
+            T1Seconds = profile.T1Seconds;
+            T2Seconds = profile.T2Seconds;
             T3Seconds = profile.T3Seconds;
+            T4Seconds = profile.T4Seconds;
             T5Seconds = profile.T5Seconds;
             T6Seconds = profile.T6Seconds;
             T7Seconds = profile.T7Seconds;
@@ -2449,10 +2681,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             Role = Role,
             Mode = Mode,
+            Transport = Transport,
             IpAddress = IpAddress,
             Port = Port,
+            SerialPortName = SerialPortName,
+            BaudRate = BaudRate,
+            DataBits = DataBits,
+            Parity = Parity,
+            StopBits = StopBits,
+            FlowControl = FlowControl,
             DeviceId = DeviceId,
+            T1Seconds = T1Seconds,
+            T2Seconds = T2Seconds,
             T3Seconds = T3Seconds,
+            T4Seconds = T4Seconds,
             T5Seconds = T5Seconds,
             T6Seconds = T6Seconds,
             T7Seconds = T7Seconds,

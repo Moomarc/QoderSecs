@@ -2,11 +2,11 @@
     <DataDictionary>
     </DataDictionary>
     <MessageDictionary>
-        <Message Name="S12F9_WaferMap" Description="设备上报上下图，正文带整张图">
+        <Message Name="WaferMap" Description="设备上报上下图，正文带整张图">
             <Stream>12</Stream>
             <Function>9</Function>
             <WBit>1</WBit>
-            <AutoReply>S12F16_WaferMap</AutoReply>
+            <AutoReply>WaferMapAck</AutoReply>
             <Structure>
                 <L>
                     <A Name="LOT ID">
@@ -27,7 +27,7 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="S12F16_WaferMap" Description="Host 侧回的上下图，正文同一张图">
+        <Message Name="WaferMapAck" Description="Host 侧回的上下图，正文同一张图">
             <Stream>12</Stream>
             <Function>16</Function>
             <Structure>

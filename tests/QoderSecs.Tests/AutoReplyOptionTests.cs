@@ -4,7 +4,8 @@ namespace QoderSecs.Tests;
 
 /// <summary>
 /// 自动回复那一栏光看名字没用，要看得见目标消息的 S/F。
-/// 下拉框只显示 Core 算好的这份 Display，所以文案和配对判断都在这一档测，不在界面里测。
+/// 下拉框只显示 Core 算好的这份 Display，所以文案在这里测，不在界面里测。
+/// v1 只支持指向单条消息，不再按「像不像 F+1」加标注。
 /// </summary>
 [TestClass]
 public sealed class AutoReplyOptionTests
@@ -34,19 +35,20 @@ public sealed class AutoReplyOptionTests
 
         var reply = options.Single(option => option.TargetName == "上传图");
         Assert.AreEqual("S12F2 · 上传图", reply.Display);
-        Assert.IsTrue(reply.IsPaired, "S12F1 的回复形状就是 S12F2，不该被标成不配对");
+        Assert.IsFalse(
+            options.Any(option => option.Display.Contains("不配对", StringComparison.Ordinal)),
+            "候选栏不再标注像不像本条回复，只靠下拉框的选中高亮表示当前值。");
     }
 
     [TestMethod]
-    public void ACandidateThatIsNotTheReplyShapeIsFlaggedButStillSelectable()
+    public void ACandidateThatIsNotTheReplyShapeIsStillPlainSignatureAndName()
     {
         var library = MessageLibrary.Load(LibraryXml);
         var other = AutoReplyOptions.Build(library, Current(library))
             .Single(option => option.TargetName == "别的流");
 
-        Assert.IsFalse(other.IsPaired);
-        StringAssert.Contains(other.Display, "S1F2 · 别的流（不配对）");
-        // 只是标注，目标照旧存名字，发不发送仍按名字精确取。
+        Assert.AreEqual("S1F2 · 别的流", other.Display);
+        // 候选只是给人看的，目标照旧存名字，发不发送仍按名字精确取。
         Assert.AreEqual("别的流", other.TargetName);
     }
 
@@ -62,9 +64,9 @@ public sealed class AutoReplyOptionTests
             new[]
             {
                 AutoReplyOptions.NoneText,
-                "S1F2 · 别的流（不配对）",
+                "S1F2 · 别的流",
                 "S12F2 · 上传图",
-                "S12F3 · 就是这条（不配对）"
+                "S12F3 · 就是这条"
             },
             options.Select(option => option.Display).ToArray());
     }

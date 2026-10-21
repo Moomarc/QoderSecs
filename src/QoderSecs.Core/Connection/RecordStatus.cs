@@ -15,6 +15,9 @@ public enum RecordStatus
     /// <summary>发出的请求 T3 超时。</summary>
     TimedOut,
 
+    /// <summary>这条消息没能送上线路（握手失败、串口写不出去），请求已经没有在等回复了。</summary>
+    SendFailed,
+
     /// <summary>收到但不需要本端回复的消息。</summary>
     Received,
 

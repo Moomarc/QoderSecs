@@ -29,6 +29,13 @@ public sealed class ConnectionSettingsStoreTests
     }
 
     [TestMethod]
+    public void FreshProfileDefaultsToHsms()
+    {
+        // SECS-I 加了入口之后 HSMS 仍是默认和主模式，这一条防止有人把默认值顺手改掉。
+        Assert.AreEqual(TransportKind.Hsms, ConnectionProfile.CreateDefault().Transport);
+    }
+
+    [TestMethod]
     public async Task SaveAndLoadRoundTripsTheOneProfile()
     {
         var store = new ConnectionSettingsStore(_settingsPath);

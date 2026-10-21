@@ -7,6 +7,7 @@ public sealed record MessageEntry
     public MessageEntry(
         XElement element,
         string name,
+        string description,
         int stream,
         int function,
         bool wBit,
@@ -16,6 +17,7 @@ public sealed record MessageEntry
     {
         Element = element;
         Name = name;
+        Description = description;
         Stream = stream;
         Function = function;
         WBit = wBit;
@@ -27,6 +29,11 @@ public sealed record MessageEntry
     public XElement Element { get; }
 
     public string Name { get; }
+
+    /// <summary>SecsExpress 的 Message Description 属性；文件里没有这个属性时是空串。</summary>
+    public string Description { get; }
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
 
     public int Stream { get; }
 

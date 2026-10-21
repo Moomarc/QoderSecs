@@ -120,6 +120,7 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
         RecordStatus.AwaitingSecondary => "等待回复",
         RecordStatus.SecondaryReceived => "收到回复",
         RecordStatus.TimedOut => "T3 超时",
+        RecordStatus.SendFailed => "发送失败",
         RecordStatus.Received => "已收到",
         RecordStatus.AwaitingReply => "待本端回复",
         RecordStatus.Answered => "已自动回复",

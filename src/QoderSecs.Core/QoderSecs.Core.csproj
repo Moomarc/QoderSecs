@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Secs4Net" Version="3.1.0" />
     <PackageReference Include="Secs4Net.Sml" Version="3.1.0" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

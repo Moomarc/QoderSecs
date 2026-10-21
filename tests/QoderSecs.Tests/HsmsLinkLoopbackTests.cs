@@ -227,7 +227,7 @@ public sealed class HsmsLinkLoopbackTests
 
         var outbound = server.Transcript.Records.Where(record => record.Direction == SecsDirection.Out).ToList();
         CollectionAssert.AreEqual(
-            new[] { "S1F2 S1F2_OnlineData", "S1F14 S1F14_EstablishCommsAck" },
+            new[] { "S1F2 OnlineData", "S1F14 EstablishCommsAck" },
             outbound.Select(record => record.MessageText).ToList());
         Assert.AreEqual(inbound[0].SystemBytes, outbound[0].SystemBytes);
         Assert.AreEqual(inbound[1].SystemBytes, outbound[1].SystemBytes);
@@ -282,7 +282,7 @@ public sealed class HsmsLinkLoopbackTests
             inbound.Select(record => record.Signature).ToList());
         Assert.IsTrue(inbound.All(record => record.Status == RecordStatus.Answered), $"入站状态不对：{Describe(inbound)}");
         CollectionAssert.AreEqual(
-            Enumerable.Repeat("S12F16 S12F16_WaferMap", outbound.Count).ToList(),
+            Enumerable.Repeat("S12F16 WaferMapAck", outbound.Count).ToList(),
             outbound.Select(record => record.MessageText).ToList());
         Assert.IsTrue(outbound.All(record => record.Status == RecordStatus.Sent), $"出站状态不对：{Describe(outbound)}");
         CollectionAssert.AreEqual(

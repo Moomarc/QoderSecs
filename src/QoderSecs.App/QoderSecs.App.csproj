@@ -5,15 +5,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 样本消息库编进 exe。启动时发现 exe 旁没有这个文件就解出来一份，之后归用户，
+    <!-- 样本消息库编进 exe。启动时发现数据目录里没有这个文件就解出来一份，之后归用户，
          所以发布目录只需要一个 exe，不再单独带 samples 出去。
          解出来不等于加载：自动回复仍然默认不开，程序仍然不内置规则。
-         两份都要解：common-commands 是 GEM 常用命令骨架，wafer-map 是带正文的 S12 上下图。
-         文件名必须和 AppDataPaths.SampleFileNames 一字不差，否则运行时按后缀找不到资源。 -->
+         只带这一份 GEM 常用命令骨架；S12 上下图那两条在它里面，但正文留空。
+         文件名必须和 AppDataPaths.SampleFileName 一字不差，否则运行时按后缀找不到资源。 -->
     <EmbeddedResource Include="..\..\samples\common-commands.sxml"
                       Link="samples\common-commands.sxml" />
-    <EmbeddedResource Include="..\..\samples\wafer-map.sxml"
-                      Link="samples\wafer-map.sxml" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -39,8 +39,21 @@ public sealed class SampleLibraryTests
     {
         var library = Sample();
 
-        Assert.AreEqual("S1F2_OnlineData", AutoReplyResolver.FindTarget(library, 1, 1)?.Name);
-        Assert.AreEqual("S1F14_EstablishCommsAck", AutoReplyResolver.FindTarget(library, 1, 13)?.Name);
+        Assert.AreEqual("OnlineData", AutoReplyResolver.FindTarget(library, 1, 1)?.Name);
+        Assert.AreEqual("EstablishCommsAck", AutoReplyResolver.FindTarget(library, 1, 13)?.Name);
+    }
+
+    /// <summary>
+    /// 应答消息的正文不能省：S1F18 的 ONLACK、S2F32 的 TIACK 是对方判断结果的唯一依据，
+    /// 空着发出去对面解析不到应答码。这两条之前都被写成了「不带正文」。
+    /// </summary>
+    [TestMethod]
+    public void AcknowledgementMessagesCarryTheirStandardBodies()
+    {
+        var library = Sample();
+
+        AssertAckBody(library, 1, 18, "ONLACK");
+        AssertAckBody(library, 2, 32, "TIACK");
     }
 
     [TestMethod]
@@ -117,7 +130,7 @@ public sealed class SampleLibraryTests
     }
 
     /// <summary>
-    /// 消息清单是用户定的：GEM 常用命令留全，日期时间和上下线那几条不要。
+    /// 消息清单是用户定的：GEM 常用命令留全，并补上上下线和日期时间那几条。
     /// 改动这份清单会先在这里撞到，改的人得是有意为之。
     /// </summary>
     [TestMethod]
@@ -131,12 +144,37 @@ public sealed class SampleLibraryTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "S10F3", "S1F1", "S1F11", "S1F13", "S1F14", "S1F2", "S1F3", "S1F4",
-                "S2F33", "S2F35", "S2F37", "S2F41", "S2F42",
+                "S10F3", "S1F1", "S1F11", "S1F13", "S1F14", "S1F15", "S1F16", "S1F17",
+                "S1F18", "S1F2", "S1F3", "S1F4",
+                "S2F31", "S2F32", "S2F33", "S2F35", "S2F37", "S2F41", "S2F42",
                 "S5F1", "S5F2", "S6F11", "S6F12", "S7F17", "S7F19", "S7F3", "S7F5",
                 "S12F9", "S12F16",
             }.OrderBy(signature => signature, StringComparer.Ordinal).ToList(),
             actual);
+    }
+
+    /// <summary>消息名只写用途，SxFy 由 Stream/Function 字段表示，不再塞进名字前缀。</summary>
+    [TestMethod]
+    public void MessageNamesDoNotRepeatTheirSignature()
+    {
+        foreach (var entry in Sample().Messages)
+        {
+            Assert.IsFalse(
+                entry.Name.StartsWith(entry.Signature + "_", StringComparison.OrdinalIgnoreCase),
+                $"{entry.Name} 还把 SxFy 写在名字前缀里。");
+        }
+    }
+
+    private static void AssertAckBody(MessageLibrary library, int stream, int function, string name)
+    {
+        var entry = library.Messages.Single(message => message.Stream == stream && message.Function == function);
+        var body = entry.Structure?.Elements().SingleOrDefault();
+        Assert.IsNotNull(body, $"{entry.Name} 的消息体是空的，应该带 {name}。");
+        Assert.AreEqual("B", body!.Name.LocalName, $"{entry.Name} 的 {name} 应该是二进制元素。");
+        Assert.AreEqual(
+            name,
+            body.Attribute("Name")?.Value,
+            $"{entry.Name} 的应答码节点应该叫 {name}。");
     }
 
     private static string ReadSample() =>

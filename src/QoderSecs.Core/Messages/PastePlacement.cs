@@ -10,7 +10,10 @@ public enum PastePlacement
     AsChild,
 
     /// <summary>成为它的同级，紧跟其后。根元素没有同级，走不到这一档。</summary>
-    AsSibling
+    AsSibling,
+
+    /// <summary>成为它的同级，紧挨在它前面。拖动落在目标行上段时走这一档。</summary>
+    AsSiblingBefore
 }
 
 /// <summary>

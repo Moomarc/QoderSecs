@@ -704,6 +704,42 @@ public sealed class StructureEditorTests
     }
 
     [TestMethod]
+    public void DropPlacementOf_ZonesChooseBeforeInsideAndAfter()
+    {
+        var root = BuildTreeRoot();
+        var first = Child(root, "first");
+        var mid = Child(root, "mid");
+
+        Assert.AreEqual(PastePlacement.AsSiblingBefore, StructureEditor.DropPlacementOf(first, mid, DropZone.Top));
+        Assert.AreEqual(PastePlacement.AsChild, StructureEditor.DropPlacementOf(first, mid, DropZone.Middle));
+        Assert.AreEqual(PastePlacement.AsSibling, StructureEditor.DropPlacementOf(first, mid, DropZone.Bottom));
+    }
+
+    /// <summary>根元素只能被落进去：上段和下段都要求有同级位置，那两档对它不成立。</summary>
+    [TestMethod]
+    public void DropPlacementOf_TopAndBottomRefuseTheRoot()
+    {
+        var root = BuildTreeRoot();
+        var first = Child(root, "first");
+
+        Assert.AreEqual(PastePlacement.AsChild, StructureEditor.DropPlacementOf(first, root, DropZone.Middle));
+        Assert.AreEqual(PastePlacement.Nowhere, StructureEditor.DropPlacementOf(first, root, DropZone.Top));
+        Assert.AreEqual(PastePlacement.Nowhere, StructureEditor.DropPlacementOf(first, root, DropZone.Bottom));
+    }
+
+    [TestMethod]
+    public void Move_TopAndBottomLandOnOppositeSidesOfTheTarget()
+    {
+        var before = BuildTreeRoot();
+        Assert.IsTrue(StructureEditor.Move(Child(before, "last"), Child(before, "first"), DropZone.Top));
+        CollectionAssert.AreEqual(new[] { "last", "first", "mid" }, ChildNames(before));
+
+        var after = BuildTreeRoot();
+        Assert.IsTrue(StructureEditor.Move(Child(after, "last"), Child(after, "first"), DropZone.Bottom));
+        CollectionAssert.AreEqual(new[] { "first", "last", "mid" }, ChildNames(after));
+    }
+
+    [TestMethod]
     public void Move_LeavesTheTreeAloneWhenTheLandingSpotRefusesIt()
     {
         var root = BuildTreeRoot();
@@ -841,6 +877,14 @@ public sealed class StructureEditorTests
         Assert.AreEqual(PastePlacement.Nowhere, StructureEditor.DropPlacementOf(messageChild, entryChild));
         Assert.AreEqual(PastePlacement.Nowhere, StructureEditor.DropPlacementOf(entry.Element, messageChild));
         Assert.AreEqual(PastePlacement.Nowhere, StructureEditor.DropPlacementOf(entryChild, messageRoot));
+        Assert.AreEqual(
+            PastePlacement.Nowhere,
+            StructureEditor.DropPlacementOf(messageChild, entry.Element, DropZone.Top),
+            "上段也不能把消息里的节点插进字典");
+        Assert.AreEqual(
+            PastePlacement.Nowhere,
+            StructureEditor.DropPlacementOf(entryChild, messageRoot, DropZone.Bottom),
+            "下段也不能把字典里的节点插进消息");
 
         Assert.IsFalse(StructureEditor.Move(messageChild, entry.Element));
         Assert.IsFalse(StructureEditor.Move(entry.Element, messageRoot));
@@ -957,6 +1001,36 @@ public sealed class StructureEditorTests
             DropWay.Move,
             StructureEditor.DropWayOf(f.List, plain),
             "两条顶层条目在字典那一层排队，谁都不进谁的肚子里，还是搬");
+    }
+
+    [TestMethod]
+    public void DropWayOf_KeepsMoveOrCopyWhenTheZoneIsTopOrBottom()
+    {
+        var f = BuildDictionary();
+        var plain = f.Library.NewEntry("一个值", SecsItemType.U4).Element;
+
+        Assert.AreEqual(DropWay.Move, StructureEditor.DropWayOf(f.Count, f.Flag, DropZone.Top), "同一条目里换顺序");
+        Assert.AreEqual(DropWay.Move, StructureEditor.DropWayOf(f.Count, f.Flag, DropZone.Bottom));
+        Assert.AreEqual(DropWay.Copy, StructureEditor.DropWayOf(f.Count, f.Config, DropZone.Top), "跨条目仍然是复制");
+        Assert.AreEqual(DropWay.Copy, StructureEditor.DropWayOf(f.Count, f.Config, DropZone.Bottom));
+        Assert.AreEqual(DropWay.Move, StructureEditor.DropWayOf(f.List, plain, DropZone.Top), "字典顶层排队还是搬");
+    }
+
+    [TestMethod]
+    public void CopyForDrop_InsertsTheCloneOnEitherSideAndLeavesTheSource()
+    {
+        var f = BuildDictionary();
+
+        var before = StructureEditor.CopyForDrop(f.Count, f.ConfigName, DropZone.Top);
+        Assert.IsNotNull(before);
+        Assert.IsTrue(ReferenceEquals(before, f.ConfigName.PreviousNode), "上段插到目标前面");
+        Assert.IsNotNull(f.Count.Parent, "来源那一条一个字不少");
+
+        var after = StructureEditor.CopyForDrop(f.Count, f.ConfigName, DropZone.Bottom);
+        Assert.IsNotNull(after);
+        Assert.IsTrue(ReferenceEquals(after, f.ConfigName.NextNode), "下段插在目标后面");
+        Assert.AreEqual("数量", (string?)f.Count.Attribute("Name"), "来源那条的名字没变");
+        Assert.IsTrue(ReferenceEquals(f.Count.Parent, f.List), "来源还挂在原来的条目里");
     }
 
     [TestMethod]

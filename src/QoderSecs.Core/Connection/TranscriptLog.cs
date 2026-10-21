@@ -41,11 +41,21 @@ public sealed class TranscriptLog : IAsyncDisposable
         _pump = Task.Run(PumpAsync);
     }
 
+    /// <summary>
+    /// 索引行和 detail.log 用同一种时间格式，跨文件按时刻直接对得上。
+    /// 文件名里只有目录那一层带开始时间，正文里必须自己写全。
+    /// </summary>
+    public const string TimestampFormat = "yyyy-MM-dd HH:mm:ss.fff";
+
     public string SmlLogPath { get; }
 
     public string DetailLogPath { get; }
 
-    public static TranscriptLog Open(string sessionDirectory)
+    /// <summary>
+    /// 打开一次会话的两个日志。header 写成 sml.log 的第一行（会话头），
+    /// 这样脱离目录名也能知道这份正文属于哪次会话；detail.log 的会话头由调用方照常记。
+    /// </summary>
+    public static TranscriptLog Open(string sessionDirectory, string? header = null)
     {
         Directory.CreateDirectory(sessionDirectory);
         var smlLogPath = Path.Combine(sessionDirectory, "sml.log");
@@ -65,14 +75,33 @@ public sealed class TranscriptLog : IAsyncDisposable
             81920,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
         var detailWriter = new StreamWriter(detailStream, new UTF8Encoding(false)) { AutoFlush = false };
-        return new TranscriptLog(smlLogPath, detailLogPath, smlStream, detailWriter);
+        var log = new TranscriptLog(smlLogPath, detailLogPath, smlStream, detailWriter);
+        if (!string.IsNullOrWhiteSpace(header))
+        {
+            // 队列还空着，启动之前同步写一行会话头不会和正文交错。
+            log._smlWriter.WriteLine(header);
+            log._smlWriter.Flush();
+        }
+
+        return log;
     }
 
     /// <summary>排一条小消息的正文。返回的序号写进记录，读盘时靠它找位置。</summary>
-    public long EnqueueInlineSml(SecsDirection direction, int systemBytes, SecsHeader header, string sml)
+    public long EnqueueInlineSml(
+        SecsDirection direction,
+        int systemBytes,
+        SecsHeader header,
+        string sml,
+        DateTimeOffset? timestamp = null)
     {
         var sequence = Interlocked.Increment(ref _nextSequence);
-        _queue.Writer.TryWrite(LogJob.InlineSml(sequence, direction, systemBytes, header, sml));
+        _queue.Writer.TryWrite(LogJob.InlineSml(
+            sequence,
+            direction,
+            systemBytes,
+            header,
+            sml,
+            timestamp ?? DateTimeOffset.Now));
         return sequence;
     }
 
@@ -85,7 +114,8 @@ public sealed class TranscriptLog : IAsyncDisposable
         SecsDirection direction,
         int systemBytes,
         SecsHeader header,
-        SecsMessage message)
+        SecsMessage message,
+        DateTimeOffset? timestamp = null)
     {
         var sequence = Interlocked.Increment(ref _nextSequence);
         try
@@ -93,7 +123,13 @@ public sealed class TranscriptLog : IAsyncDisposable
             _smlGate.Wait();
             try
             {
-                var location = WriteBlockAsync(sequence, direction, systemBytes, header, message)
+                var location = WriteBlockAsync(
+                        sequence,
+                        direction,
+                        systemBytes,
+                        header,
+                        message,
+                        timestamp ?? DateTimeOffset.Now)
                     .GetAwaiter()
                     .GetResult();
                 lock (_locations)
@@ -120,7 +156,8 @@ public sealed class TranscriptLog : IAsyncDisposable
     /// <summary>事件行：连接状态、状态变化、回复来源、异常。时间戳在这里统一加。</summary>
     public void EnqueueDetail(string line) =>
         _queue.Writer.TryWrite(
-            LogJob.DetailLine($"{DateTimeOffset.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture)} {line}"));
+            LogJob.DetailLine(
+                $"{DateTimeOffset.Now.ToString(TimestampFormat, CultureInfo.InvariantCulture)} {line}"));
 
     public bool TryGetSmlLocation(long sequence, out SmlLocation location)
     {
@@ -184,7 +221,8 @@ public sealed class TranscriptLog : IAsyncDisposable
                             job.Direction,
                             job.SystemBytes,
                             job.Header,
-                            job.Sml!)
+                            job.Sml!,
+                            job.Timestamp)
                         .ConfigureAwait(false);
                     lock (_locations)
                     {
@@ -208,9 +246,10 @@ public sealed class TranscriptLog : IAsyncDisposable
         SecsDirection direction,
         int systemBytes,
         SecsHeader header,
-        SecsMessage message)
+        SecsMessage message,
+        DateTimeOffset timestamp)
     {
-        await _smlWriter.WriteLineAsync(IndexLine(sequence, direction, systemBytes, header)).ConfigureAwait(false);
+        await _smlWriter.WriteLineAsync(IndexLine(sequence, direction, systemBytes, header, timestamp)).ConfigureAwait(false);
         await _smlWriter.FlushAsync().ConfigureAwait(false);
         var offset = _smlStream.Position;
 
@@ -226,9 +265,10 @@ public sealed class TranscriptLog : IAsyncDisposable
         SecsDirection direction,
         int systemBytes,
         SecsHeader header,
-        string sml)
+        string sml,
+        DateTimeOffset timestamp)
     {
-        await _smlWriter.WriteLineAsync(IndexLine(sequence, direction, systemBytes, header)).ConfigureAwait(false);
+        await _smlWriter.WriteLineAsync(IndexLine(sequence, direction, systemBytes, header, timestamp)).ConfigureAwait(false);
         await _smlWriter.FlushAsync().ConfigureAwait(false);
         var offset = _smlStream.Position;
 
@@ -239,7 +279,17 @@ public sealed class TranscriptLog : IAsyncDisposable
         return new SmlLocation(sequence, offset, _smlStream.Position - offset);
     }
 
-    private static string IndexLine(long sequence, SecsDirection direction, int systemBytes, SecsHeader header) =>
+    /// <summary>
+    /// 索引行也带时刻，和 detail.log 同一格式；seq 是这条正文在 sml.log 里的序号，
+    /// detail.log 的收发行写的也是它，两边按 seq 或时刻都能对上。
+    /// </summary>
+    private static string IndexLine(
+        long sequence,
+        SecsDirection direction,
+        int systemBytes,
+        SecsHeader header,
+        DateTimeOffset timestamp) =>
+        $"{timestamp.ToString(TimestampFormat, CultureInfo.InvariantCulture)} " +
         $"# seq={sequence} sys={systemBytes:X8} dir={(direction == SecsDirection.Out ? "Out" : "In")} " +
         $"{header.Signature} {header.Name}";
 
@@ -252,13 +302,15 @@ public sealed class TranscriptLog : IAsyncDisposable
             SecsDirection direction,
             int systemBytes,
             SecsHeader header,
-            string sml) => new()
+            string sml,
+            DateTimeOffset timestamp) => new()
         {
             Sequence = sequence,
             Direction = direction,
             SystemBytes = systemBytes,
             Header = header,
-            Sml = sml
+            Sml = sml,
+            Timestamp = timestamp
         };
 
         public string? Detail { get; init; }
@@ -272,6 +324,8 @@ public sealed class TranscriptLog : IAsyncDisposable
         public SecsHeader Header { get; init; }
 
         public string? Sml { get; init; }
+
+        public DateTimeOffset Timestamp { get; init; }
     }
 }
 

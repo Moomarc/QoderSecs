@@ -4,8 +4,8 @@ using QoderSecs.Core.Profiles;
 namespace QoderSecs.App;
 
 /// <summary>
-/// 样本消息库内嵌在程序里，启动时 exe 旁边缺了哪一份就解出来一份（清单在
-/// <see cref="AppDataPaths.SampleFileNames"/>）。解出来之后它们就是普通文件——
+/// 样本消息库内嵌在程序里，启动时数据目录里缺了就解出来一份（路径在
+/// <see cref="AppDataPaths.SampleFilePath"/>）。解出来之后它就是普通文件——
 /// 用户改它、删它、换成自己的，程序都不再过问。
 ///
 /// 这么做只为了一件事：只拿到一个 exe 的人也有东西能导入，不用先去找人要 .sxml。
@@ -14,7 +14,7 @@ namespace QoderSecs.App;
 internal static class SampleLibrary
 {
     /// <summary>
-    /// 把 <see cref="AppDataPaths.SampleFileNames"/> 里每一份内嵌样本解到 exe 旁的 samples/。
+    /// 把内嵌的样本解到 QoderSecsData 第一层，和 settings.json 并排。
     /// 已经在的不覆盖：那说明用户改过或者换成了自己的一份，程序不能再伸手。
     /// 返回要给界面看的一句话，null 表示没什么要交代的。
     /// 解不出来（目录只读、权限不够）也不算错，顶多是样本暂时不可用，不能拦住程序启动。
@@ -23,18 +23,7 @@ internal static class SampleLibrary
     {
         ArgumentNullException.ThrowIfNull(paths);
 
-        List<string>? notices = null;
-        for (var index = 0; index < AppDataPaths.SampleFileNames.Count; index++)
-        {
-            var notice = ExtractOne(
-                AppDataPaths.SampleFileNames[index], paths.SampleFilePaths[index]);
-            if (notice is not null)
-            {
-                (notices ??= []).Add(notice);
-            }
-        }
-
-        return notices is null ? null : string.Join(" ", notices);
+        return ExtractOne(AppDataPaths.SampleFileName, paths.SampleFilePath);
     }
 
     private static string? ExtractOne(string fileName, string targetPath)

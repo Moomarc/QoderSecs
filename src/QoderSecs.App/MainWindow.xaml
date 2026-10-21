@@ -297,6 +297,7 @@
                 <TextBlock Grid.Column="1"
                            Margin="0,0,12,0"
                            VerticalAlignment="Center"
+                           AutomationProperties.AutomationId="ProfileSummary"
                            Foreground="{StaticResource MutedBrush}"
                            Text="{Binding ConfigurationSummary}" />
 
@@ -366,48 +367,79 @@
                             <WrapPanel IsEnabled="{Binding AreParametersEditable}">
                                 <StackPanel Width="145">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="角色" />
-                                    <ComboBox ItemsSource="{Binding EndpointRoles}"
+                                    <ComboBox AutomationProperties.AutomationId="ProfileRole"
+                                              ItemsSource="{Binding EndpointRoles}"
                                               SelectedItem="{Binding Role}" />
                                 </StackPanel>
                                 <StackPanel Width="145">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="传输方式" />
+                                    <ComboBox AutomationProperties.AutomationId="ProfileTransport"
+                                              DisplayMemberPath="Display"
+                                              ItemsSource="{Binding TransportOptions}"
+                                              SelectedValuePath="Kind"
+                                              SelectedValue="{Binding Transport, Mode=TwoWay}">
+                                        <ComboBox.ItemContainerStyle>
+                                            <Style TargetType="ComboBoxItem">
+                                                <!-- 和自动回复那栏一样：不给名字，UIA 读出来是 TransportOption 的 ToString。 -->
+                                                <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
+                                            </Style>
+                                        </ComboBox.ItemContainerStyle>
+                                    </ComboBox>                                </StackPanel>
+                                <StackPanel Width="105">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device ID" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileDeviceId"
+                                             Text="{Binding DeviceId}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T3 (s)" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT3"
+                                             Text="{Binding T3Seconds}" />
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <!-- HSMS 那一套：网络四元组加 T5–T8 和 Linktest。 -->
+                            <WrapPanel Margin="0,8,0,0"
+                                       IsEnabled="{Binding AreParametersEditable}"
+                                       Visibility="{Binding HsmsSettingsVisibility}">
+                                <StackPanel Width="145">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="模式" />
-                                    <ComboBox ItemsSource="{Binding ConnectionModes}"
+                                    <ComboBox AutomationProperties.AutomationId="ProfileMode"
+                                              ItemsSource="{Binding ConnectionModes}"
                                               SelectedItem="{Binding Mode}" />
                                 </StackPanel>
                                 <StackPanel Width="180">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="IP 地址" />
-                                    <TextBox Text="{Binding IpAddress, UpdateSourceTrigger=LostFocus}" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileIpAddress"
+                                             Text="{Binding IpAddress, UpdateSourceTrigger=LostFocus}" />
                                 </StackPanel>
                                 <StackPanel Width="105">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Port" />
-                                    <TextBox Text="{Binding Port}" />
-                                </StackPanel>
-                                <StackPanel Width="105">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Device ID" />
-                                    <TextBox Text="{Binding DeviceId}" />
+                                    <TextBox AutomationProperties.AutomationId="ProfilePort"
+                                             Text="{Binding Port}" />
                                 </StackPanel>
                             </WrapPanel>
                             <WrapPanel Margin="0,8,0,0"
-                                       IsEnabled="{Binding AreParametersEditable}">
-                                <StackPanel Width="90">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T3 (s)" />
-                                    <TextBox Text="{Binding T3Seconds}" />
-                                </StackPanel>
+                                       IsEnabled="{Binding AreParametersEditable}"
+                                       Visibility="{Binding HsmsSettingsVisibility}">
                                 <StackPanel Width="90">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T5 (s)" />
-                                    <TextBox Text="{Binding T5Seconds}" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT5"
+                                             Text="{Binding T5Seconds}" />
                                 </StackPanel>
                                 <StackPanel Width="90">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T6 (s)" />
-                                    <TextBox Text="{Binding T6Seconds}" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT6"
+                                             Text="{Binding T6Seconds}" />
                                 </StackPanel>
                                 <StackPanel Width="90">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T7 (s)" />
-                                    <TextBox Text="{Binding T7Seconds}" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT7"
+                                             Text="{Binding T7Seconds}" />
                                 </StackPanel>
                                 <StackPanel Width="90">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T8 (s)" />
-                                    <TextBox Text="{Binding T8Seconds}" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT8"
+                                             Text="{Binding T8Seconds}" />
                                 </StackPanel>
                                 <StackPanel Width="190" Margin="12,0,0,0">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Linktest" />
@@ -421,6 +453,64 @@
                                                  Text="{Binding LinkTestIntervalSeconds}" />
                                         <TextBlock VerticalAlignment="Center" Text="秒" />
                                     </StackPanel>
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <!-- SECS-I 那一套：串口参数加 T1/T2/T4。 -->
+                            <WrapPanel Margin="0,8,0,0"
+                                       IsEnabled="{Binding AreParametersEditable}"
+                                       Visibility="{Binding Secs1SettingsVisibility}">
+                                <StackPanel Width="120">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="串口" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileSerialPort"
+                                             Text="{Binding SerialPortName, UpdateSourceTrigger=LostFocus}" />
+                                </StackPanel>
+                                <StackPanel Width="110">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="波特率" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileBaudRate"
+                                             Text="{Binding BaudRate}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="数据位" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileDataBits"
+                                             Text="{Binding DataBits}" />
+                                </StackPanel>
+                                <StackPanel Width="100">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="校验" />
+                                    <ComboBox AutomationProperties.AutomationId="ProfileParity"
+                                              ItemsSource="{Binding SerialParities}"
+                                              SelectedItem="{Binding Parity}" />
+                                </StackPanel>
+                                <StackPanel Width="110">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="停止位" />
+                                    <ComboBox AutomationProperties.AutomationId="ProfileStopBits"
+                                              ItemsSource="{Binding SerialStopBitOptions}"
+                                              SelectedItem="{Binding StopBits}" />
+                                </StackPanel>
+                                <StackPanel Width="120">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="流控" />
+                                    <ComboBox AutomationProperties.AutomationId="ProfileFlowControl"
+                                              ItemsSource="{Binding SerialFlowControls}"
+                                              SelectedItem="{Binding FlowControl}" />
+                                </StackPanel>
+                            </WrapPanel>
+                            <WrapPanel Margin="0,8,0,0"
+                                       IsEnabled="{Binding AreParametersEditable}"
+                                       Visibility="{Binding Secs1SettingsVisibility}">
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T1 (s)" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT1"
+                                             Text="{Binding T1Seconds}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T2 (s)" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT2"
+                                             Text="{Binding T2Seconds}" />
+                                </StackPanel>
+                                <StackPanel Width="90">
+                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="T4 (s)" />
+                                    <TextBox AutomationProperties.AutomationId="ProfileT4"
+                                             Text="{Binding T4Seconds}" />
                                 </StackPanel>
                             </WrapPanel>
                         </StackPanel>
@@ -512,8 +602,15 @@
                                         </MultiBinding>
                                     </Setter.Value>
                                 </Setter>
+                                <Setter Property="ToolTip" Value="{x:Null}" />
                                 <EventSetter Event="PreviewMouseRightButtonDown"
                                              Handler="SelectMessageOnRightClick" />
+                                <Style.Triggers>
+                                    <!-- 空描述不挂空 ToolTip，否则鼠标停上去会弹一个空白小框。 -->
+                                    <DataTrigger Binding="{Binding HasDescription}" Value="True">
+                                        <Setter Property="ToolTip" Value="{Binding Description}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
                             </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
@@ -583,25 +680,22 @@
                                Margin="10,4,8,4"
                                Style="{StaticResource SectionTitleStyle}"
                                Text="消息编辑" />
-                    <DockPanel Grid.Row="1" Margin="10,0,8,8">
-                        <!-- 发送跟着编辑字段走：填完名称和 SxFy，右手边就是发送。 -->
-                        <Button Width="90"
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Bottom"
-                                DockPanel.Dock="Right"
-                                Command="{Binding SendCommand}"
-                                Content="发送" />
-                        <!-- 带 W 的消息在途时发送按键必然变灰（一次只发一条），
-                             没有这个按钮的话等待只能靠 T3 到点，观感就是程序卡死。 -->
-                        <Button Width="90"
-                                Margin="0,0,0,0"
-                                VerticalAlignment="Bottom"
-                                DockPanel.Dock="Right"
-                                Visibility="{Binding CancelSendVisibility}"
-                                Command="{Binding CancelSendCommand}"
-                                Content="取消等待" />
-                        <WrapPanel IsEnabled="{Binding HasSelectedMessage}">
-                            <StackPanel Width="170">
+                    <Grid Grid.Row="1" Margin="10,0,8,8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <!-- 名称/S/F/W/自动回复排一行，描述单独占一行：
+                             中栏只有 3*，固定宽度分组一旦超过剩余宽度，右边框会被裁掉。 -->
+                        <Grid IsEnabled="{Binding HasSelectedMessage}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="1.2*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" />
                                 <TextBox AutomationProperties.AutomationId="MessageName"
                                          AutomationProperties.Name="消息名称"
@@ -609,41 +703,39 @@
                                          ToolTip="同一个 SxFy 可以有多条消息，全靠这个名字区分（自动回复也是按它指向的）；不能留空，也不能和别的消息重名"
                                          Text="{Binding MessageName, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
-                            <!-- S、F、W 当成一个整体：WrapPanel 只按直接子元素折行，
-                                 包一层横向 StackPanel 后，中栏再窄也只能整组换到下一行，
-                                 不会把它们仨拆到上下两行去。 -->
-                            <StackPanel Margin="8,0,0,0" Orientation="Horizontal">
-                                <StackPanel Width="56">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="S" />
-                                    <TextBox AutomationProperties.AutomationId="MessageStream"
-                                             AutomationProperties.Name="消息 Stream"
-                                             KeyDown="CommitOnEnter"
-                                             Text="{Binding StreamText, UpdateSourceTrigger=LostFocus}" />
-                                </StackPanel>
-                                <StackPanel Width="56" Margin="8,0,0,0">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="F" />
-                                    <TextBox AutomationProperties.AutomationId="MessageFunction"
-                                             AutomationProperties.Name="消息 Function"
-                                             KeyDown="CommitOnEnter"
-                                             Text="{Binding FunctionText, UpdateSourceTrigger=LostFocus}" />
-                                </StackPanel>
-                                <CheckBox Margin="10,17,0,0"
-                                          VerticalAlignment="Center"
-                                          AutomationProperties.AutomationId="MessageWBit"
-                                          AutomationProperties.Name="消息 W 位"
-                                          Content="W"
-                                          IsChecked="{Binding MessageWBit}"
-                                          ToolTip="这条消息要求对方回复（W-Bit）" />
+                            <StackPanel Grid.Column="1" Width="48">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="S" />
+                                <TextBox AutomationProperties.AutomationId="MessageStream"
+                                         AutomationProperties.Name="消息 Stream"
+                                         KeyDown="CommitOnEnter"
+                                         Text="{Binding StreamText, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
-                            <StackPanel Width="170" Margin="12,0,0,0">
+                            <StackPanel Grid.Column="2" Width="48" Margin="8,0,0,0">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="F" />
+                                <TextBox AutomationProperties.AutomationId="MessageFunction"
+                                         AutomationProperties.Name="消息 Function"
+                                         KeyDown="CommitOnEnter"
+                                         Text="{Binding FunctionText, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="3"
+                                      Margin="10,0,0,7"
+                                      VerticalAlignment="Bottom"
+                                      AutomationProperties.AutomationId="MessageWBit"
+                                      AutomationProperties.Name="消息 W 位"
+                                      Content="W"
+                                      IsChecked="{Binding MessageWBit}"
+                                      ToolTip="这条消息要求对方回复（W-Bit）" />
+                            <StackPanel Grid.Column="4" Margin="12,0,0,0">
                                 <TextBlock Style="{StaticResource FieldLabelStyle}"
-                                           Text="{Binding AutoReplyFieldLabel}" />
+                                           Text="{Binding AutoReplyFieldLabel}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding AutoReplyFieldLabel}" />
                                 <ComboBox AutomationProperties.AutomationId="MessageAutoReply"
                                           AutomationProperties.Name="{Binding AutoReplyFieldLabel}"
                                           DisplayMemberPath="Display"
                                           ItemsSource="{Binding AutoReplyCandidates}"
                                           SelectedItem="{Binding MessageAutoReply}"
-                                          ToolTip="收到这条消息时自动回哪一条。候选写的是「SxF · 名字」；标了「不配对」的是说它不是本条 F+1 那一号，照样可以选，程序按名字回">
+                                          ToolTip="收到这条消息时自动回哪一条。候选写的是「SxF · 名字」，当前值由下拉框的选中高亮表示；v1 只支持指向单条消息，程序按名字精确回">
                                     <ComboBox.ItemContainerStyle>
                                         <Style TargetType="ComboBoxItem">
                                             <!-- 不加这个，下拉项的 UIA 名字就是 AutoReplyOption 的 ToString()，
@@ -654,8 +746,35 @@
                                     </ComboBox.ItemContainerStyle>
                                 </ComboBox>
                             </StackPanel>
-                        </WrapPanel>
-                    </DockPanel>
+                        </Grid>
+                        <DockPanel Grid.Row="1" Margin="0,8,0,0">
+                            <!-- 发送放在描述行右侧：这样上面那行字段能排齐，按钮也不会压住任何输入框。 -->
+                            <Button x:Name="SendButton"
+                                    Width="90"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Bottom"
+                                    DockPanel.Dock="Right"
+                                    Command="{Binding SendCommand}"
+                                    Content="发送" />
+                            <!-- 带 W 的消息在途时发送按键必然变灰（一次只发一条），
+                                 没有这个按钮的话等待只能靠 T3 到点，观感就是程序卡死。 -->
+                            <Button Width="90"
+                                    Margin="0,0,0,0"
+                                    VerticalAlignment="Bottom"
+                                    DockPanel.Dock="Right"
+                                    Visibility="{Binding CancelSendVisibility}"
+                                    Command="{Binding CancelSendCommand}"
+                                    Content="取消等待" />
+                            <StackPanel IsEnabled="{Binding HasSelectedMessage}">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="描述" />
+                                <TextBox AutomationProperties.AutomationId="MessageDescription"
+                                         AutomationProperties.Name="消息描述"
+                                         KeyDown="CommitOnEnter"
+                                         ToolTip="这条消息的用途说明；清空后左栏悬停不再显示"
+                                         Text="{Binding MessageDescription, UpdateSourceTrigger=LostFocus}" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Grid>
                     <TabControl Grid.Row="2"
                                 Margin="8,0"
                                 SelectedIndex="{Binding EditorTab}">
@@ -711,6 +830,7 @@
                                           PreviewMouseLeftButtonDown="NodeTreePreviewMouseLeftButtonDown"
                                           MouseMove="NodeTreeMouseMove"
                                           DragOver="NodeTreeDragOver"
+                                          DragLeave="NodeTreeDragLeave"
                                           Drop="NodeTreeDrop"
                                           MouseDoubleClick="NodeTreeMouseDoubleClick"
                                           PreviewKeyDown="NodeTreePreviewKeyDown">
@@ -797,6 +917,7 @@
                                                      AutomationProperties.Name="节点值"
                                                      AcceptsReturn="{Binding IsMultiLineValue}"
                                                      Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
+                                                     LostFocus="StructureValueLostFocus"
                                                      TextWrapping="Wrap"
                                                      ToolTip="{Binding ValueEditorTip}">
                                                 <TextBox.Style>
@@ -966,6 +1087,7 @@
                                               PreviewMouseLeftButtonDown="NodeTreePreviewMouseLeftButtonDown"
                                               MouseMove="NodeTreeMouseMove"
                                               DragOver="NodeTreeDragOver"
+                                              DragLeave="NodeTreeDragLeave"
                                               Drop="NodeTreeDrop"
                                               MouseDoubleClick="NodeTreeMouseDoubleClick"
                                               PreviewKeyDown="NodeTreePreviewKeyDown" />

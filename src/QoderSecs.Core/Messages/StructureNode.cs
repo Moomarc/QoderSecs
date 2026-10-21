@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace QoderSecs.Core.Messages;
@@ -150,10 +151,44 @@ public sealed class StructureNode
     /// <summary>
     /// SecsExpress 把长的 B 值写成空格分隔的十六进制字节（s6800.sxml 的 S7F6 就是），
     /// 所以校验和转换前都先去掉空白，规则只有这一处。
+    /// 负数同样会先按 <see cref="ConvertNegativeBytes"/> 转掉，这样校验和发送都不会把 -45 当成坏值。
     /// </summary>
     public static string NormalizeBinary(string? value)
     {
-        return value is null ? string.Empty : new string(value.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        var converted = ConvertNegativeBytes(value);
+        return converted.Length == 0 ? string.Empty : new string(converted.Where(c => !char.IsWhiteSpace(c)).ToArray());
+    }
+
+    private static readonly Regex NegativeByteToken = new(
+        @"(?<!\S)-(?<value>\d{1,3})(?!\S)",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// 把 B 值里单独成项的负数按 8 位二补码换成两位大写十六进制：-45 → D3、-1 → FF、-127 → 81。
+    /// 只认 -1 到 -127；-128 及其他值原样留着，让校验照常报红。
+    /// 保留原来的空白分隔——这是收框时给用户看的文本，不是最终发送用的紧凑串。
+    /// </summary>
+    public static string ConvertNegativeBytes(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || !value.Contains('-'))
+        {
+            return value ?? string.Empty;
+        }
+
+        return NegativeByteToken.Replace(value, match =>
+        {
+            if (!int.TryParse(
+                    match.Groups["value"].Value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var number)
+                || number is < 1 or > 127)
+            {
+                return match.Value;
+            }
+
+            return ((byte)-number).ToString("X2", CultureInfo.InvariantCulture);
+        });
     }
 
     private static string? ValidateBinary(string? value)

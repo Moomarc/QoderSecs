@@ -173,6 +173,26 @@ public sealed class TranscriptCorrelator
         }
     }
 
+    /// <summary>
+    /// 这条消息没能送上线路。请求从待回复表里摘掉，免得下一次同 SystemBytes 的回复被配到一条
+    /// 根本没发出去的消息上；状态写「发送失败」。
+    /// </summary>
+    public void MarkSendFailed(CommunicationRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        lock (_gate)
+        {
+            if (_outstandingRequests.TryGetValue(record.SystemBytes, out var pending)
+                && ReferenceEquals(pending, record))
+            {
+                _outstandingRequests.Remove(record.SystemBytes);
+            }
+
+            record.Status = RecordStatus.SendFailed;
+        }
+    }
+
     /// <summary>这条 Primary 不回复了。已经回过的（不在待回复表里）不动，免得把「已自动回复」盖掉。</summary>
     public void MarkAutoReplySkipped(int systemBytes)
     {
