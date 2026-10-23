@@ -714,11 +714,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string LibraryHeader
     {
-        get
-        {
-            var source = _libraryPath.Length == 0 ? "消息库" : $"消息库 · {Path.GetFileName(_libraryPath)}";
-            return $"{source}（{_library.Messages.Count} 条）";
-        }
+        // 只报条数：左栏被右侧两个按钮挤得只剩一百多像素，
+        // 带上文件名就会被截成半截，还不如不显示。
+        get => $"消息库（{_library.Messages.Count} 条）";
     }
 
     public string SearchText

@@ -135,6 +135,15 @@ public sealed class SmlTests
     }
 
     [TestMethod]
+    public void TryToSml_Accepts0xPrefixedBinary()
+    {
+        var entry = Entry("<Structure><B><Value>0x20 0X20 0xC3 0x50</Value></B></Structure>");
+
+        Assert.IsTrue(SmlConverter.TryToSml(entry, out var sml, out var error), error);
+        StringAssert.Contains(Nl(sml), "<B [4] 0x20 0x20 0xC3 0x50>");
+    }
+
+    [TestMethod]
     public void TryToSml_SendsEmptyNumericPlaceholderAsZero()
     {
         var entry = Entry(
@@ -186,6 +195,19 @@ public sealed class SmlTests
         Assert.IsFalse(SmlConverter.TryValidate(Entry("<Structure><U4><Value>abc</Value></U4></Structure>"), out var error));
         StringAssert.Contains(error!, "abc");
         Assert.IsTrue(SmlConverter.TryValidate(Entry("<Structure><B><Value>01 02</Value></B></Structure>"), out _));
+    }
+
+    [TestMethod]
+    public void TryValidate_WalksNestedStructureAndAccepts0xBinary()
+    {
+        Assert.IsFalse(SmlConverter.TryValidate(
+            Entry("<Structure><L><U1><Value>1 2 999</Value></U1></L></Structure>"),
+            out var error));
+        StringAssert.Contains(error!, "第 3 个值");
+
+        Assert.IsTrue(SmlConverter.TryValidate(
+            Entry("<Structure><L><B><Value>0x00 0xFF</Value></B></L></Structure>"),
+            out _));
     }
 
     // ---------- 发送用消息 ----------

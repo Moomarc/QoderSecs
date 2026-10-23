@@ -118,13 +118,23 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     public string DisplayName => Node.Name ?? string.Empty;
 
-    /// <summary>树行上的值摘要。数组把各个值都显示出来，末尾点个数的标记，行内不用点开就知道填了几项。</summary>
+    /// <summary>树行上的值摘要。大值只报大小，不把整段正文拉进界面；数组末尾点个数的标记，行内不用点开就知道填了几项。</summary>
     public string ValuePreview => Node.ItemType switch
     {
         SecsItemType.List or null => string.Empty,
+        _ when Node.IsLargeValue => $"{Node.ValueSizeText} · 大值",
         _ when Node.IsArray => $"{OneLine(Node.ValueText)} · {Node.Items.Count} 个值",
         _ => OneLine(Node.SingleValue)
     };
+
+    public bool IsLargeValue => Node.IsLargeValue;
+
+    /// <summary>大值在底部那一栏显示的说明。正文本身不进任何 TextBox。</summary>
+    public string LargeValueSummary => Node.IsLargeValue
+        ? $"{Node.ElementName} 值 {Node.ValueSizeText}，不在输入框里展开。"
+        : string.Empty;
+
+    public bool ShowsLargeValuePanel => Node.IsValueEditable && Node.IsLargeValue;
 
     public bool IsInvalid => Node.ValidationError is not null;
 
@@ -171,7 +181,7 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     public bool IsMultiLineValue => Node.ItemType is SecsItemType.A or SecsItemType.J;
 
-    public bool ShowsValueEditor => Node.IsValueEditable && !IsBoolean;
+    public bool ShowsValueEditor => Node.IsValueEditable && !IsBoolean && !Node.IsLargeValue;
 
     public bool ShowsBooleanEditor => Node.IsValueEditable && IsBoolean;
 
@@ -188,13 +198,15 @@ public sealed class StructureNodeViewModel : ObservableObject
     /// 值输入框的悬停说明。有问题先报问题，没问题才讲怎么填——数组这一条不写出来，
     /// 用户看不出这个框能装多个值（第 5 条修改意见要的就是这个能力）。
     /// </summary>
-    public string? ValueEditorTip => ValidationError ?? (Node.ItemType switch
-    {
-        SecsItemType.A or SecsItemType.J => "一段文本，可以换行。",
-        SecsItemType.B => "十六进制字节，成对写，可以用空格分隔；-127 到 -1 会按二补码转成两位十六进制（-45 → D3）。",
-        _ when Node.CanHoldArray => "可以填多个值，用空格分隔，例如 0 0 1。",
-        _ => null
-    });
+    public string? ValueEditorTip => ValidationError ?? (Node.IsLargeValue
+        ? "值太长，不在输入框里展开。"
+        : Node.ItemType switch
+        {
+            SecsItemType.A or SecsItemType.J => "一段文本，可以换行。",
+            SecsItemType.B => "十六进制字节，成对写，可以用空格分隔；0x00 这类前缀会自动去掉，-127 到 -1 会按二补码转成两位十六进制（-45 → D3）。",
+            _ when Node.CanHoldArray => "可以填多个值，用空格分隔，例如 0 0 1。",
+            _ => null
+        });
 
     public string EditName
     {
@@ -214,10 +226,11 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     public string EditValue
     {
-        get => Node.IsValueEditable ? Node.ValueText : string.Empty;
+        // 大值不给绑定值：就算框已经折叠，WPF 仍会把 Text 送进控件，几十兆文本照样要排版。
+        get => Node.IsValueEditable && !Node.IsLargeValue ? Node.ValueText : string.Empty;
         set
         {
-            if (!Node.IsValueEditable || value == EditValue)
+            if (!Node.IsValueEditable || Node.IsLargeValue || value == EditValue)
             {
                 return;
             }
@@ -229,21 +242,46 @@ public sealed class StructureNodeViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 收框或失焦时把 B 值里的负数换成十六进制。不能放在 EditValue 的 setter 里逐字转换：
-    /// 刚敲下 '-' 的时候后面的数字还没输入，值就已经被改写，-45 永远打不进来。
+    /// 收框或失焦时把 B 值里的 0x 前缀和负数换掉。不能放在 EditValue 的 setter 里逐字转换：
+    /// 刚敲下 '-' 的时候后面的数字还没输入，值就已经被改写，-45 永远打不进来；
+    /// 0x 也会在刚敲完 0 的那一下被拆开。
     /// </summary>
     public void CommitValue()
     {
-        if (Node.ItemType != SecsItemType.B)
+        if (Node.ItemType != SecsItemType.B || Node.IsLargeValue)
         {
             return;
         }
 
-        var converted = StructureNode.ConvertNegativeBytes(EditValue);
+        var converted = StructureNode.NormalizeBinaryText(EditValue);
         if (converted != EditValue)
         {
             EditValue = converted;
         }
+    }
+
+    /// <summary>
+    /// 整段替换值。给大值用：正文不经过输入框绑定，直接写进 XML，
+    /// 免得 WPF 先把它塞进 TextBox 再排版。B 的 0x 前缀在这里就去掉，导出的 SXML 保持原格式。
+    /// </summary>
+    public bool ReplaceValueText(string text)
+    {
+        if (!Node.IsValueEditable)
+        {
+            return false;
+        }
+
+        var stored = Node.ItemType == SecsItemType.B
+            ? StructureNode.NormalizeBinaryText(text)
+            : text;
+        if (!StructureEditor.SetValue(Element, stored))
+        {
+            return false;
+        }
+
+        RefreshSnapshot();
+        Owner.OnStructureEdited(this);
+        return true;
     }
 
     /// <summary>
@@ -267,6 +305,9 @@ public sealed class StructureNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowsValueNote));
         OnPropertyChanged(nameof(ValueNote));
         OnPropertyChanged(nameof(ValueEditorTip));
+        OnPropertyChanged(nameof(IsLargeValue));
+        OnPropertyChanged(nameof(LargeValueSummary));
+        OnPropertyChanged(nameof(ShowsLargeValuePanel));
         OnPropertyChanged(nameof(AutomationName));
     }
 
@@ -279,8 +320,14 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     private static string OneLine(string value)
     {
-        var flat = value.Replace('\r', ' ').Replace('\n', ' ');
-        return flat.Length <= 40 ? flat : $"{flat[..40]}…";
+        // 只摊平前 40 个字符：大值摘要每次刷新都会读这里，不能为一行预览扫整段正文。
+        if (value.Length <= 40)
+        {
+            return value.Replace('\r', ' ').Replace('\n', ' ');
+        }
+
+        var flat = value[..40].Replace('\r', ' ').Replace('\n', ' ');
+        return $"{flat}…";
     }
 
     private static SolidColorBrush FrozenBrush(byte r, byte g, byte b)

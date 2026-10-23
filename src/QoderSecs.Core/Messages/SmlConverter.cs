@@ -25,26 +25,66 @@ public static class SmlConverter
 
     /// <summary>
     /// 只判断这条消息发不发得出去（值转不转得成 SECS 数据），不生成正文。
-    /// 发送按钮的可用性每敲一下都要判一次，大 PP body 不能为这个攒出几十兆文本。
+    /// 发送按钮的可用性每敲一下都要判一次，大 PP body 不能为这个攒出几十兆数据。
+    /// 走结构树逐项校验，不构造 SecsItem——构造一次五兆的 B 会临时吃掉上百兆。
     /// </summary>
     public static bool TryValidate(MessageEntry entry, [NotNullWhen(false)] out string? error)
     {
-        if (!TryToMessage(entry, out var message, out error))
+        var root = StructureNode.FromStructure(entry.Structure);
+        if (root is null)
         {
+            error = null;
+            return true;
+        }
+
+        return TryValidateNode(root, out error);
+    }
+
+    private static bool TryValidateNode(StructureNode node, [NotNullWhen(false)] out string? error)
+    {
+        if (node.ValidationError is { } nodeError)
+        {
+            error = nodeError;
             return false;
         }
 
-        message.Dispose();
+        // 和 TryToItem 一样只往 L 里走：数据元素下面就算挂了东西，转换时也不会看。
+        if (node.ItemType == SecsItemType.List)
+        {
+            foreach (var child in node.Children)
+            {
+                if (!TryValidateNode(child, out error))
+                {
+                    return false;
+                }
+            }
+        }
+
+        error = null;
         return true;
     }
 
     /// <summary>
     /// 预览用的 SML：正文超过上限就不生成，改给一句说明。
     /// 预览框里塞几十兆文本，界面画不动也滚不动，正文本身在 sml.log 里才是完整的。
+    /// 先按结构估大小，超上限的直接跳过构造，别为了说明一句去建整条消息。
     /// </summary>
     public static bool TryToPreviewSml(MessageEntry entry, int characterCap, out string sml, out string? error)
     {
         sml = string.Empty;
+        if (!TryValidate(entry, out error))
+        {
+            return false;
+        }
+
+        var estimate = EstimatePreviewTextBytes(StructureNode.FromStructure(entry.Structure));
+        if (estimate > characterCap)
+        {
+            sml = $"正文约 {SizeText(estimate)}，超过预览上限 {SizeText(characterCap)}，这里不展开。" +
+                  $"{Environment.NewLine}结构和值以「结构」页签为准，发送和 sml.log 落盘都不受影响。";
+            return true;
+        }
+
         if (!TryToMessage(entry, out var message, out error))
         {
             return false;
@@ -52,18 +92,31 @@ public static class SmlConverter
 
         using (message)
         {
-            var estimate = EstimateTextBytes(message);
-            if (estimate > characterCap)
-            {
-                sml = $"正文约 {SizeText(estimate)}，超过预览上限 {SizeText(characterCap)}，这里不展开。" +
-                      $"{Environment.NewLine}结构和值以「结构」页签为准，发送和 sml.log 落盘都不受影响。";
-                return true;
-            }
-
             sml = ToSml(message);
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 从结构树估预览正文的字节数。只求数量级对，宁可估大一点：
+    /// B 按每个字节最多 0xNN 加分隔符算三倍字符，A / J 按字符数算。
+    /// </summary>
+    private static long EstimatePreviewTextBytes(StructureNode? root) =>
+        root is null ? 64 : EstimatePreviewNode(root) + 64;
+
+    private static long EstimatePreviewNode(StructureNode node)
+    {
+        if (node.ItemType == SecsItemType.List)
+        {
+            return 8 + node.Children.Sum(EstimatePreviewNode);
+        }
+
+        return node.ItemType switch
+        {
+            SecsItemType.B => node.ValueText.Length * 3L + 16,
+            _ => node.ValueText.Length + 16
+        };
     }
 
     /// <summary>给人看的大小。连接层降级成"没有正文"的记录时也要报出正文有多大。</summary>
@@ -189,9 +242,9 @@ public static class SmlConverter
     {
         item = null;
         error = null;
-        if (node.ValidationError is not null)
+        if (node.ValidationError is { } nodeError)
         {
-            error = node.ValidationError;
+            error = nodeError;
             return false;
         }
 
@@ -223,7 +276,7 @@ public static class SmlConverter
                 item = Item.J(value);
                 return true;
             case SecsItemType.B:
-                item = Item.B(Convert.FromHexString(StructureNode.NormalizeBinary(value)));
+                item = Item.B(Convert.FromHexString(node.NormalizedBinary));
                 return true;
             case SecsItemType.Boolean:
                 item = Item.Boolean(ParseEach(values, bool.Parse));

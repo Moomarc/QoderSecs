@@ -127,6 +127,44 @@ public sealed class StructureNodeTests
     }
 
     /// <summary>
+    /// 日志里 B 印成 0x00 0x01 形式，粘回编辑框要当普通十六进制字节用；
+    /// 收框时把前缀去掉，导出的 SXML 仍是 SecsExpress 认的写法。
+    /// </summary>
+    [TestMethod]
+    public void Binary_Accepts0xPrefixAndRemovesItWhenCommitted()
+    {
+        Assert.IsNull(Node("<B><Value>0x00 0X1F 2A</Value></B>").ValidationError);
+        Assert.AreEqual("001F2A", StructureNode.NormalizeBinary("0x00 0X1F 2A"));
+        Assert.AreEqual("00 1F 2A", StructureNode.NormalizeBinaryText("0x00 0X1F 2A"));
+        Assert.AreEqual("12 D3 FF", StructureNode.NormalizeBinaryText("0x12 -45 0xFF"));
+
+        StringAssert.Contains(Node("<B><Value>0x</Value></B>").ValidationError!, "十六进制");
+        StringAssert.Contains(Node("<B><Value>0x0</Value></B>").ValidationError!, "十六进制");
+        Assert.AreEqual("ABC0x12", StructureNode.NormalizeBinaryText("ABC0x12"), "只有一项开头的 0x 才算前缀");
+    }
+
+    [TestMethod]
+    public void LargeValue_IsOnlyFlaggedAboveTheSharedThreshold()
+    {
+        var atLimit = Node($"<B><Value>{new string('A', StructureNode.LargeValueCharacterThreshold)}</Value></B>");
+        var above = Node($"<B><Value>{new string('A', StructureNode.LargeValueCharacterThreshold + 1)}</Value></B>");
+
+        Assert.IsFalse(atLimit.IsLargeValue);
+        Assert.IsTrue(above.IsLargeValue);
+        Assert.IsFalse(Node("<L></L>").IsLargeValue, "L 没有值可编辑，不存在大值");
+    }
+
+    [TestMethod]
+    public void ValueSizeText_ReportsBinaryBytesAndTextCharacters()
+    {
+        var binary = Node($"<B><Value>{new string('A', 2048)}</Value></B>");
+        var text = Node($"<A><Value>{new string('x', 1000)}</Value></A>");
+
+        StringAssert.Contains(binary.ValueSizeText, "1,024 字节");
+        StringAssert.Contains(text.ValueSizeText, "1,000 个字符");
+    }
+
+    /// <summary>
     /// 旧程序把 B 里的高位字节显示成 -45 这类十进制数。这里只认 -1 到 -127：
     /// 按 8 位二补码换成两位大写十六进制；-128 及以外的值原样留着，让校验报红。
     /// </summary>

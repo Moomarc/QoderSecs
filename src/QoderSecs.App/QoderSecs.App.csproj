@@ -24,6 +24,9 @@
     <!-- 资源管理器、快捷方式和任务栏用的就是这个图标。
          16/24/32/48 是无压缩的位图条目，256 是 PNG 条目，缺了哪一档系统在对应尺寸上就会模糊。 -->
     <ApplicationIcon>app.ico</ApplicationIcon>
+
+    <!-- 发布落点固定为仓库根的 release\；bin 下只是编译缓存，不是发布目录。 -->
+    <PublishDir>$(MSBuildThisFileDirectory)..\..\release\</PublishDir>
   </PropertyGroup>
 
 </Project>

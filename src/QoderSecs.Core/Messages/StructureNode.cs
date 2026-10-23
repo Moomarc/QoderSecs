@@ -6,6 +6,14 @@ namespace QoderSecs.Core.Messages;
 
 public sealed class StructureNode
 {
+    /// <summary>超过这个字符数的值不在编辑框里展开；界面和 Core 用同一条口径。</summary>
+    public const int LargeValueCharacterThreshold = 256 * 1024;
+
+    private bool _validationComputed;
+    private string? _validationError;
+    private string? _normalizedBinary;
+    private string? _valueSizeText;
+
     public StructureNode(XElement element)
     {
         Element = element;
@@ -76,7 +84,58 @@ public sealed class StructureNode
     /// </summary>
     public bool IsValueEditable => IsEditable && ItemType != SecsItemType.List;
 
-    public string? ValidationError => Validate();
+    /// <summary>
+    /// 一份快照只验一次。大 B 的校验要扫完整段正文，界面上好几处绑定都会读它，
+    /// 每次重算等于同一段几十兆的文本被反复扫。
+    /// </summary>
+    public string? ValidationError
+    {
+        get
+        {
+            if (!_validationComputed)
+            {
+                _validationError = Validate();
+                _validationComputed = true;
+            }
+
+            return _validationError;
+        }
+    }
+
+    /// <summary>大值不在输入框里展开：几十兆文本交给 TextBox 排版会把界面拖死。</summary>
+    public bool IsLargeValue => IsValueEditable && ValueText.Length > LargeValueCharacterThreshold;
+
+    /// <summary>B 值去掉空白后的紧凑串，校验、发送、大小统计共用一份，不反复复制大正文。</summary>
+    public string NormalizedBinary => _normalizedBinary ??= NormalizeBinary(ValueText);
+
+    /// <summary>大值摘要里报的大小。B 按字节数，A / J 按字符数。</summary>
+    public string ValueSizeText
+    {
+        get
+        {
+            if (_valueSizeText is not null)
+            {
+                return _valueSizeText;
+            }
+
+            if (ItemType == SecsItemType.B)
+            {
+                var bytes = NormalizedBinary.Length / 2;
+                _valueSizeText = $"{FormatBytes(bytes)}（{bytes.ToString("N0", CultureInfo.InvariantCulture)} 字节）";
+            }
+            else
+            {
+                _valueSizeText = $"{ValueText.Length.ToString("N0", CultureInfo.InvariantCulture)} 个字符";
+            }
+
+            return _valueSizeText;
+        }
+    }
+
+    private static string FormatBytes(long bytes) =>
+        bytes < 1024 * 1024
+            ? $"{bytes / 1024.0:F1} KB"
+            : $"{bytes / 1024.0 / 1024.0:F1} MB";
 
     private string? Validate()
     {
@@ -151,12 +210,35 @@ public sealed class StructureNode
     /// <summary>
     /// SecsExpress 把长的 B 值写成空格分隔的十六进制字节（s6800.sxml 的 S7F6 就是），
     /// 所以校验和转换前都先去掉空白，规则只有这一处。
-    /// 负数同样会先按 <see cref="ConvertNegativeBytes"/> 转掉，这样校验和发送都不会把 -45 当成坏值。
+    /// 负数同样会先按 <see cref="ConvertNegativeBytes"/> 转掉，这样校验和发送都不会把 -45 当成坏值；
+    /// 日志里的 0x00 前缀也在这里一并去掉。
     /// </summary>
     public static string NormalizeBinary(string? value)
     {
-        var converted = ConvertNegativeBytes(value);
+        var converted = NormalizeBinaryText(value);
         return converted.Length == 0 ? string.Empty : new string(converted.Where(c => !char.IsWhiteSpace(c)).ToArray());
+    }
+
+    /// <summary>
+    /// 收框时给用户看的 B 文本：去掉每个字节前面的 0x、负数换二补码，原来的空白分隔照留。
+    /// 日志里印的是 0x00 0x01 形式，粘回编辑框必须和直接写 00 01 的一样用。
+    /// 0x 后面没有十六进制数字的保持原样，交给校验报错，不能悄悄变成空值。
+    /// </summary>
+    public static string NormalizeBinaryText(string? value) =>
+        ConvertNegativeBytes(ExpandBinaryPrefixes(value));
+
+    private static readonly Regex BinaryPrefix = new(
+        @"(?<![^\s])0[xX](?=[0-9A-Fa-f])",
+        RegexOptions.Compiled);
+
+    private static string ExpandBinaryPrefixes(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || !value.Contains("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return value ?? string.Empty;
+        }
+
+        return BinaryPrefix.Replace(value, string.Empty);
     }
 
     private static readonly Regex NegativeByteToken = new(
@@ -191,21 +273,104 @@ public sealed class StructureNode
         });
     }
 
+    private const string BinaryError = "B 的值必须是成对的十六进制字符，可以用空格分隔，0x 前缀可以带。";
+
+    /// <summary>
+    /// 逐项扫一遍，不拼出紧凑串：这个判断会被界面反复读，几十兆的正文不该为它再复制一份。
+    /// 规则和 <see cref="NormalizeBinaryText"/> 对齐：空白分隔、每项可以带 0x、-1 到 -127 按二补码算两个字节，
+    /// 全部项合起来的十六进制位数必须是偶数。
+    /// </summary>
     private static string? ValidateBinary(string? value)
     {
-        var hex = NormalizeBinary(value);
-        if (hex.Length == 0)
+        if (string.IsNullOrEmpty(value))
         {
             return null;
         }
 
-        if (hex.Length % 2 != 0 || hex.Any(c => !Uri.IsHexDigit(c)))
+        long digits = 0;
+        for (var index = 0; index < value.Length;)
         {
-            return "B 的值必须是成对的十六进制字符，可以用空格分隔。";
+            if (char.IsWhiteSpace(value[index]))
+            {
+                index++;
+                continue;
+            }
+
+            var start = index;
+            while (index < value.Length && !char.IsWhiteSpace(value[index]))
+            {
+                index++;
+            }
+
+            var token = value.AsSpan(start, index - start);
+            if (IsNegativeByteToken(token, out var isConvertible))
+            {
+                if (!isConvertible)
+                {
+                    return BinaryError;
+                }
+
+                digits += 2;
+                continue;
+            }
+
+            if (token.Length >= 3
+                && token[0] == '0'
+                && (token[1] == 'x' || token[1] == 'X')
+                && IsHexDigit(token[2]))
+            {
+                token = token[2..];
+            }
+
+            foreach (var c in token)
+            {
+                if (!IsHexDigit(c))
+                {
+                    return BinaryError;
+                }
+            }
+
+            digits += token.Length;
         }
 
-        return null;
+        return digits % 2 == 0 ? null : BinaryError;
     }
+
+    /// <summary>
+    /// 这一项像不像单独成项的负数。-1 到 -127 才算能转，-128、-0 这类仍交给后面的十六进制检查报错。
+    /// 返回 false 表示根本不像负数字节，按普通十六进制项继续扫。
+    /// </summary>
+    private static bool IsNegativeByteToken(ReadOnlySpan<char> token, out bool isConvertible)
+    {
+        isConvertible = false;
+        if (token.Length < 2 || token[0] != '-')
+        {
+            return false;
+        }
+
+        var digits = token[1..];
+        if (digits.Length > 3)
+        {
+            return false;
+        }
+
+        var number = 0;
+        foreach (var c in digits)
+        {
+            if (c is < '0' or > '9')
+            {
+                return false;
+            }
+
+            number = number * 10 + (c - '0');
+        }
+
+        isConvertible = number is >= 1 and <= 127;
+        return true;
+    }
+
+    private static bool IsHexDigit(char c) =>
+        c is >= '0' and <= '9' or >= 'A' and <= 'F' or >= 'a' and <= 'f';
 
     private static string? ValidateBoolean(string? value)
     {

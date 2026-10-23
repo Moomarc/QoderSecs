@@ -385,13 +385,138 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>结构值框失焦时收掉 B 类负数，Tab、点工具栏、切到别的程序都走这一条。</summary>
+    /// <summary>结构值框失焦时收掉 B 类负数和 0x 前缀，Tab、点工具栏、切到别的程序都走这一条。</summary>
     private void StructureValueLostFocus(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: StructureNodeViewModel node })
         {
             node.CommitValue();
         }
+    }
+
+    /// <summary>单行值框按回车就收框；A / J 的换行框要留给换行，不能抢。</summary>
+    private void StructureValueKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || sender is not TextBox { AcceptsReturn: false } box)
+        {
+            return;
+        }
+
+        if (box.DataContext is StructureNodeViewModel node)
+        {
+            node.CommitValue();
+        }
+
+        e.Handled = true;
+    }
+
+    // ---------- 大值：不进输入框，整段替换 ----------
+
+    private static bool TryGetTextData(IDataObject data, out string text)
+    {
+        text = string.Empty;
+        if (data.GetDataPresent(DataFormats.UnicodeText))
+        {
+            text = data.GetData(DataFormats.UnicodeText) as string ?? string.Empty;
+        }
+        else if (data.GetDataPresent(DataFormats.Text))
+        {
+            text = data.GetData(DataFormats.Text) as string ?? string.Empty;
+        }
+
+        return text.Length > 0;
+    }
+
+    /// <summary>
+    /// 粘进来的正文超过大值阈值就不让它进 TextBox：WPF 会先给整段文本排版，
+    /// 五兆的 PP body 就是卡五秒的来源。改成直接写 XML，界面上只留摘要。
+    /// </summary>
+    private void ValueBoxPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: StructureNodeViewModel node })
+        {
+            return;
+        }
+
+        if (!TryGetTextData(e.DataObject, out var text)
+            || text.Length <= StructureNode.LargeValueCharacterThreshold)
+        {
+            return;
+        }
+
+        e.CancelCommand();
+        node.ReplaceValueText(text);
+    }
+
+    /// <summary>大文本拖到值框或大值摘要区时显示可放；小文本交给 TextBox 自己插到光标处。</summary>
+    private void ValueBoxPreviewDragOver(object sender, DragEventArgs e)
+    {
+        if (!TryGetTextData(e.Data, out var text))
+        {
+            return;
+        }
+
+        if (sender is TextBox && text.Length <= StructureNode.LargeValueCharacterThreshold)
+        {
+            return;
+        }
+
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    /// <summary>大文本松手整段替换，不走 TextBox 的默认插入；大值摘要区没有输入框，任何文本都按整段替换。</summary>
+    private void ValueBoxPreviewDrop(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: StructureNodeViewModel node })
+        {
+            return;
+        }
+
+        if (!TryGetTextData(e.Data, out var text))
+        {
+            return;
+        }
+
+        if (sender is TextBox && text.Length <= StructureNode.LargeValueCharacterThreshold)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        node.ReplaceValueText(text);
+    }
+
+    private void ReplaceLargeValueFromClipboard(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: StructureNodeViewModel node })
+        {
+            return;
+        }
+
+        string text;
+        try
+        {
+            text = Clipboard.GetText();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                $"读剪贴板失败：{exception.Message}",
+                "替换大值",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        if (string.IsNullOrEmpty(text))
+        {
+            MessageBox.Show(this, "剪贴板里没有文本。", "替换大值", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        node.ReplaceValueText(text);
     }
 
     // ---------- 结构树拖动：搬过去，或者留一份、放下去的是副本 ----------

@@ -202,7 +202,11 @@
                     <Grid Grid.Column="2">
                         <TextBox VerticalAlignment="Center"
                                  AcceptsReturn="False"
+                                 AllowDrop="True"
                                  AutomationProperties.Name="节点值"
+                                 DataObject.Pasting="ValueBoxPasting"
+                                 PreviewDragOver="ValueBoxPreviewDragOver"
+                                 PreviewDrop="ValueBoxPreviewDrop"
                                  Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
                                  TextWrapping="NoWrap"
                                  ToolTip="{Binding ValueEditorTip}">
@@ -241,6 +245,22 @@
                                 </Style>
                             </ComboBox.Style>
                         </ComboBox>
+                        <TextBlock VerticalAlignment="Center"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   Text="大值，不在行内展开"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding LargeValueSummary}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsLargeValue}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <TextBlock VerticalAlignment="Center"
                                    Foreground="{StaticResource MutedBrush}"
                                    Text="{Binding ValueNote}"
@@ -563,14 +583,34 @@
                         <TextBlock Margin="0,0,8,0"
                                    Style="{StaticResource SectionTitleStyle}"
                                    Text="{Binding LibraryHeader}"
-                                   TextTrimming="CharacterEllipsis"
-                                   ToolTip="{Binding LibraryHeader}" />
+                                   TextTrimming="CharacterEllipsis" />
                     </DockPanel>
-                    <TextBox Grid.Row="1"
-                             Margin="10,0,10,8"
-                             AutomationProperties.Name="搜索消息"
-                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="按名称过滤，或直接输入 SxFy，例如 S10F3" />
+                    <!-- 灰色引导：WPF 的 TextBox 没有占位符，只能叠一层只显文字、
+                         不吃鼠标的 TextBlock，空串时才露出来。 -->
+                    <Grid Grid.Row="1" Margin="10,0,10,8">
+                        <TextBox Margin="0"
+                                 AutomationProperties.Name="搜索消息"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="按名称过滤，或直接输入 SxFy，例如 S10F3" />
+                        <TextBlock Margin="9,0,9,0"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   Foreground="{StaticResource MutedBrush}"
+                                   IsHitTestVisible="False"
+                                   Text="按名称或 SxFy 搜索，S10F3 / 10F3 均可"
+                                   TextTrimming="CharacterEllipsis">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SearchText}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
                     <ListBox x:Name="MessageList"
                              Grid.Row="2"
                              Margin="6,0,6,6"
@@ -862,6 +902,7 @@
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <TextBlock VerticalAlignment="Center"
                                                    Foreground="{StaticResource MutedBrush}"
@@ -914,15 +955,25 @@
                                             <TextBox Width="240"
                                                      Margin="0,0,12,0"
                                                      VerticalAlignment="Center"
-                                                     AutomationProperties.Name="节点值"
                                                      AcceptsReturn="{Binding IsMultiLineValue}"
-                                                     Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
+                                                     AllowDrop="True"
+                                                     AutomationProperties.AutomationId="SelectedNodeValue"
+                                                     AutomationProperties.Name="节点值"
+                                                     DataObject.Pasting="ValueBoxPasting"
+                                                     HorizontalScrollBarVisibility="Auto"
+                                                     KeyDown="StructureValueKeyDown"
                                                      LostFocus="StructureValueLostFocus"
-                                                     TextWrapping="Wrap"
-                                                     ToolTip="{Binding ValueEditorTip}">
+                                                     PreviewDragOver="ValueBoxPreviewDragOver"
+                                                     PreviewDrop="ValueBoxPreviewDrop"
+                                                     Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
+                                                     TextWrapping="NoWrap"
+                                                     ToolTip="{Binding ValueEditorTip}"
+                                                     VerticalScrollBarVisibility="Auto">
                                                 <TextBox.Style>
                                                     <Style TargetType="TextBox">
-                                                        <Setter Property="MinHeight" Value="30" />
+                                                        <!-- 高度必须固定：Auto 行 + 自动换行遇到几十兆正文，
+                                                             量一次就把整个中间栏撑满。 -->
+                                                        <Setter Property="Height" Value="30" />
                                                         <Setter Property="Padding" Value="7,4" />
                                                         <Setter Property="VerticalContentAlignment" Value="Center" />
                                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -975,7 +1026,43 @@
                                                 </TextBlock.Style>
                                             </TextBlock>
                                         </StackPanel>
-                                        <TextBlock Grid.Row="1"
+                                        <!-- 大值不进输入框：只报大小，正文从剪贴板整段替换。 -->
+                                        <Grid Grid.Row="1"
+                                              Margin="0,6,0,0"
+                                              AllowDrop="True"
+                                              Background="Transparent"
+                                              PreviewDragOver="ValueBoxPreviewDragOver"
+                                              PreviewDrop="ValueBoxPreviewDrop">
+                                            <Grid.Style>
+                                                <Style TargetType="Grid">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ShowsLargeValuePanel}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Grid.Style>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock VerticalAlignment="Center"
+                                                       AutomationProperties.AutomationId="LargeValueSummary"
+                                                       Foreground="#B45309"
+                                                       Text="{Binding LargeValueSummary}"
+                                                       TextWrapping="Wrap"
+                                                       ToolTip="大值不在输入框里展开；把新正文复制到剪贴板后点右侧按钮，或直接拖到这个区域。" />
+                                            <Button Grid.Column="1"
+                                                    Margin="8,0,0,0"
+                                                    Padding="10,4"
+                                                    VerticalAlignment="Center"
+                                                    AutomationProperties.AutomationId="ReplaceLargeValue"
+                                                    Click="ReplaceLargeValueFromClipboard"
+                                                    Content="用剪贴板替换…"
+                                                    ToolTip="用剪贴板里的整段文本替换当前值；B 的 0x 前缀会自动去掉" />
+                                        </Grid>
+                                        <TextBlock Grid.Row="2"
                                                    Margin="0,4,0,0"
                                                    Foreground="#DC2626"
                                                    Text="{Binding ValidationError}"

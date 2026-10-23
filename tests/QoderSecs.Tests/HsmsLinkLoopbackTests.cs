@@ -234,6 +234,52 @@ public sealed class HsmsLinkLoopbackTests
     }
 
     /// <summary>
+    /// S10F3 的正文是 L{B TID; A TEXT}。屏幕亮不亮是机台侧的事，本端能自证的是：
+    /// 发出去的结构和值对、W 位带着、对端回 S10F4 后按同一个 SystemBytes 配对。
+    /// </summary>
+    [TestMethod]
+    public async Task TerminalDisplayGoesOutAsListAndComesBackAcknowledged()
+    {
+        var port = ReservePort();
+        await using var equipment = new HsmsLink { LibraryProvider = TerminalDisplayLibrary };
+        await using var host = new HsmsLink { LibraryProvider = TerminalDisplayLibrary };
+        equipment.Connect(Passive(port));
+        host.Connect(Active(port));
+        await WaitFor("两端就绪", () => equipment.Phase == LinkPhase.Online && host.Phase == LinkPhase.Online);
+
+        var library = TerminalDisplayLibrary();
+        var display = library.Messages.Single(message => message.Signature == "S10F3");
+        Assert.IsTrue(SmlConverter.TryToMessage(display, out var request, out var error), error);
+
+        using (request)
+        {
+            var outcome = await host.SendAsync(request);
+            StringAssert.Contains(outcome, "收到 S10F4");
+        }
+
+        var sent = host.Transcript.Records.Single(record => record.Direction == SecsDirection.Out);
+        Assert.AreEqual("S10F3W", sent.Signature);
+        // TID 是 B 类型，TEXT 是 A 类型；两者的类型和值都不能在转换时走样。
+        StringAssert.Contains(sent.Sml, "<L [2]");
+        StringAssert.Contains(sent.Sml, "<B [1] 0x00>");
+        StringAssert.Contains(sent.Sml, "<A [5] 'HELLO'>");
+
+        var reply = host.Transcript.Records.Single(record => record.Direction == SecsDirection.In);
+        Assert.AreEqual("S10F4", reply.Signature);
+        Assert.AreEqual(sent.SystemBytes, reply.SystemBytes);
+
+        var received = equipment.Transcript.Records.Single(record => record.Direction == SecsDirection.In);
+        Assert.AreEqual(sent.SystemBytes, received.SystemBytes);
+        await WaitFor("S10F3 已自动回复", () => received.Status == RecordStatus.Answered);
+
+        var ack = equipment.Transcript.Records.Single(record => record.Direction == SecsDirection.Out);
+        Assert.AreEqual("S10F4", ack.Signature);
+        Assert.AreEqual(received.SystemBytes, ack.SystemBytes);
+        Assert.IsFalse(ack.Header.ReplyExpected, "Secondary 不能带 W");
+        await WaitFor("S10F4 已发出", () => ack.Status == RecordStatus.Sent);
+    }
+
+    /// <summary>
     /// 上下图第 6 条，本端当 Equipment：Host 发来带 7482 字符地图的 S12F9W，按库里的 AutoReply
     /// 回一张同样的图出去。连发 10 轮，每一轮都要回得来、正文一个字不能少，
     /// 跑完连接还得是 Online——大图不许把链路带崩，也不许把发送闸门卡住（第 4 条那个坑）。
@@ -920,6 +966,31 @@ public sealed class HsmsLinkLoopbackTests
     /// <summary>上下图素材：S12F9 带 7482 字符地图、AutoReply 指着 S12F16，两条正文同一张图。</summary>
     private static MessageLibrary WaferMapLibrary() => MessageLibrary.Load(
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "wafer-map.sxml")));
+
+    /// <summary>S10F3 / S10F4 的最小库：TID 用 00、TEXT 用 HELLO，和机台联调时的填法一致。</summary>
+    private static MessageLibrary TerminalDisplayLibrary() => MessageLibrary.Load("""
+        <SXML>
+            <MessageDictionary>
+                <Message Name="S10F3_TerminalDisplaySingle">
+                    <Stream>10</Stream>
+                    <Function>3</Function>
+                    <WBit>1</WBit>
+                    <AutoReply>S10F4_TerminalDisplay_Ack</AutoReply>
+                    <Structure>
+                        <L>
+                            <B Name="TID"><Value>00</Value></B>
+                            <A Name="TEXT"><Value>HELLO</Value></A>
+                        </L>
+                    </Structure>
+                </Message>
+                <Message Name="S10F4_TerminalDisplay_Ack">
+                    <Stream>10</Stream>
+                    <Function>4</Function>
+                    <Structure/>
+                </Message>
+            </MessageDictionary>
+        </SXML>
+        """);
 
     /// <summary>地图正文只认素材里那一份，测试自己抄一份就对不上了。</summary>
     private static string WaferMapBody(MessageLibrary library) => library.Messages[0].Structure!
