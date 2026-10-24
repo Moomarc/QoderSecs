@@ -319,7 +319,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string StructureHint => SelectedMessage is null
         ? "选择或新建消息后编辑结构"
         : StructureRootItems.Count == 0
-            ? "这条消息没有消息体，用「添加子项」添加根节点"
+            ? "无消息体；用「添加子项」添加根节点"
             : string.Empty;
 
     /// <summary>
@@ -338,7 +338,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             return SmlConverter.TryToPreviewSml(SelectedMessage, SmlPreviewCharacterCap, out var sml, out var error)
                 ? sml
-                : $"这条消息现在转不成 SML，发送会被拦下：{error}";
+                : $"无法生成 SML，发送已拦截：{error}";
         }
     }
 
@@ -400,6 +400,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     };
 
     public string ConnectButtonText => Phase.IsLocked() ? "断开" : "连接";
+
+    /// <summary>断开时「连接」是顶栏唯一的主动作，用强调色；连上后这颗变成「断开」，退回描边。</summary>
+    public bool ShowsConnectAccent => !Phase.IsLocked();
 
     /// <summary>连上以后配置只读，避免边跑边改端口和定时器。</summary>
     public bool AreParametersEditable => !Phase.IsLocked() && !_isLinkBusy;
@@ -714,9 +717,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string LibraryHeader
     {
-        // 只报条数：左栏被右侧两个按钮挤得只剩一百多像素，
-        // 带上文件名就会被截成半截，还不如不显示。
-        get => $"消息库（{_library.Messages.Count} 条）";
+        // 只报条数：左栏被右侧「文件 + 新消息」挤得只剩一条窄轨。
+        // 窗口拖到最窄（860 DIP）时标题只有约 64 DIP，「消息库 29 条」和带「·」的写法
+        // 都会被裁成「消息库 …」；这个写法实测 55 DIP，两种宽度下都能完整显示。
+        get => $"消息库 {_library.Messages.Count}";
     }
 
     public string SearchText
@@ -837,14 +841,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public IReadOnlyList<AutoReplyOption> AutoReplyCandidates => _autoReplyCandidates;
 
     /// <summary>字段标题带上本条的 SxF（和 W），用户不用回左栏去核对这条是几号。</summary>
-    public string AutoReplyFieldLabel => SelectedMessage is { } entry
-        ? $"自动回复（本条 {entry.Signature}{(entry.WBit ? " W" : string.Empty)}）"
-        : "自动回复";
+    /// <summary>
+    /// 标签只写字段名。带上「本条 S1F2 W」在中栏 3* 的宽度里会被截成「本条 S1F…」，
+    /// 而 SxFy 和 W 就在旁边那几格，标签里再写一遍只是挤占下拉框的宽度。
+    /// </summary>
+    public string AutoReplyFieldLabel => "自动回复";
 
     public bool HasMessages => Messages.Count > 0;
 
     public string EmptyHint => _library.Messages.Count == 0
-        ? "消息库为空，用「文件 → 导入 .sxml…」打开一个"
+        ? "消息库为空\n用「文件」菜单导入 .sxml"
         : "没有匹配的消息";
 
     /// <summary>
@@ -1005,8 +1011,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 LinkPhase.Online => $"已连接 {_link.Profile?.Label}。",
                 LinkPhase.PeerLost when _link.Profile?.Transport == TransportKind.Secs1 =>
-                    "串口不再有数据：对端已断开或端口被拔掉。点「断开」收尾后再重连。",
-                LinkPhase.PeerLost => "对方已断开；本端还在等对方回来，等不及就点「断开」再重连。",
+                    "串口无数据：对端断开或端口拔出。点「断开」后再重连。",
+                LinkPhase.PeerLost => "对方已断开；本端仍在等待，可点「断开」后重连。",
                 LinkPhase.Retrying => "还没连上，正在按 T5 重试。",
                 _ => StatusMessage
             };
@@ -1035,7 +1041,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // 发送按键变灰就又被读成程序卡死，这句提示不能省。
         SetSendWaiting(true);
         StatusMessage = entry.WBit
-            ? $"正在等 {entry.Signature} 的回复（T3 {_t3Seconds} 秒），可点「取消等待」。"
+            ? $"等待 {entry.Signature} 回复（T3 {_t3Seconds} 秒），可取消。"
             : $"正在发送 {entry.Signature}。";
 
         try
@@ -1183,6 +1189,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(PhaseText));
         OnPropertyChanged(nameof(PhaseBrush));
         OnPropertyChanged(nameof(ConnectButtonText));
+        OnPropertyChanged(nameof(ShowsConnectAccent));
         OnPropertyChanged(nameof(AreParametersEditable));
         ConnectCommand.RaiseCanExecuteChanged();
         SendCommand.RaiseCanExecuteChanged();
@@ -2248,9 +2255,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         DeleteNodeCommand.RaiseCanExecuteChanged();
         CopyNodeCommand.RaiseCanExecuteChanged();
         PasteNodeCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(HasAddChildTarget));
+        OnPropertyChanged(nameof(HasAddSiblingTarget));
         // 「存为条目」和条目那一侧的「删除」看的是同一个选中项，跟着树命令一起刷，不另找时机。
         RaiseEntryCommandCanExecute();
     }
+
+    /// <summary>
+    /// 工具栏那两个带下级的菜单能不能展开。没有落点时菜单里的 15 个类型全是灰的，
+    /// 不如整行灰掉，省得点开一屏灰菜单再猜为什么。
+    /// </summary>
+    public bool HasAddChildTarget => CanAddChildToSelection();
+
+    public bool HasAddSiblingTarget => SelectedNode is not null
+        && StructureEditor.CanAddSibling(SelectedNode.Element);
 
     // ---------- 数据字典条目：单独存起来的 data 和 list ----------
 
@@ -2381,7 +2399,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>字典页没条目时的提示语，和结构页那条同一个用法。</summary>
     public string EntryHint => DataEntries.Count == 0
-        ? "还没有条目。点「新增数据」建一条，或者到结构页把选中的节点存为条目"
+        ? "无条目；点「新增数据」新建，或在结构页将节点存为条目"
         : string.Empty;
 
     /// <summary>

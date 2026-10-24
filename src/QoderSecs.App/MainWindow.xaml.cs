@@ -34,6 +34,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        ConfigPanelPopup.CustomPopupPlacementCallback = PlaceConfigPanel;
+
         // Insert 键开菜单时临时改成贴着节点弹；关掉后恢复跟鼠标，
         // 否则右键菜单会跑到节点下面去，不像右键菜单。
         if (FindResource("NodeContextMenu") is ContextMenu nodeMenu)
@@ -57,6 +59,61 @@ public partial class MainWindow : Window
             FollowRecords();
             FollowDetail();
         };
+    }
+
+    /// <summary>
+    /// 连接参数面板贴着「连接参数」那颗按钮弹出。面板比按钮宽得多，优先右对齐
+    /// （右边界和按钮对齐，不往窗口外跑），那一侧放不下就让 WPF 选下一个：左对齐。
+    /// 弹层内容四周留了投影用的边距，这里把边距折回来，视觉边界才对得上按钮。
+    /// </summary>
+    private static CustomPopupPlacement[] PlaceConfigPanel(Size popupSize, Size targetSize, Point offset)
+    {
+        const double shadowKeepOut = 10;
+        const double shadowTop = 4;
+        const double gap = 8;
+
+        var y = targetSize.Height + gap - shadowTop;
+        return new[]
+        {
+            new CustomPopupPlacement(
+                new Point(targetSize.Width - popupSize.Width + shadowKeepOut, y),
+                PopupPrimaryAxis.None),
+            new CustomPopupPlacement(new Point(-shadowKeepOut, y), PopupPrimaryAxis.None)
+        };
+    }
+
+    /// <summary>
+    /// 弹层被别的途径关掉时（例如 Esc、窗口失活），把按钮的选中态也收回来，
+    /// 免得留下「按钮亮着、面板已经没了」的状态，下一次点击还得按两下。
+    /// </summary>
+    private void ConfigPanelPopupClosed(object? sender, EventArgs e)
+    {
+        if (ConfigPanelToggle.IsChecked == true)
+        {
+            ConfigPanelToggle.IsChecked = false;
+        }
+    }
+
+    /// <summary>切到别的窗口也算「点在外面」：参数面板没有理由留在别的程序后面。</summary>
+    private void WindowDeactivated(object? sender, EventArgs e)
+    {
+        if (ConfigPanelToggle.IsChecked == true)
+        {
+            ConfigPanelToggle.IsChecked = false;
+        }
+    }
+
+    private static bool IsWithinVisual(DependencyObject? source, DependencyObject ancestor)
+    {
+        for (var node = source; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (ReferenceEquals(node, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void FollowDetail()
@@ -338,6 +395,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 参数弹层是独立顶层窗口，点它内部的控件走不到这里；能走到就说明点在别处。
+        // 点在「连接参数」按钮上时不在这里关：那一下交给按钮自己的开关，
+        // 否则先在按下时关掉，松开时按钮又把面板翻开了。
+        if (ConfigPanelPopup.IsOpen && !IsWithinVisual(e.OriginalSource as DependencyObject, ConfigPanelToggle))
+        {
+            ConfigPanelToggle.IsChecked = false;
+        }
+
         if (e.OriginalSource is Visual source)
         {
             for (Visual? ancestor = source; ancestor is not null; ancestor = VisualTreeHelper.GetParent(ancestor) as Visual)
@@ -428,6 +493,14 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// 只看数据里有没有文本，不把正文取出来。DragOver 一秒触发几十次，
+    /// 跨进程拖放每取一次都要过一次 COM；大正文在这里量长度就是拖动卡顿的来源。
+    /// 长度判断留到 Drop，那时本来就要取一次正文。
+    /// </summary>
+    private static bool HasTextData(IDataObject data) =>
+        data.GetDataPresent(DataFormats.UnicodeText) || data.GetDataPresent(DataFormats.Text);
+
+    /// <summary>
     /// 粘进来的正文超过大值阈值就不让它进 TextBox：WPF 会先给整段文本排版，
     /// 五兆的 PP body 就是卡五秒的来源。改成直接写 XML，界面上只留摘要。
     /// </summary>
@@ -451,13 +524,16 @@ public partial class MainWindow : Window
     /// <summary>大文本拖到值框或大值摘要区时显示可放；小文本交给 TextBox 自己插到光标处。</summary>
     private void ValueBoxPreviewDragOver(object sender, DragEventArgs e)
     {
-        if (!TryGetTextData(e.Data, out var text))
+        if (!HasTextData(e.Data))
         {
             return;
         }
 
-        if (sender is TextBox && text.Length <= StructureNode.LargeValueCharacterThreshold)
+        // 输入框不在这里挡：小文本要保留 TextBox 自己的落点光标和插入行为，
+        // 大文本到 Drop 时再整段替换。两种都由 Drop 里的长度判断收口。
+        if (sender is TextBox)
         {
+            e.Effects = DragDropEffects.Copy;
             return;
         }
 
@@ -554,6 +630,18 @@ public partial class MainWindow : Window
                 _dragStart = e.GetPosition(null);
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// 右键先选中被点的那一行。上下菜单里的删除、复制、存为条目都作用在 SelectedNode 上，
+    /// 不先选中就会对着上一次选中的节点下手。不 Handled，右键菜单照常弹出。
+    /// </summary>
+    private void NodeItemPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is TreeViewItem item)
+        {
+            item.IsSelected = true;
         }
     }
 

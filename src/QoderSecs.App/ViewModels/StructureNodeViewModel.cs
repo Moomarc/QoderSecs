@@ -131,7 +131,7 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     /// <summary>大值在底部那一栏显示的说明。正文本身不进任何 TextBox。</summary>
     public string LargeValueSummary => Node.IsLargeValue
-        ? $"{Node.ElementName} 值 {Node.ValueSizeText}，不在输入框里展开。"
+        ? $"{Node.ElementName} 值 {Node.ValueSizeText}，不进输入框。"
         : string.Empty;
 
     public bool ShowsLargeValuePanel => Node.IsValueEditable && Node.IsLargeValue;
@@ -199,12 +199,12 @@ public sealed class StructureNodeViewModel : ObservableObject
     /// 用户看不出这个框能装多个值（第 5 条修改意见要的就是这个能力）。
     /// </summary>
     public string? ValueEditorTip => ValidationError ?? (Node.IsLargeValue
-        ? "值太长，不在输入框里展开。"
+        ? "值太长，不在输入框展开。"
         : Node.ItemType switch
         {
-            SecsItemType.A or SecsItemType.J => "一段文本，可以换行。",
-            SecsItemType.B => "十六进制字节，成对写，可以用空格分隔；0x00 这类前缀会自动去掉，-127 到 -1 会按二补码转成两位十六进制（-45 → D3）。",
-            _ when Node.CanHoldArray => "可以填多个值，用空格分隔，例如 0 0 1。",
+            SecsItemType.A or SecsItemType.J => "文本，可换行。",
+            SecsItemType.B => "十六进制字节，空格分隔；0x 前缀自动去掉，负数按二补码转换。",
+            _ when Node.CanHoldArray => "多值以空格分隔，如 0 0 1。",
             _ => null
         });
 

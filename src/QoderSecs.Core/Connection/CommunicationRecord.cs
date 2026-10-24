@@ -167,6 +167,10 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
         }
     }
 
+    /// <summary>列表行没有显式设置 AutomationProperties.Name 时，UI 自动化会退回这个值；
+    /// 不覆盖就会把 CLR 类型名念出来，读屏和自动化都拿不到有用信息。</summary>
+    public override string ToString() => $"{TimeText} {DirectionText} {MessageText} {StatusText}";
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

@@ -4,62 +4,1061 @@
         Title="QoderSecs"
         Width="1360"
         Height="860"
-        MinWidth="860"
+        MinWidth="880"
         MinHeight="680"
-        Background="#F3F4F6"
-        FontFamily="Segoe UI"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="#F4F5F7"
+        FontFamily="{DynamicResource UiFontFamily}"
         FontSize="13"
+        Deactivated="WindowDeactivated"
         PreviewMouseDown="WindowPreviewMouseDown">
+    <!-- MinWidth 880 的来由：三栏下限 230 + 300 + 300、两条分隔条 10、主区左右
+         外边距 20，再加窗口左右那圈不可见的 12px 拉伸边框（150% 下约 8 DIP），
+         合起来是 876，取 880 留一点余量。写 860 时右栏会被窗口右缘切掉一条。 -->
     <Window.Resources>
+        <!-- ============================================================
+             设计 Token
+             数值取自 lepoco/WPF UI 与 Kinnara/ModernWpf 的 Fluent token：
+             控件圆角 4、浮层圆角 8、卡片静止态无阴影、描边走深色的低透明度、
+             正文近黑、次要文字 62% 黑。强调色沿用本项目既有的 #2563EB。
+             要调整观感只改这一段，下面所有模板都引用这些 key。
+             ============================================================ -->
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F4F5F7" />
         <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF" />
-        <SolidColorBrush x:Key="BorderBrush" Color="#D8DEE8" />
+        <SolidColorBrush x:Key="SubtleSurfaceBrush" Color="#F7F8FA" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#E3E7ED" />
+        <SolidColorBrush x:Key="DividerBrush" Color="#EEF1F5" />
+        <SolidColorBrush x:Key="ControlBorderBrush" Color="#D5DAE2" />
+        <SolidColorBrush x:Key="ControlHoverBorderBrush" Color="#BFC6D1" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#F4F6F8" />
+        <SolidColorBrush x:Key="SelectedBrush" Color="#EDF3FF" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#1F2328" />
         <SolidColorBrush x:Key="MutedBrush" Color="#667085" />
         <SolidColorBrush x:Key="PrimaryBrush" Color="#2563EB" />
-        <Style TargetType="Button">
-            <Setter Property="MinHeight" Value="32" />
-            <Setter Property="Padding" Value="12,5" />
-            <Setter Property="Margin" Value="3" />
+        <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#1D4ED8" />
+        <SolidColorBrush x:Key="PrimaryPressedBrush" Color="#1E40AF" />
+        <SolidColorBrush x:Key="DangerBrush" Color="#D92D20" />
+        <SolidColorBrush x:Key="ScrollThumbBrush" Color="#C9CFD9" />
+        <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#A8B0BC" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#B45309" />
+        <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
+        <CornerRadius x:Key="PanelCornerRadius">6</CornerRadius>
+        <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+
+        <!-- 字体三档，各留回退：本机 Win11 有 Segoe UI Variable 和 Cascadia Mono，
+             同事的机器缺字时依次落到 Segoe UI / Consolas，不会变成宋体或方框。
+             图标字体优先 Segoe Fluent Icons（Win11），回退到 MDL2（Win10 也有）。 -->
+        <FontFamily x:Key="UiFontFamily">Segoe UI Variable Text, Segoe UI</FontFamily>
+        <FontFamily x:Key="DisplayFontFamily">Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI</FontFamily>
+        <FontFamily x:Key="MonoFontFamily">Cascadia Mono, Consolas</FontFamily>
+        <FontFamily x:Key="IconFontFamily">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+        <!-- 键盘焦点框：系统那圈黑色虚线是整套界面里最后的旧控件痕迹。
+             只给「自身不画焦点提示」的控件用；输入框有自己的底部强调线，用不着再套一圈。 -->
+        <Style x:Key="FocusOutlineStyle">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border Margin="-2"
+                                BorderBrush="{StaticResource PrimaryBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource ControlCornerRadius}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="Padding" Value="7,4" />
-            <Setter Property="Margin" Value="0,4,8,0" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
+
+        <!-- ============================ 排版 ============================ -->
+        <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource DisplayFontFamily}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <Style TargetType="ComboBox">
-            <Setter Property="MinHeight" Value="30" />
-            <Setter Property="Margin" Value="0,4,8,0" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
+        <!-- 左缩进 10 = 输入框 9 内边距 + 1 边框：标签要和框里的文字同一条竖线，
+             只看外框会显得标签比正文更靠左。横向并排的标签自己覆盖 Margin。 -->
+        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="Margin" Value="10,0,0,4" />
         </Style>
+        <!-- 四处空态（消息库 / 结构 / 字典 / 通信记录）共用：限宽换行，
+             否则一行长提示会顶穿面板边框。 -->
+        <Style x:Key="EmptyHintStyle" TargetType="TextBlock">
+            <Setter Property="MaxWidth" Value="360" />
+            <Setter Property="Margin" Value="24" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="LineHeight" Value="19" />
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        </Style>
+        <!-- 三栏共用的栏头：36 高、单一分隔线。左中右三栏的标题从同一个样式出来，
+             避免再出现「一栏 48 一栏 28」那种各写各的。 -->
+        <Style x:Key="PanelHeaderBorderStyle" TargetType="Border">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource DividerBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+
+        <!-- 类型徽标（L / A / U4 …）：三处同源，写在一处才不会漂移。
+             字母必须显式 VerticalAlignment=Center：水平 StackPanel 会把子元素拉到
+             整行高，TextBlock 拉伸后文字贴的是行盒顶部，看起来就落在色块中间偏上。
+             色块也固定 16 高并居中，不跟着旁边的名称行盒变高。 -->
+        <Style x:Key="TypeBadgeBorderStyle" TargetType="Border">
+            <Setter Property="Height" Value="16" />
+            <Setter Property="MinWidth" Value="18" />
+            <Setter Property="Padding" Value="5,0" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{Binding BadgeBrush}" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
+        <Style x:Key="TypeBadgeTextStyle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource MonoFontFamily}" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Center" />
+            <Setter Property="Text" Value="{Binding TypeLabel}" />
+        </Style>
+
+        <!-- ============================ 面板 ============================ -->
         <Style x:Key="PanelStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource PanelBrush}" />
             <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{StaticResource PanelCornerRadius}" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
         </Style>
-        <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="14" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="VerticalAlignment" Value="Center" />
+
+        <!-- ============================ 按钮 ============================
+             尺寸与 WPF UI 一致：高 32、左右内边距 12、圆角 4、字重不加粗。
+             主按钮单独一套模板，因为它悬浮/按下的颜色不能跟着次要按钮走。 -->
+        <ControlTemplate x:Key="SecondaryButtonTemplate" TargetType="Button">
+            <Border x:Name="Chrome"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{StaticResource ControlCornerRadius}"
+                    SnapsToDevicePixels="True">
+                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  RecognizesAccessKey="True" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                    <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource ControlHoverBorderBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SubtleSurfaceBrush}" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Chrome" Property="Opacity" Value="0.45" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <ControlTemplate x:Key="PrimaryButtonTemplate" TargetType="Button">
+            <Border x:Name="Chrome"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{StaticResource ControlCornerRadius}"
+                    SnapsToDevicePixels="True">
+                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  RecognizesAccessKey="True" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource PrimaryHoverBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource PrimaryPressedBrush}" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Chrome" Property="Opacity" Value="0.4" />
+                    <Setter Property="Foreground" Value="White" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style x:Key="SecondaryButtonStyle" TargetType="Button">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template" Value="{StaticResource SecondaryButtonTemplate}" />
         </Style>
-        <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
+        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}" />
+
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Template" Value="{StaticResource PrimaryButtonTemplate}" />
+        </Style>
+
+        <!-- 图标按钮：只画图标不画框，悬停才给浅底。关闭键、以后的小工具按钮都用它，
+             免得再出现「1px 方框里塞个小叉」那种系统按钮既视感。 -->
+        <Style x:Key="IconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontFamily" Value="{StaticResource IconFontFamily}" />
             <Setter Property="FontSize" Value="12" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource ControlCornerRadius}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SelectedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
+
+        <!-- 类型子菜单：15 种元素排成单列会拖到屏幕外，这里 3 列 × 5 行。
+             定宽 120 保证三列等宽，列内文字左对齐；弹层宽 366（360 + 左右内边距 4）。 -->
+        <ItemsPanelTemplate x:Key="TypeMenuPanelTemplate">
+            <WrapPanel Width="366" Orientation="Horizontal" />
+        </ItemsPanelTemplate>
+
+        <!-- 顶栏那颗开着参数面板的开关按钮：按下态用浅强调底色，和主按钮区分开。 -->
         <Style x:Key="TopBarButtonStyle" TargetType="ToggleButton">
             <Setter Property="MinHeight" Value="32" />
-            <Setter Property="Padding" Value="12,5" />
-            <Setter Property="Margin" Value="3" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource ControlCornerRadius}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource ControlHoverBorderBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SelectedBrush}" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
+
+        <!-- ============================ 输入框 ============================
+             聚焦只把底边点亮成 2px 强调色，边框颜色不动——校验失败时
+             BorderBrush 会被设成红色，边框如果也被模板触发器抢走，红框就看不见了。 -->
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="9,5" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="CaretBrush" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="SelectionBrush" Value="{StaticResource PrimaryBrush}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <!-- 输入框聚焦时自己画底部强调线，再套一圈焦点框就是两层提示。 -->
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource ControlCornerRadius}"
+                                SnapsToDevicePixels="True">
+                            <Grid>
+                                <!-- 滚动条可见性必须透传：单行框默认 Hidden 不会变，多行框
+                                     自己设了 Auto，写死 Hidden 等于把它们的长行全截掉。
+                                     内容宿主不要再绑 Padding：TextBox 自己已经按 Padding
+                                     内缩过文字，再绑一次就是双重内边距——文字比标签靠右
+                                     一倍，框也比按钮高 8 DIP。 -->
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Focusable="False"
+                                              HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                              VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}" />
+                                <Border x:Name="FocusLine"
+                                        Height="2"
+                                        Margin="1,0,1,0"
+                                        VerticalAlignment="Bottom"
+                                        Background="{StaticResource PrimaryBrush}"
+                                        CornerRadius="0,0,3,3"
+                                        IsHitTestVisible="False"
+                                        Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <!-- 多行框要自己吃满高度才能滚动，不能按单行的居中法摆。 -->
+                            <Trigger Property="AcceptsReturn" Value="True">
+                                <Setter TargetName="PART_ContentHost" Property="VerticalAlignment" Value="Stretch" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusLine" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <!-- 多行框的文字从顶端开始写。VerticalContentAlignment 也管文字画在
+                     框里的哪一截，只把 ScrollViewer 拉满会让整段停在垂直中间。 -->
+                <Trigger Property="AcceptsReturn" Value="True">
+                    <Setter Property="VerticalContentAlignment" Value="Top" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ============================ 下拉框 ============================
+             只做非可编辑那一种，本项目所有 ComboBox 都不接受手输。
+             弹层自己留 4px 内边距、每个选项再留 3px，悬浮底色才不会顶到圆角上。 -->
+        <Style x:Key="ComboBoxItemStyle" TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="9,7" />
+            <Setter Property="Margin" Value="3,1,3,1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Chrome"
+                                Background="Transparent"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SelectedBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource ComboBoxItemStyle}" />
+
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="9,0,30,0" />
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid SnapsToDevicePixels="True">
+                            <ToggleButton x:Name="Toggle"
+                                          ClickMode="Press"
+                                          Focusable="False"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Chrome"
+                                                Background="{Binding Background, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                BorderThickness="{Binding BorderThickness, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                CornerRadius="{StaticResource ControlCornerRadius}">
+                                            <TextBlock Margin="0,0,11,0"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource IconFontFamily}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource MutedBrush}"
+                                                       Text="&#xE70D;" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource ControlHoverBorderBrush}" />
+                                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="SelectionHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentStringFormat="{TemplateBinding SelectionBoxItemStringFormat}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              IsHitTestVisible="False" />
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade"
+                                   VerticalOffset="4">
+                                <Border MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                        Margin="0,0,8,10"
+                                        Padding="4,4,4,5"
+                                        Background="{StaticResource PanelBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource OverlayCornerRadius}">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="16"
+                                                          Opacity="0.14"
+                                                          ShadowDepth="3" />
+                                    </Border.Effect>
+                                    <ScrollViewer CanContentScroll="True"
+                                                  HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained" />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================ 复选 ============================ -->
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Background="Transparent" Orientation="Horizontal">
+                            <!-- 20×20、圆角 4：Fluent 的复选框标准尺寸。
+                                 小一号的 16 在 150% DPI 下，勾和底色都挤在一起看不清。 -->
+                            <Border x:Name="Box"
+                                    Width="20"
+                                    Height="20"
+                                    VerticalAlignment="Center"
+                                    Background="{StaticResource PanelBrush}"
+                                    BorderBrush="{StaticResource ControlBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="4">
+                                <Path x:Name="Check"
+                                      Width="11"
+                                      Height="8"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Data="M 0,4 L 3.5,7.5 L 11,0.5"
+                                      Stroke="White"
+                                      StrokeEndLineCap="Round"
+                                      StrokeStartLineCap="Round"
+                                      StrokeThickness="1.8"
+                                      Visibility="Collapsed" />
+                            </Border>
+                            <ContentPresenter Margin="7,0,0,0"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <!-- 顺序有意义：悬停先写，选中后写。反过来的话鼠标停在已勾选项上，
+                                 悬停那支触发器的灰边框会盖掉强调色，看起来就像填充没铺满。 -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource ControlHoverBorderBrush}" />
+                            </Trigger>
+                            <!-- 选中态去掉 1px 描边，整块 20×20 直接铺强调色。
+                                 留着描边时，150% DPI 下描边的抗锯齿会在内缘留一圈浅色。 -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{StaticResource PrimaryBrush}" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                                <Setter TargetName="Box" Property="BorderThickness" Value="0" />
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================ 菜单 ============================
+             一套模板管住四种 Role：顶栏的「文件」是 TopLevelHeader，右键菜单里的行是
+             SubmenuItem，「添加子项 / 添加同级」那种带下级的行是 SubmenuHeader。
+             Role 触发器决定弹层往哪边开、要不要画右箭头，删掉的话子菜单就展不开了。 -->
+        <Style x:Key="MenuRowStyle" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Grid>
+                            <Border x:Name="Chrome"
+                                    Padding="{TemplateBinding Padding}"
+                                    Background="Transparent"
+                                    CornerRadius="4"
+                                    SnapsToDevicePixels="True">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ContentPresenter ContentSource="Header"
+                                                      VerticalAlignment="Center"
+                                                      RecognizesAccessKey="True" />
+                                    <TextBlock x:Name="Gesture"
+                                               Grid.Column="1"
+                                               Margin="28,0,0,0"
+                                               VerticalAlignment="Center"
+                                               FontSize="12"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               Text="{TemplateBinding InputGestureText}" />
+                                    <Path x:Name="Arrow"
+                                          Grid.Column="1"
+                                          Width="5"
+                                          Height="9"
+                                          Margin="28,0,0,0"
+                                          VerticalAlignment="Center"
+                                          Data="M 0,0 L 5,4.5 L 0,9"
+                                          Stroke="{StaticResource MutedBrush}"
+                                          StrokeThickness="1.3"
+                                          Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   HorizontalOffset="-2"
+                                   IsOpen="{Binding IsSubmenuOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Placement="Right"
+                                   PopupAnimation="None"
+                                   VerticalOffset="-5">
+                                <Border Margin="0,0,12,12"
+                                        Padding="4,5"
+                                        Background="{StaticResource PanelBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource OverlayCornerRadius}">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="18"
+                                                          Opacity="0.14"
+                                                          ShadowDepth="3" />
+                                    </Border.Effect>
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <!-- 顶栏那一行：比下拉里的行高一点，和旁边的按钮对齐。 -->
+                            <Trigger Property="Role" Value="TopLevelHeader">
+                                <Setter TargetName="PART_Popup" Property="Placement" Value="Bottom" />
+                                <Setter TargetName="PART_Popup" Property="HorizontalOffset" Value="0" />
+                                <Setter TargetName="PART_Popup" Property="VerticalOffset" Value="4" />
+                                <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed" />
+                                <Setter Property="Padding" Value="12,0" />
+                            </Trigger>
+                            <Trigger Property="Role" Value="TopLevelItem">
+                                <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed" />
+                                <!-- 8 而不是 12：结构页六项在默认窗宽下只差十几像素，
+                                     收到 8 才留得出余量，换台机器字体回退也不会又折行。 -->
+                                <Setter Property="Padding" Value="8,0" />
+                            </Trigger>
+                            <Trigger Property="Role" Value="SubmenuHeader">
+                                <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed" />
+                                <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <!-- 没有快捷键的行要把它彻底拿掉：这个 TextBlock 留着 28 的左边距，
+                                 空着也占位，会把「U1 无符号整数」这类长标题截掉最后一个字。 -->
+                            <Trigger Property="InputGestureText" Value="">
+                                <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SelectedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 隐式样式只是 MenuRowStyle 的别名；带 key 的那份是唯一正文，
+             子菜单项和工具栏「文件」都要显式 BasedOn 到它，不能靠 {x:Type MenuItem}
+             往前找——那会落到系统主题样式上（深色主题下菜单字是白的，落在白底上就看不见了）。 -->
+        <Style TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}" />
+
+        <!-- 类型选项网格：15 个类型排 3 列 × 5 行，单列那一长串会把弹层拉到屏幕外。 -->
+        <Style x:Key="TypeSubmenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}">
+            <Setter Property="Width" Value="120" />
+            <!-- 外层操作栏压到 12 号，展开的类型网格仍按正文 13 号，不跟着变小。 -->
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+        </Style>
+
+        <!-- 页签上方那条操作栏：结构页六项、字典页四项。13 号字时六项合计比中栏内容
+             宽出十几像素，末尾「存为条目」会单独掉到第二行；压到 12 号正好一行放下。
+             右键菜单里仍按 13 号显示，快捷键提示也在那边。 -->
+        <Style x:Key="TabToolbarItemStyle" TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}">
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <!-- 菜单里的分隔线走 MenuItem 自己那个主题 key，不写它会退回系统那条 3D 凹槽。 -->
+        <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+            <Setter Property="Margin" Value="8,4" />
+            <Setter Property="Background" Value="{StaticResource DividerBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Border Height="1" Background="{TemplateBinding Background}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="Padding" Value="4,5" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Margin="0,0,12,12"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource OverlayCornerRadius}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="18"
+                                                  Opacity="0.14"
+                                                  ShadowDepth="3" />
+                            </Border.Effect>
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 提示条：默认那种灰底黑边在浅色界面上很扎眼，换成白卡片细描边。 -->
+        <Style TargetType="ToolTip">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="MaxWidth" Value="460" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Padding="{TemplateBinding Padding}"
+                                Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource ControlCornerRadius}">
+                            <ContentPresenter />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 左栏「文件」是 Menu，默认比旁边的 Button 矮一截也窄一截，按 Button 的尺寸对齐。
-             必须 BasedOn 主题默认样式：MenuItem 靠 Role 触发器换模板，覆盖掉就展不开子菜单了。 -->
+             BasedOn 必须指到 MenuRowStyle：Role 触发器在那里面，覆盖掉子菜单就展不开了。 -->
         <Style x:Key="ToolbarMenuStyle"
-               BasedOn="{StaticResource {x:Type MenuItem}}"
+               BasedOn="{StaticResource MenuRowStyle}"
                TargetType="MenuItem">
             <Setter Property="MinHeight" Value="32" />
-            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Padding" Value="12,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
+        <!-- ============================ 页签 ============================
+             下划线式：选中项靠一条 2px 强调色标出来，不用整块底色。
+             三栏里只有中栏有页签，但它默认那套「带边框的文件夹页签」是整个窗口最显旧的控件。 -->
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Grid Background="Transparent">
+                            <Border Padding="{TemplateBinding Padding}" Background="Transparent">
+                                <ContentPresenter ContentSource="Header"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center" />
+                            </Border>
+                            <Border x:Name="Bar"
+                                    Height="2"
+                                    VerticalAlignment="Bottom"
+                                    Background="{StaticResource PrimaryBrush}"
+                                    CornerRadius="1"
+                                    Visibility="Collapsed" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border Background="Transparent"
+                                    BorderBrush="{StaticResource DividerBrush}"
+                                    BorderThickness="0,0,0,1">
+                                <TabPanel IsItemsHost="True" Background="Transparent" />
+                            </Border>
+                            <ContentPresenter x:Name="PART_SelectedContentHost"
+                                              Grid.Row="1"
+                                              Margin="0,8,0,0"
+                                              ContentSource="SelectedContent" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================ 列表行 ============================
+             选中不是整片蓝底：3×14 的圆角竖条标出当前项，底色只比白纸深一点点。
+             这是 WPF UI / ModernWpf 里 ListViewItem 的做法，也是「一眼褪掉系统蓝」的关键。
+             左栏消息列表用这个模板；右栏是 GridView，行模板另有 GridViewRowTemplate，
+             但选中竖条与配色从这两个模板同一套色值出，观感还是一致的。 -->
+        <ControlTemplate x:Key="SelectorRowTemplate" TargetType="ListBoxItem">
+            <Border x:Name="Chrome"
+                    Background="Transparent"
+                    CornerRadius="{StaticResource ControlCornerRadius}"
+                    SnapsToDevicePixels="True">
+                <Grid>
+                    <ContentPresenter Margin="{TemplateBinding Padding}"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="Center" />
+                    <Border x:Name="Pill"
+                            Width="3"
+                            Height="14"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Background="{StaticResource PrimaryBrush}"
+                            CornerRadius="1.5"
+                            Visibility="Collapsed" />
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SelectedBrush}" />
+                    <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Chrome" Property="Opacity" Value="0.5" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style TargetType="ListBoxItem">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="12,0,8,0" />
+            <Setter Property="Margin" Value="4,1,4,1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template" Value="{StaticResource SelectorRowTemplate}" />
+        </Style>
+
+        <!-- 行模板不能复用 SelectorRowTemplate：那个模板里只有一个 ContentPresenter，
+             而 GridView 的单元格是 GridViewRowPresenter 按列渲染的，换掉之后每行只剩
+             对象的 ToString()，整列都会变成类型名。表头与单元格的竖线对齐换算见下面
+             ListViewItem 的注释。 -->
+        <ControlTemplate x:Key="GridViewRowTemplate" TargetType="ListViewItem">
+            <Border x:Name="Chrome"
+                    Background="Transparent"
+                    CornerRadius="{StaticResource ControlCornerRadius}"
+                    SnapsToDevicePixels="True">
+                <Grid>
+                    <GridViewRowPresenter Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"
+                                          Columns="{TemplateBinding GridView.ColumnCollection}"
+                                          Content="{TemplateBinding Content}" />
+                    <Border x:Name="Pill"
+                            Width="3"
+                            Height="14"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Background="{StaticResource PrimaryBrush}"
+                            CornerRadius="1.5"
+                            Visibility="Collapsed" />
+                </Grid>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource SelectedBrush}" />
+                    <Setter TargetName="Pill" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Chrome" Property="Opacity" Value="0.5" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style TargetType="ListViewItem">
+            <Setter Property="MinHeight" Value="30" />
+            <!-- 行内缩进会和列表头错开：GridView 的单元格比行首多缩 6px，表头行比
+                 列表多缩 2px，两者要同一竖线就得让 行内边距 + 6 = 表头内边距 + 2。
+                 取 2 / 6 之后文字落在距面板内沿 12px 的位置，正好和「通信记录」标题对齐；
+                 缩进再大就会从每一列的可视宽度里扣同样的值，7 个字的「无人等待的回复」会被切。 -->
+            <Setter Property="Padding" Value="2,0" />
+            <Setter Property="Margin" Value="0,1,0,1" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template" Value="{StaticResource GridViewRowTemplate}" />
+        </Style>
+
+        <Style TargetType="GridViewColumnHeader">
+            <Setter Property="Height" Value="30" />
+            <!-- 不加左右外边距：那 4px 会把「方向」这种窄列挤到只剩 18px 正文宽度，
+                 标题直接裁字，表头也和下面的单元格错开 4px。 -->
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridViewColumnHeader">
+                        <Border Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{StaticResource DividerBrush}"
+                                BorderThickness="0,0,0,1">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ============================ 滚动条 ============================
+             没有箭头、没有凹槽，只有一根 6px 的圆角滑块。
+             竖向和横向用两套模板：翻页按钮的命令方向不一样，共用一套会让横向条上下翻。 -->
+        <Style x:Key="ScrollThumbStyle" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="Bar"
+                                Margin="3"
+                                Background="{StaticResource ScrollThumbBrush}"
+                                CornerRadius="3" />
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bar" Property="Background" Value="{StaticResource ScrollThumbHoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Bar" Property="Background" Value="{StaticResource ScrollThumbHoverBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <ControlTemplate x:Key="VerticalScrollBarTemplate" TargetType="ScrollBar">
+            <Grid Background="Transparent" SnapsToDevicePixels="True">
+                <Track x:Name="PART_Track" IsDirectionReversed="True">
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}" Focusable="False">
+                            <RepeatButton.Template>
+                                <ControlTemplate TargetType="RepeatButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.DecreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb MinHeight="20" Style="{StaticResource ScrollThumbStyle}" />
+                    </Track.Thumb>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}" Focusable="False">
+                            <RepeatButton.Template>
+                                <ControlTemplate TargetType="RepeatButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.IncreaseRepeatButton>
+                </Track>
+            </Grid>
+        </ControlTemplate>
+
+        <ControlTemplate x:Key="HorizontalScrollBarTemplate" TargetType="ScrollBar">
+            <Grid Background="Transparent" SnapsToDevicePixels="True">
+                <Track x:Name="PART_Track">
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command="{x:Static ScrollBar.PageLeftCommand}" Focusable="False">
+                            <RepeatButton.Template>
+                                <ControlTemplate TargetType="RepeatButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.DecreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb MinWidth="20" Style="{StaticResource ScrollThumbStyle}" />
+                    </Track.Thumb>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command="{x:Static ScrollBar.PageRightCommand}" Focusable="False">
+                            <RepeatButton.Template>
+                                <ControlTemplate TargetType="RepeatButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.IncreaseRepeatButton>
+                </Track>
+            </Grid>
+        </ControlTemplate>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template" Value="{StaticResource VerticalScrollBarTemplate}" />
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto" />
+                    <Setter Property="Height" Value="12" />
+                    <Setter Property="Template" Value="{StaticResource HorizontalScrollBarTemplate}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- 挂在 TreeViewItem 上而不是行内容上：整行（含展开箭头）右键都能出菜单。
              共享实例，DataContext 由 PlacementTarget 继承，所以绑定照旧走节点 VM。
              两个添加项按节点类型收掉：非列表元素加不了子项、根元素没有同级，
@@ -67,9 +1066,10 @@
         <ContextMenu x:Key="NodeContextMenu">
             <MenuItem Header="添加子项"
                       Visibility="{Binding AddChildVisibility}"
+                      ItemsPanel="{StaticResource TypeMenuPanelTemplate}"
                       ItemsSource="{Binding Owner.ItemTypeOptions}">
                 <MenuItem.ItemContainerStyle>
-                    <Style TargetType="MenuItem">
+                    <Style TargetType="MenuItem" BasedOn="{StaticResource TypeSubmenuItemStyle}">
                         <Setter Property="Header" Value="{Binding Header}" />
                         <Setter Property="Command"
                                 Value="{Binding DataContext.Owner.AddChildCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -79,9 +1079,10 @@
             </MenuItem>
             <MenuItem Header="添加同级"
                       Visibility="{Binding AddSiblingVisibility}"
+                      ItemsPanel="{StaticResource TypeMenuPanelTemplate}"
                       ItemsSource="{Binding Owner.ItemTypeOptions}">
                 <MenuItem.ItemContainerStyle>
-                    <Style TargetType="MenuItem">
+                    <Style TargetType="MenuItem" BasedOn="{StaticResource TypeSubmenuItemStyle}">
                         <Setter Property="Header" Value="{Binding Header}" />
                         <Setter Property="Command"
                                 Value="{Binding DataContext.Owner.AddSiblingCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -103,7 +1104,7 @@
             <MenuItem Header="存为条目"
                       Visibility="{Binding SaveAsEntryVisibility}"
                       Command="{Binding Owner.SaveNodeAsEntryCommand}"
-                      ToolTip="把这个节点整份存进数据字典，之后可以复制粘贴到别的消息里；改条目不会动这条消息" />
+                      ToolTip="存一份到数据字典，供其他消息复制" />
         </ContextMenu>
 
         <!-- 两棵树共用同一套行样式：结构页那棵和字典页那棵都是 SECS-II 子树，
@@ -116,8 +1117,112 @@
             <!-- TreeViewItem 的 UIA 名字默认取数据项的 ToString，
                  走查和读屏都读不出这一行是什么，必须显式给。 -->
             <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
-            <EventSetter Event="PreviewMouseRightButtonDown"
-                         Handler="SelectNodeOnRightClick" />
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
+            <!-- 右键先选中这一行：菜单命令都作用在 SelectedNode 上，不选就等于改别的行。 -->
+            <EventSetter Event="PreviewMouseRightButtonDown" Handler="NodeItemPreviewMouseRightButtonDown" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TreeViewItem">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <!-- 两层的用意：底下一层铺选中色（整行），上面这层只负责悬浮反馈。
+                                 悬浮色带透明度，压在选中色上不会把选中状态盖掉；
+                                 悬浮判断挂在行本身而不是整只容器上，否则鼠标停在子行上父行也会亮。 -->
+                            <Border x:Name="RowBack"
+                                    Grid.Row="0"
+                                    Margin="0,1"
+                                    Background="Transparent"
+                                    CornerRadius="{StaticResource ControlCornerRadius}" />
+                            <!-- 这个名字是给拖放用的：MainWindow.xaml.cs 的 RowHeader 按它取
+                                 「一行」的高度来分上中下三段，换掉名字会退化成按整只容器算。 -->
+                            <Border x:Name="PART_Header"
+                                    Grid.Row="0"
+                                    MinHeight="26"
+                                    Margin="0,1"
+                                    Padding="2,0"
+                                    Background="Transparent"
+                                    CornerRadius="{StaticResource ControlCornerRadius}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#0A000000" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ToggleButton x:Name="Expander"
+                                                  Width="16"
+                                                  Height="16"
+                                                  VerticalAlignment="Center"
+                                                  ClickMode="Press"
+                                                  Focusable="False"
+                                                  IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border Width="16" Height="16" Background="Transparent">
+                                                    <TextBlock x:Name="Glyph"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontFamily="{StaticResource IconFontFamily}"
+                                                               FontSize="10"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               RenderTransformOrigin="0.5,0.5"
+                                                               Text="&#xE76C;" />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter TargetName="Glyph" Property="RenderTransform">
+                                                            <Setter.Value>
+                                                                <RotateTransform Angle="90" />
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Trigger>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                    <ContentPresenter x:Name="HeaderHost"
+                                                      Grid.Column="1"
+                                                      ContentSource="Header"
+                                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                      VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                            <ItemsPresenter x:Name="ItemsHost"
+                                            Grid.Row="1"
+                                            Margin="16,0,0,0" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsExpanded" Value="False">
+                                <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="False">
+                                <Setter TargetName="Expander" Property="Visibility" Value="Hidden" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="RowBack" Property="Background" Value="{StaticResource SelectedBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
             <Style.Triggers>
                 <!-- 只有正在编辑的那一行拉满宽度，值框才吃得到 * 列；
                      显示态不拉，长值预览照旧把行撑宽，行为不变。 -->
@@ -143,14 +1248,8 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <Border Margin="0,1,6,1"
-                            Padding="5,0"
-                            Background="{Binding BadgeBrush}"
-                            CornerRadius="3">
-                        <TextBlock FontFamily="Cascadia Mono"
-                                   FontSize="11"
-                                   Foreground="White"
-                                   Text="{Binding TypeLabel}" />
+                    <Border Style="{StaticResource TypeBadgeBorderStyle}">
+                        <TextBlock Style="{StaticResource TypeBadgeTextStyle}" />
                     </Border>
                     <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
                     <TextBlock Margin="8,0,0,0"
@@ -161,7 +1260,7 @@
                                 <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                        <Setter Property="Foreground" Value="#DC2626" />
+                                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -184,21 +1283,14 @@
                             </Style.Triggers>
                         </Style>
                     </Grid.Style>
-                    <Border Margin="0,1,6,1"
-                            Padding="5,0"
-                            VerticalAlignment="Center"
-                            Background="{Binding BadgeBrush}"
-                            CornerRadius="3">
-                        <TextBlock FontFamily="Cascadia Mono"
-                                   FontSize="11"
-                                   Foreground="White"
-                                   Text="{Binding TypeLabel}" />
+                    <Border Style="{StaticResource TypeBadgeBorderStyle}">
+                        <TextBlock Style="{StaticResource TypeBadgeTextStyle}" />
                     </Border>
                     <TextBox Grid.Column="1"
                              VerticalAlignment="Center"
                              AutomationProperties.Name="节点名称"
                              Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="可选，例如 PPID / COMMACK；留空就是没有名字" />
+                             ToolTip="可空，例如 PPID / COMMACK" />
                     <Grid Grid.Column="2">
                         <TextBox VerticalAlignment="Center"
                                  AcceptsReturn="False"
@@ -211,14 +1303,14 @@
                                  TextWrapping="NoWrap"
                                  ToolTip="{Binding ValueEditorTip}">
                             <TextBox.Style>
-                                <Style TargetType="TextBox">
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ShowsValueEditor}" Value="True">
                                             <Setter Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                            <Setter Property="BorderBrush" Value="#DC2626" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding IsEditing}" Value="True">
                                             <Setter Property="FocusManager.FocusedElement"
@@ -235,7 +1327,7 @@
                                   ItemsSource="{Binding BooleanOptions}"
                                   SelectedItem="{Binding EditValue}">
                             <ComboBox.Style>
-                                <Style TargetType="ComboBox">
+                                <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding ShowsBooleanEditor}" Value="True">
@@ -247,7 +1339,7 @@
                         </ComboBox>
                         <TextBlock VerticalAlignment="Center"
                                    Foreground="{StaticResource MutedBrush}"
-                                   Text="大值，不在行内展开"
+                                   Text="大值，行内不展开"
                                    TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding LargeValueSummary}">
                             <TextBlock.Style>
@@ -295,7 +1387,8 @@
 
         <Border x:Name="TopBar"
                 Grid.Row="0"
-                Padding="12,9"
+                Height="52"
+                Padding="14,0"
                 Background="White"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,0,0,1">
@@ -308,39 +1401,46 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Margin="0,0,18,0"
+                <TextBlock Margin="0,0,16,0"
                            VerticalAlignment="Center"
-                           FontSize="18"
+                           FontFamily="{StaticResource DisplayFontFamily}"
+                           FontSize="16"
                            FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"
                            Text="QoderSecs" />
 
                 <TextBlock Grid.Column="1"
                            Margin="0,0,12,0"
                            VerticalAlignment="Center"
                            AutomationProperties.AutomationId="ProfileSummary"
+                           FontSize="12"
                            Foreground="{StaticResource MutedBrush}"
-                           Text="{Binding ConfigurationSummary}" />
+                           Text="{Binding ConfigurationSummary}"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding ConfigurationSummary}" />
 
                 <ToggleButton x:Name="ConfigPanelToggle"
                               Grid.Column="2"
+                              VerticalAlignment="Center"
                               IsChecked="{Binding IsConfigPanelOpen, Mode=TwoWay}"
                               Style="{StaticResource TopBarButtonStyle}"
                               Content="连接参数 ▾" />
 
                 <Border Grid.Column="3"
                         Margin="8,0"
-                        Padding="10,5"
+                        Padding="10,4"
                         VerticalAlignment="Center"
-                        Background="#F2F4F7"
-                        CornerRadius="12">
+                        Background="{StaticResource SubtleSurfaceBrush}"
+                        CornerRadius="10">
                     <StackPanel Orientation="Horizontal">
-                        <Ellipse Width="8"
-                                 Height="8"
+                        <Ellipse Width="7"
+                                 Height="7"
                                  VerticalAlignment="Center"
                                  Fill="{Binding PhaseBrush}" />
                         <TextBlock x:Name="PhasePill"
                                    Margin="6,0,0,0"
                                    VerticalAlignment="Center"
+                                   FontSize="12"
                                    Foreground="{StaticResource MutedBrush}"
                                    Text="{Binding PhaseText}" />
                     </StackPanel>
@@ -349,41 +1449,65 @@
                 <Button x:Name="ConnectButton"
                         Grid.Column="4"
                         MinWidth="88"
+                        VerticalAlignment="Center"
                         Command="{Binding ConnectCommand}"
-                        Content="{Binding ConnectButtonText}" />
+                        Content="{Binding ConnectButtonText}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource SecondaryButtonStyle}">
+                            <Style.Triggers>
+                                <!-- 只有「连接」用强调色；同一颗按钮在连上后是「断开」，
+                                     那时的强调色会去催一个破坏性动作。 -->
+                                <DataTrigger Binding="{Binding ShowsConnectAccent}" Value="True">
+                                    <Setter Property="Template" Value="{StaticResource PrimaryButtonTemplate}" />
+                                    <Setter Property="Background" Value="{StaticResource PrimaryBrush}" />
+                                    <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}" />
+                                    <Setter Property="Foreground" Value="White" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
 
-                <Popup AllowsTransparency="True"
-                       HorizontalOffset="12"
+                <!-- 弹层贴着「连接参数」这颗按钮出，不再锚在整条顶栏上：
+                     锚整条顶栏时起点固定在最左边，窗口一宽按钮和面板就隔开半屏。
+                     右对齐还是左对齐由 PlaceConfigPanel 按余量挑，见 MainWindow.xaml.cs。 -->
+                <Popup x:Name="ConfigPanelPopup"
+                       AllowsTransparency="True"
+                       Closed="ConfigPanelPopupClosed"
                        IsOpen="{Binding IsConfigPanelOpen, Mode=TwoWay}"
-                       Placement="Bottom"
-                       PlacementTarget="{Binding ElementName=TopBar}"
-                       StaysOpen="True"
-                       VerticalOffset="8">
+                       Placement="Custom"
+                       PlacementTarget="{Binding ElementName=ConfigPanelToggle}"
+                       StaysOpen="True">
                     <Border MaxWidth="940"
-                            Margin="14,6,14,16"
-                            Padding="14"
+                            Margin="10,4,10,18"
+                            Padding="16"
                             Background="{StaticResource PanelBrush}"
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
-                            CornerRadius="8">
+                            CornerRadius="{StaticResource OverlayCornerRadius}">
                         <Border.Effect>
-                            <DropShadowEffect BlurRadius="16"
-                                              Opacity="0.22"
-                                              ShadowDepth="2" />
+                            <DropShadowEffect BlurRadius="24"
+                                              Opacity="0.16"
+                                              ShadowDepth="4" />
                         </Border.Effect>
                         <StackPanel>
-                            <DockPanel Margin="0,0,0,10">
-                                <TextBlock Style="{StaticResource SectionTitleStyle}"
-                                           Text="连接参数" />
-                                <Button Width="26"
-                                        Height="26"
-                                        Margin="0"
-                                        Padding="0"
-                                        HorizontalAlignment="Right"
-                                        Command="{Binding CloseConfigPanelCommand}"
-                                        Content="✕"
-                                        ToolTip="关闭 (Esc)" />
-                            </DockPanel>
+                            <!-- 头部：标题 + 右侧无边框图标按钮 + 一条细分隔线。
+                                 关闭键和标题同为 28 高，分隔线压在主内容上方，层次比原来自带方框的 ✕ 清楚。 -->
+                            <Border Margin="0,0,0,12"
+                                    Padding="0,0,0,10"
+                                    BorderBrush="{StaticResource DividerBrush}"
+                                    BorderThickness="0,0,0,1">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right"
+                                            Style="{StaticResource IconButtonStyle}"
+                                            Command="{Binding CloseConfigPanelCommand}"
+                                            Content="&#xE8BB;"
+                                            ToolTip="关闭 (Esc)" />
+                                    <TextBlock FontSize="15"
+                                               Style="{StaticResource SectionTitleStyle}"
+                                               Text="连接参数" />
+                                </DockPanel>
+                            </Border>
                             <WrapPanel IsEnabled="{Binding AreParametersEditable}">
                                 <StackPanel Width="145">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="角色" />
@@ -399,7 +1523,7 @@
                                               SelectedValuePath="Kind"
                                               SelectedValue="{Binding Transport, Mode=TwoWay}">
                                         <ComboBox.ItemContainerStyle>
-                                            <Style TargetType="ComboBoxItem">
+                                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
                                                 <!-- 和自动回复那栏一样：不给名字，UIA 读出来是 TransportOption 的 ToString。 -->
                                                 <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
                                             </Style>
@@ -463,7 +1587,7 @@
                                 </StackPanel>
                                 <StackPanel Width="190" Margin="12,0,0,0">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="Linktest" />
-                                    <StackPanel Margin="0,5,0,0" Orientation="Horizontal">
+                                    <StackPanel Margin="0" Orientation="Horizontal">
                                         <CheckBox Margin="0,0,10,0"
                                                   VerticalAlignment="Center"
                                                   Content="启用"
@@ -541,17 +1665,21 @@
 
         <Grid Grid.Row="1" Margin="10,8,10,8">
             <Grid.ColumnDefinitions>
-                <!-- 三栏下限之和加上两条分隔条，就是窗口 MinWidth 的下界；
-                     想让窗口能更窄，必须先降这里，只改 MinWidth 是拖不动的。
-                     中栏不能低于 300：名称框 170 和 S/F/W 组 160 都要放得下，
-                     扣掉发送按钮 98 之后只剩压盖，不会换行。
-                     左栏不能低于 230：标题是 DockPanel 的填充项，
-                     右边「文件 + ＋新消息」占掉 150，再窄标题就被挤成 0 宽直接消失。 -->
-                <ColumnDefinition Width="2*" MinWidth="230" />
+                <!-- 三栏下限之和加上两条分隔条、主区外边距和窗口边框，才是窗口 MinWidth
+                     的真正下界（见 Window 上的注释）；想让窗口更窄必须先降这里。
+                     中栏下限 300 时内容宽 273：名称框 112、S/F/W 组 158、自动回复 232、
+                     描述 167 加发送 90，都还在，不会换行。
+                     左栏下限 230 时内容宽 227：右边「文件 + ＋新消息」占 135，
+                     标题是 DockPanel 的填充项，至少还能留下 60 多。
+                     份数按 1130 DIP 宽的窗口校过：左 2.2 份刚好放下「消息库 29」，
+                     中 3 份 335 够放各输入框，剩下的都给右栏那张六列表格。 -->
+                <ColumnDefinition Width="2.2*" MinWidth="230" />
                 <ColumnDefinition Width="5" />
                 <ColumnDefinition Width="3*" MinWidth="300" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="4*" MinWidth="300" />
+                <!-- 右栏比中栏多给 1.6 份：通信记录是六列表格，中栏只有几个输入框。
+                     按 4 份分时表格在常见的 1130 DIP 宽窗口里要横向滚动，最后一列被挡掉。 -->
+                <ColumnDefinition Width="4.6*" MinWidth="300" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource PanelStyle}">
@@ -566,38 +1694,45 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <DockPanel Margin="10,8">
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Menu Margin="3" Background="Transparent">
-                                <MenuItem Header="文件" Style="{StaticResource ToolbarMenuStyle}">
-                                    <MenuItem Command="{Binding ImportLibraryCommand}" Header="导入 .sxml…" />
-                                    <MenuItem Command="{Binding ExportLibraryCommand}" Header="导出 .sxml…" />
-                                    <Separator />
-                                    <MenuItem Command="{Binding ClearLibraryCommand}" Header="清空消息库…" />
-                                </MenuItem>
-                            </Menu>
-                            <Button AutomationProperties.AutomationId="NewMessage"
-                                    Command="{Binding NewMessageCommand}"
-                                    Content="＋ 新消息" />
-                        </StackPanel>
-                        <TextBlock Margin="0,0,8,0"
-                                   Style="{StaticResource SectionTitleStyle}"
-                                   Text="{Binding LibraryHeader}"
-                                   TextTrimming="CharacterEllipsis" />
-                    </DockPanel>
+                    <Border Grid.Row="0"
+                            Padding="12,0,8,0"
+                            Style="{StaticResource PanelHeaderBorderStyle}">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right"
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal">
+                                <Menu Background="Transparent">
+                                    <MenuItem Header="文件" Style="{StaticResource ToolbarMenuStyle}">
+                                        <MenuItem Command="{Binding ImportLibraryCommand}" Header="导入 .sxml…" />
+                                        <MenuItem Command="{Binding ExportLibraryCommand}" Header="导出 .sxml…" />
+                                        <Separator />
+                                        <MenuItem Command="{Binding ClearLibraryCommand}" Header="清空消息库…" />
+                                    </MenuItem>
+                                </Menu>
+                                <Button Margin="4,0,0,0"
+                                        AutomationProperties.AutomationId="NewMessage"
+                                        Command="{Binding NewMessageCommand}"
+                                        Content="＋ 新消息" />
+                            </StackPanel>
+                            <TextBlock Margin="0,0,8,0"
+                                       Style="{StaticResource SectionTitleStyle}"
+                                       Text="{Binding LibraryHeader}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                    </Border>
                     <!-- 灰色引导：WPF 的 TextBox 没有占位符，只能叠一层只显文字、
                          不吃鼠标的 TextBlock，空串时才露出来。 -->
-                    <Grid Grid.Row="1" Margin="10,0,10,8">
+                    <Grid Grid.Row="1" Margin="12,10,12,8">
                         <TextBox Margin="0"
                                  AutomationProperties.Name="搜索消息"
                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="按名称过滤，或直接输入 SxFy，例如 S10F3" />
-                        <TextBlock Margin="9,0,9,0"
+                                 ToolTip="按名称或 SxFy 过滤；S10F3、10 3、10,3 均可" />
+                        <TextBlock Margin="10,0,10,0"
                                    VerticalAlignment="Center"
                                    FontSize="12"
                                    Foreground="{StaticResource MutedBrush}"
                                    IsHitTestVisible="False"
-                                   Text="按名称或 SxFy 搜索，S10F3 / 10F3 均可"
+                                   Text="搜名称或 S10F3 / 10 3"
                                    TextTrimming="CharacterEllipsis">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
@@ -613,10 +1748,11 @@
                     </Grid>
                     <ListBox x:Name="MessageList"
                              Grid.Row="2"
-                             Margin="6,0,6,6"
+                             Margin="0,0,0,6"
+                             Background="Transparent"
                              BorderThickness="0"
                              ItemsSource="{Binding Messages}"
-                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
                              PreviewKeyDown="MessageListPreviewKeyDown">
                         <!-- 删除和复制的入口都在右键菜单（删除另外还绑 Delete 键，工具条那里已经满了）。
@@ -630,7 +1766,7 @@
                             </ContextMenu>
                         </ListBox.ContextMenu>
                         <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                                 <!-- 不加这个，行的 UIA 名字就是 MessageEntry 的 ToString()，
                                      读屏软件会把整段 XML 念一遍，自动化测试也没法精确断言。 -->
                                 <Setter Property="AutomationProperties.Name">
@@ -642,11 +1778,13 @@
                                         </MultiBinding>
                                     </Setter.Value>
                                 </Setter>
-                                <Setter Property="ToolTip" Value="{x:Null}" />
+                                <!-- 名字列吃的是剩下的宽度，长名字一定被截；悬停至少要能看到全名。
+                                     有描述时改显示描述——那段是作者写给使用者看的，比名字有用。
+                                     空描述不挂空 ToolTip，否则鼠标停上去会弹一个空白小框。 -->
+                                <Setter Property="ToolTip" Value="{Binding Name}" />
                                 <EventSetter Event="PreviewMouseRightButtonDown"
                                              Handler="SelectMessageOnRightClick" />
                                 <Style.Triggers>
-                                    <!-- 空描述不挂空 ToolTip，否则鼠标停上去会弹一个空白小框。 -->
                                     <DataTrigger Binding="{Binding HasDescription}" Value="True">
                                         <Setter Property="ToolTip" Value="{Binding Description}" />
                                     </DataTrigger>
@@ -655,17 +1793,26 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Width="60"
-                                               Margin="0,0,6,0"
-                                               FontFamily="Cascadia Mono"
+                                <!-- 三列固定两列、名字吃剩下的宽度：用横向 StackPanel 的话
+                                     名字多长都照排，左栏一窄就长出横向滚动条。
+                                     名字长了按字符截断，悬停由行 ToolTip 给描述。 -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Width="62"
+                                               Margin="0,0,7,0"
+                                               FontFamily="{StaticResource MonoFontFamily}"
                                                Foreground="{StaticResource PrimaryBrush}"
                                                Text="{Binding Signature}" />
-                                    <TextBlock Width="14"
-                                               Margin="0,0,6,0"
-                                               FontFamily="Cascadia Mono"
+                                    <TextBlock Grid.Column="1"
+                                               Width="14"
+                                               Margin="0,0,7,0"
+                                               FontFamily="{StaticResource MonoFontFamily}"
                                                TextAlignment="Center"
-                                               ToolTip="这条消息要求对方回复（W-Bit）"
+                                               ToolTip="要求对方回复（W-Bit）"
                                                Text="{Binding WBitMark}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
@@ -678,21 +1825,17 @@
                                             </Style>
                                         </TextBlock.Style>
                                     </TextBlock>
-                                    <TextBlock Text="{Binding Name}" />
-                                </StackPanel>
+                                    <TextBlock Grid.Column="2"
+                                               Margin="0,0,6,0"
+                                               Text="{Binding Name}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-                    <TextBlock Grid.Row="2"
-                               Margin="14"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Foreground="{StaticResource MutedBrush}"
-                               Text="{Binding EmptyHint}"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap">
+                    <TextBlock Grid.Row="2" Text="{Binding EmptyHint}">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyHintStyle}">
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding HasMessages}" Value="False">
@@ -716,31 +1859,31 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0"
-                               Margin="10,4,8,4"
-                               Style="{StaticResource SectionTitleStyle}"
-                               Text="消息编辑" />
-                    <Grid Grid.Row="1" Margin="10,0,8,8">
+                    <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
+                        <TextBlock Style="{StaticResource SectionTitleStyle}" Text="消息编辑" />
+                    </Border>
+                    <Grid Grid.Row="1" Margin="12,10,12,10">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <!-- 名称/S/F/W/自动回复排一行，描述单独占一行：
-                             中栏只有 3*，固定宽度分组一旦超过剩余宽度，右边框会被裁掉。 -->
+                        <!-- 名称/S/F/W 一行，自动回复单独一行，描述再一行。
+                             自动回复搁在名称右边时，中栏按 3* 分配只剩 80 来像素，
+                             下拉框里的「（不自动回复）」会被硬截掉后半截。 -->
                         <Grid IsEnabled="{Binding HasSelectedMessage}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="1.2*" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock Style="{StaticResource FieldLabelStyle}" Text="名称" />
                                 <TextBox AutomationProperties.AutomationId="MessageName"
                                          AutomationProperties.Name="消息名称"
                                          KeyDown="CommitOnEnter"
-                                         ToolTip="同一个 SxFy 可以有多条消息，全靠这个名字区分（自动回复也是按它指向的）；不能留空，也不能和别的消息重名"
+                                         ToolTip="SxFy 可重复，按名称区分；不可空或重名"
                                          Text="{Binding MessageName, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Width="48">
@@ -758,36 +1901,37 @@
                                          Text="{Binding FunctionText, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
                             <CheckBox Grid.Column="3"
-                                      Margin="10,0,0,7"
+                                      Margin="10,0,0,6"
                                       VerticalAlignment="Bottom"
                                       AutomationProperties.AutomationId="MessageWBit"
                                       AutomationProperties.Name="消息 W 位"
                                       Content="W"
                                       IsChecked="{Binding MessageWBit}"
-                                      ToolTip="这条消息要求对方回复（W-Bit）" />
-                            <StackPanel Grid.Column="4" Margin="12,0,0,0">
-                                <TextBlock Style="{StaticResource FieldLabelStyle}"
-                                           Text="{Binding AutoReplyFieldLabel}"
-                                           TextTrimming="CharacterEllipsis"
-                                           ToolTip="{Binding AutoReplyFieldLabel}" />
-                                <ComboBox AutomationProperties.AutomationId="MessageAutoReply"
-                                          AutomationProperties.Name="{Binding AutoReplyFieldLabel}"
-                                          DisplayMemberPath="Display"
-                                          ItemsSource="{Binding AutoReplyCandidates}"
-                                          SelectedItem="{Binding MessageAutoReply}"
-                                          ToolTip="收到这条消息时自动回哪一条。候选写的是「SxF · 名字」，当前值由下拉框的选中高亮表示；v1 只支持指向单条消息，程序按名字精确回">
-                                    <ComboBox.ItemContainerStyle>
-                                        <Style TargetType="ComboBoxItem">
-                                            <!-- 不加这个，下拉项的 UIA 名字就是 AutoReplyOption 的 ToString()，
-                                                 读屏软件念一串字段名，自动化也断言不到「SxF · 名字」那段文案。
-                                                 和左栏消息行同一个做法。 -->
-                                            <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
-                                        </Style>
-                                    </ComboBox.ItemContainerStyle>
-                                </ComboBox>
-                            </StackPanel>
+                                      ToolTip="要求对方回复（W-Bit）" />
                         </Grid>
-                        <DockPanel Grid.Row="1" Margin="0,8,0,0">
+                        <StackPanel Grid.Row="1"
+                                    Width="240"
+                                    Margin="0,10,0,0"
+                                    HorizontalAlignment="Left"
+                                    IsEnabled="{Binding HasSelectedMessage}">
+                            <TextBlock Style="{StaticResource FieldLabelStyle}" Text="{Binding AutoReplyFieldLabel}" />
+                            <ComboBox AutomationProperties.AutomationId="MessageAutoReply"
+                                      AutomationProperties.Name="{Binding AutoReplyFieldLabel}"
+                                      DisplayMemberPath="Display"
+                                      ItemsSource="{Binding AutoReplyCandidates}"
+                                      SelectedItem="{Binding MessageAutoReply}"
+                                      ToolTip="收到后自动回复的消息；按名称精确匹配，单选">
+                                <ComboBox.ItemContainerStyle>
+                                    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                        <!-- 不加这个，下拉项的 UIA 名字就是 AutoReplyOption 的 ToString()，
+                                             读屏软件念一串字段名，自动化也断言不到「SxF · 名字」那段文案。
+                                             和左栏消息行同一个做法。 -->
+                                        <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
+                                    </Style>
+                                </ComboBox.ItemContainerStyle>
+                            </ComboBox>
+                        </StackPanel>
+                        <DockPanel Grid.Row="2" Margin="0,10,0,0">
                             <!-- 发送放在描述行右侧：这样上面那行字段能排齐，按钮也不会压住任何输入框。 -->
                             <Button x:Name="SendButton"
                                     Width="90"
@@ -810,13 +1954,13 @@
                                 <TextBox AutomationProperties.AutomationId="MessageDescription"
                                          AutomationProperties.Name="消息描述"
                                          KeyDown="CommitOnEnter"
-                                         ToolTip="这条消息的用途说明；清空后左栏悬停不再显示"
+                                         ToolTip="用途说明；显示在左栏悬停"
                                          Text="{Binding MessageDescription, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
                         </DockPanel>
                     </Grid>
                     <TabControl Grid.Row="2"
-                                Margin="8,0"
+                                Margin="12,0,12,0"
                                 SelectedIndex="{Binding EditorTab}">
                         <TabItem Header="结构">
                             <Grid>
@@ -825,10 +1969,15 @@
                                     <RowDefinition Height="*" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <Menu Margin="2,4,0,0" Background="Transparent">
-                                    <MenuItem Header="添加子项" ItemsSource="{Binding ItemTypeOptions}">
+                                <Menu Margin="0,0,0,6" Background="Transparent">
+                                    <MenuItem Header="添加子项"
+                                              Style="{StaticResource TabToolbarItemStyle}"
+                                              Padding="8,0"
+                                              IsEnabled="{Binding HasAddChildTarget}"
+                                              ItemsPanel="{StaticResource TypeMenuPanelTemplate}"
+                                              ItemsSource="{Binding ItemTypeOptions}">
                                         <MenuItem.ItemContainerStyle>
-                                            <Style TargetType="MenuItem">
+                                            <Style TargetType="MenuItem" BasedOn="{StaticResource TypeSubmenuItemStyle}">
                                                 <Setter Property="Header" Value="{Binding Header}" />
                                                 <Setter Property="Command"
                                                         Value="{Binding DataContext.AddChildCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
@@ -836,9 +1985,14 @@
                                             </Style>
                                         </MenuItem.ItemContainerStyle>
                                     </MenuItem>
-                                    <MenuItem Header="添加同级" ItemsSource="{Binding ItemTypeOptions}">
+                                    <MenuItem Header="添加同级"
+                                              Style="{StaticResource TabToolbarItemStyle}"
+                                              Padding="8,0"
+                                              IsEnabled="{Binding HasAddSiblingTarget}"
+                                              ItemsPanel="{StaticResource TypeMenuPanelTemplate}"
+                                              ItemsSource="{Binding ItemTypeOptions}">
                                         <MenuItem.ItemContainerStyle>
-                                            <Style TargetType="MenuItem">
+                                            <Style TargetType="MenuItem" BasedOn="{StaticResource TypeSubmenuItemStyle}">
                                                 <Setter Property="Header" Value="{Binding Header}" />
                                                 <Setter Property="Command"
                                                         Value="{Binding DataContext.AddSiblingCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
@@ -846,22 +2000,28 @@
                                             </Style>
                                         </MenuItem.ItemContainerStyle>
                                     </MenuItem>
-                                    <MenuItem Header="删除" Command="{Binding DeleteNodeCommand}" />
+                                    <MenuItem Header="删除"
+                                              Style="{StaticResource TabToolbarItemStyle}"
+                                              Command="{Binding DeleteNodeCommand}" />
                                     <Separator />
                                     <MenuItem Header="复制"
+                                              Style="{StaticResource TabToolbarItemStyle}"
                                               InputGestureText="Ctrl+C"
                                               Command="{Binding CopyNodeCommand}" />
                                     <MenuItem Header="粘贴"
+                                              Style="{StaticResource TabToolbarItemStyle}"
                                               InputGestureText="Ctrl+V"
                                               Command="{Binding PasteNodeCommand}" />
                                     <Separator />
                                     <MenuItem Header="存为条目"
+                                              Style="{StaticResource TabToolbarItemStyle}"
                                               Command="{Binding SaveNodeAsEntryCommand}"
-                                              ToolTip="把这个节点整份存进数据字典，之后可以复制粘贴到别的消息里；改条目不会动这条消息" />
+                                              ToolTip="存一份到数据字典，供其他消息复制" />
                                 </Menu>
                                 <TreeView x:Name="StructureTree"
                                           Grid.Row="1"
-                                          Margin="4,0,4,4"
+                                          Margin="0,0,0,4"
+                                          Background="Transparent"
                                           BorderThickness="0"
                                           AllowDrop="True"
                                           ItemContainerStyle="{StaticResource StructureNodeItemStyle}"
@@ -875,16 +2035,9 @@
                                           MouseDoubleClick="NodeTreeMouseDoubleClick"
                                           PreviewKeyDown="NodeTreePreviewKeyDown">
                                 </TreeView>
-                                <TextBlock Grid.Row="1"
-                                           Margin="14"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           Foreground="{StaticResource MutedBrush}"
-                                           Text="{Binding StructureHint}"
-                                           TextAlignment="Center"
-                                           TextWrapping="Wrap">
+                                <TextBlock Grid.Row="1" Text="{Binding StructureHint}">
                                     <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource EmptyHintStyle}">
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding StructureHint}" Value="">
                                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -894,9 +2047,9 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                                 <Border Grid.Row="2"
-                                        Padding="8,6"
-                                        Background="#F8FAFC"
-                                        BorderBrush="{StaticResource BorderBrush}"
+                                        Padding="10,8"
+                                        Background="{StaticResource SubtleSurfaceBrush}"
+                                        BorderBrush="{StaticResource DividerBrush}"
                                         BorderThickness="0,1,0,0">
                                     <Grid DataContext="{Binding SelectedNode}">
                                         <Grid.RowDefinitions>
@@ -906,7 +2059,7 @@
                                         </Grid.RowDefinitions>
                                         <TextBlock VerticalAlignment="Center"
                                                    Foreground="{StaticResource MutedBrush}"
-                                                   Text="选中一个节点后，在这里改名称和值。">
+                                                   Text="选中节点后在此改名称和值">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -918,42 +2071,58 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
-                                        <StackPanel Orientation="Horizontal">
-                                            <StackPanel.Style>
-                                                <Style TargetType="StackPanel">
+                                        <!-- 名称和值分两行：中栏在 1130 DIP 窗口下只有约 335 DIP，
+                                             名称 150 + 值 240 再加两个标签并排放不下，值框会被整个挤出可视区。
+                                             分行后每行只放一组标签+输入框，窗口再窄也裁不到值。 -->
+                                        <Grid>
+                                            <Grid.Style>
+                                                <Style TargetType="Grid">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding}" Value="{x:Null}">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </StackPanel.Style>
-                                            <Border Margin="0,1,8,1"
-                                                    Padding="5,0"
-                                                    VerticalAlignment="Center"
-                                                    Background="{Binding BadgeBrush}"
-                                                    CornerRadius="3">
-                                                <TextBlock FontFamily="Cascadia Mono"
-                                                           FontSize="11"
-                                                           Foreground="White"
-                                                           Text="{Binding TypeLabel}" />
+                                            </Grid.Style>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Row="0"
+                                                    Margin="0,0,8,0"
+                                                    Style="{StaticResource TypeBadgeBorderStyle}">
+                                                <TextBlock Style="{StaticResource TypeBadgeTextStyle}" />
                                             </Border>
-                                            <TextBlock Margin="0,0,6,0"
+                                            <TextBlock Grid.Row="0"
+                                                       Grid.Column="1"
+                                                       Margin="0,0,6,0"
                                                        VerticalAlignment="Center"
                                                        Style="{StaticResource FieldLabelStyle}"
                                                        Text="名称" />
-                                            <TextBox Width="150"
-                                                     Margin="0,0,12,0"
+                                            <TextBox Grid.Row="0"
+                                                     Grid.Column="2"
+                                                     Width="150"
+                                                     HorizontalAlignment="Left"
                                                      VerticalAlignment="Center"
                                                      AutomationProperties.Name="节点名称"
                                                      Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
-                                                     ToolTip="可选，例如 PPID / COMMACK；留空就是没有名字" />
-                                            <TextBlock Margin="0,0,6,0"
+                                                     ToolTip="可空，例如 PPID / COMMACK" />
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="1"
+                                                       Margin="0,8,6,0"
                                                        VerticalAlignment="Center"
                                                        Style="{StaticResource FieldLabelStyle}"
                                                        Text="值" />
-                                            <TextBox Width="240"
-                                                     Margin="0,0,12,0"
+                                            <Grid Grid.Row="1"
+                                                  Grid.Column="2"
+                                                  Margin="0,8,0,0">
+                                            <TextBox MinWidth="120"
+                                                     HorizontalAlignment="Stretch"
                                                      VerticalAlignment="Center"
                                                      AcceptsReturn="{Binding IsMultiLineValue}"
                                                      AllowDrop="True"
@@ -970,11 +2139,11 @@
                                                      ToolTip="{Binding ValueEditorTip}"
                                                      VerticalScrollBarVisibility="Auto">
                                                 <TextBox.Style>
-                                                    <Style TargetType="TextBox">
+                                                    <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                         <!-- 高度必须固定：Auto 行 + 自动换行遇到几十兆正文，
                                                              量一次就把整个中间栏撑满。 -->
-                                                        <Setter Property="Height" Value="30" />
-                                                        <Setter Property="Padding" Value="7,4" />
+                                                        <Setter Property="Height" Value="32" />
+                                                        <Setter Property="Padding" Value="9,5" />
                                                         <Setter Property="VerticalContentAlignment" Value="Center" />
                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                         <Style.Triggers>
@@ -986,21 +2155,21 @@
                                                                 <Setter Property="VerticalContentAlignment" Value="Top" />
                                                             </DataTrigger>
                                                             <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                                                <Setter Property="BorderBrush" Value="#DC2626" />
+                                                                <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
                                                 </TextBox.Style>
                                             </TextBox>
                                             <ComboBox Width="90"
-                                                      Margin="0,0,12,0"
+                                                      Margin="0"
+                                                      HorizontalAlignment="Left"
                                                       VerticalAlignment="Center"
                                                       AutomationProperties.Name="节点值"
                                                       ItemsSource="{Binding BooleanOptions}"
                                                       SelectedItem="{Binding EditValue}">
                                                 <ComboBox.Style>
-                                                    <Style TargetType="ComboBox">
-                                                        <Setter Property="MinHeight" Value="30" />
+                                                    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
                                                         <Setter Property="VerticalContentAlignment" Value="Center" />
                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                         <Style.Triggers>
@@ -1011,9 +2180,12 @@
                                                     </Style>
                                                 </ComboBox.Style>
                                             </ComboBox>
-                                            <TextBlock VerticalAlignment="Center"
+                                            <TextBlock Margin="10,0,0,0"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Center"
                                                        Foreground="{StaticResource MutedBrush}"
-                                                       Text="{Binding ValueNote}">
+                                                       Text="{Binding ValueNote}"
+                                                       TextTrimming="CharacterEllipsis">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1025,7 +2197,8 @@
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                        </StackPanel>
+                                            </Grid>
+                                        </Grid>
                                         <!-- 大值不进输入框：只报大小，正文从剪贴板整段替换。 -->
                                         <Grid Grid.Row="1"
                                               Margin="0,6,0,0"
@@ -1049,10 +2222,10 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock VerticalAlignment="Center"
                                                        AutomationProperties.AutomationId="LargeValueSummary"
-                                                       Foreground="#B45309"
+                                                       Foreground="{StaticResource WarningBrush}"
                                                        Text="{Binding LargeValueSummary}"
                                                        TextWrapping="Wrap"
-                                                       ToolTip="大值不在输入框里展开；把新正文复制到剪贴板后点右侧按钮，或直接拖到这个区域。" />
+                                                       ToolTip="大值不进输入框；从剪贴板替换，或拖入此区域" />
                                             <Button Grid.Column="1"
                                                     Margin="8,0,0,0"
                                                     Padding="10,4"
@@ -1060,11 +2233,11 @@
                                                     AutomationProperties.AutomationId="ReplaceLargeValue"
                                                     Click="ReplaceLargeValueFromClipboard"
                                                     Content="用剪贴板替换…"
-                                                    ToolTip="用剪贴板里的整段文本替换当前值；B 的 0x 前缀会自动去掉" />
+                                                    ToolTip="整段替换当前值；B 类型自动去掉 0x" />
                                         </Grid>
                                         <TextBlock Grid.Row="2"
                                                    Margin="0,4,0,0"
-                                                   Foreground="#DC2626"
+                                                   Foreground="{StaticResource DangerBrush}"
                                                    Text="{Binding ValidationError}"
                                                    TextWrapping="Wrap">
                                             <TextBlock.Style>
@@ -1083,47 +2256,58 @@
                             </Grid>
                         </TabItem>
                         <TabItem Header="SML">
-                            <Grid Margin="4,4,4,4">
+                            <Grid>
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="96" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <TextBox BorderThickness="0"
-                                         IsReadOnly="True"
+                                <!-- 只读预览给一块浅底，和右栏详情区同一句话：等宽正文放在带底色的
+                                     框里，和普通输入框区分开。 -->
+                                <TextBox Margin="0"
+                                         Padding="10,8"
                                          AcceptsReturn="True"
                                          AutomationProperties.Name="SML 预览"
-                                         FontFamily="Cascadia Mono"
+                                         Background="{StaticResource SubtleSurfaceBrush}"
+                                         BorderBrush="{StaticResource DividerBrush}"
+                                         FontFamily="{StaticResource MonoFontFamily}"
+                                         FontSize="12"
                                          HorizontalScrollBarVisibility="Auto"
-                                         TextWrapping="NoWrap"
+                                         IsReadOnly="True"
                                          Text="{Binding SmlPreviewText, Mode=OneWay}"
+                                         TextWrapping="NoWrap"
                                          VerticalScrollBarVisibility="Auto">
                                     <TextBox.Style>
-                                        <Style TargetType="TextBox">
+                                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding SmlPreviewHasError}" Value="True">
-                                                    <Setter Property="Foreground" Value="#DC2626" />
+                                                    <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </TextBox.Style>
                                 </TextBox>
                                 <TextBlock Grid.Row="1"
-                                           Margin="0,6,0,2"
+                                           Margin="0,10,0,4"
+                                           FontSize="12"
                                            Foreground="{StaticResource MutedBrush}"
-                                           Text="粘贴一条完整消息的 SML（带 SxFy 消息头），覆盖当前消息的消息头和结构：" />
+                                           Text="粘贴带 SxFy 头的完整 SML，覆盖当前消息："
+                                           TextWrapping="Wrap" />
                                 <TextBox Grid.Row="2"
+                                         Margin="0"
+                                         Padding="10,8"
                                          AcceptsReturn="True"
                                          AutomationProperties.Name="粘贴 SML"
-                                         FontFamily="Cascadia Mono"
+                                         FontFamily="{StaticResource MonoFontFamily}"
+                                         FontSize="12"
                                          HorizontalScrollBarVisibility="Auto"
-                                         TextWrapping="NoWrap"
                                          Text="{Binding PasteSmlText, UpdateSourceTrigger=PropertyChanged}"
+                                         TextWrapping="NoWrap"
                                          VerticalScrollBarVisibility="Auto" />
                                 <Button Grid.Row="3"
                                         Width="120"
-                                        Margin="0,6,0,0"
+                                        Margin="0,8,0,0"
                                         HorizontalAlignment="Right"
                                         Command="{Binding ApplySmlCommand}"
                                         Content="覆盖当前消息" />
@@ -1138,10 +2322,13 @@
                                     <RowDefinition Height="*" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <Menu Grid.Row="0" Margin="2,4,0,0" Background="Transparent">
-                                    <MenuItem Header="新增数据" ItemsSource="{Binding ItemTypeOptions}">
+                                <Menu Grid.Row="0" Margin="0,0,0,6" Background="Transparent">
+                                    <MenuItem Header="新增数据"
+                                              Style="{StaticResource TabToolbarItemStyle}"
+                                              ItemsPanel="{StaticResource TypeMenuPanelTemplate}"
+                                              ItemsSource="{Binding ItemTypeOptions}">
                                         <MenuItem.ItemContainerStyle>
-                                            <Style TargetType="MenuItem">
+                                            <Style TargetType="MenuItem" BasedOn="{StaticResource TypeSubmenuItemStyle}">
                                                 <Setter Property="Header" Value="{Binding Header}" />
                                                 <Setter Property="Command"
                                                         Value="{Binding DataContext.NewEntryCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
@@ -1150,22 +2337,26 @@
                                         </MenuItem.ItemContainerStyle>
                                     </MenuItem>
                                     <MenuItem Header="删除条目"
+                                              Style="{StaticResource TabToolbarItemStyle}"
                                               Command="{Binding DeleteEntryCommand}"
-                                              ToolTip="只删字典里这一条，已经复制进消息的那些内容不受影响" />
+                                              ToolTip="只删字典条目，已复制进消息的内容不受影响" />
                                     <Separator />
                                     <MenuItem Header="复制"
+                                              Style="{StaticResource TabToolbarItemStyle}"
                                               InputGestureText="Ctrl+C"
                                               Command="{Binding CopyNodeCommand}" />
                                     <MenuItem Header="粘贴"
+                                              Style="{StaticResource TabToolbarItemStyle}"
                                               InputGestureText="Ctrl+V"
                                               Command="{Binding PasteNodeCommand}" />
                                 </Menu>
-                                <Grid Grid.Row="1" Margin="4,0,4,4">
+                                <Grid Grid.Row="1" Margin="0,0,0,8">
                                     <!-- 一个条目就是一个顶层节点，不垫假根行：条目之间互不隶属，
                                          垫一行会让人以为整本字典能像消息体那样拖来拖去。
                                          树里可以就地改名字和值、加子项、删某一层，和结构页那一棵同一套操作；
                                          要跨到消息里去只能复制粘贴，拖动过不去（Core 把跨段那一刀拦了）。 -->
                                     <TreeView x:Name="EntryTree"
+                                              Background="Transparent"
                                               BorderThickness="0"
                                               AllowDrop="True"
                                               ItemContainerStyle="{StaticResource StructureNodeItemStyle}"
@@ -1178,17 +2369,16 @@
                                               Drop="NodeTreeDrop"
                                               MouseDoubleClick="NodeTreeMouseDoubleClick"
                                               PreviewKeyDown="NodeTreePreviewKeyDown" />
-                                    <TextBlock HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"
-                                               Foreground="{StaticResource MutedBrush}"
+                                    <TextBlock Style="{StaticResource EmptyHintStyle}"
                                                Text="{Binding EntryHint}" />
                                 </Grid>
-                                <StackPanel Grid.Row="2" Margin="4,0,4,6">
+                                <StackPanel Grid.Row="2">
                                     <TextBlock Style="{StaticResource FieldLabelStyle}" Text="条目名称" />
-                                    <TextBox AutomationProperties.Name="条目名称"
+                                    <TextBox Margin="0"
+                                             AutomationProperties.Name="条目名称"
                                              KeyDown="CommitOnEnter"
                                              IsEnabled="{Binding HasSelectedDataEntry}"
-                                             ToolTip="改名字不影响已经复制进消息的内容；数据元素的名字可以留空、也可以重名"
+                                             ToolTip="改名不影响已复制内容；元素名可空、可重名"
                                              Text="{Binding DataEntryName, UpdateSourceTrigger=LostFocus}" />
                                 </StackPanel>
                             </Grid>
@@ -1213,12 +2403,16 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <TextBlock Margin="10,8"
-                                   Style="{StaticResource SectionTitleStyle}"
-                                   Text="{Binding RecordsTitle}" />
-                        <Grid Grid.Row="1"
-                              Margin="8,0,8,8">
+                        <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding RecordsTitle}" />
+                        </Border>
+                        <Grid Grid.Row="1" Margin="0,2,0,0">
+                            <!-- 边框必须显式关掉：ListView 不写 BorderThickness 时走系统模板，
+                                 会在面板里再套一圈深色 1px 描边，和面板边框错开 2px。 -->
                             <ListView x:Name="RecordList"
+                                      Margin="4,0,4,4"
+                                      Background="Transparent"
+                                      BorderThickness="0"
                                       ItemsSource="{Binding Records}"
                                       SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
                                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
@@ -1228,13 +2422,15 @@
                                 <ListView.View>
                                     <GridView>
                                         <GridViewColumn Header="时间"
-                                                        Width="104"
+                                                        Width="86"
                                                         DisplayMemberBinding="{Binding TimeText}" />
                                         <GridViewColumn Header="方向"
-                                                        Width="46"
+                                                        Width="40"
                                                         DisplayMemberBinding="{Binding DirectionText}" />
                                         <!-- 名称长了会裁，裁了必须能悬停看全，不然只能去翻日志。 -->
-                                        <GridViewColumn Header="消息" Width="140">
+                                        <!-- 消息列 160：默认窗宽下 "S2F41W NewMessage" 这种
+                                             短名也得完整显示，108 时十几个字符就要打点。 -->
+                                        <GridViewColumn Header="消息" Width="160">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
                                                     <TextBlock Text="{Binding MessageText}"
@@ -1244,20 +2440,22 @@
                                             </GridViewColumn.CellTemplate>
                                         </GridViewColumn>
                                         <GridViewColumn Header="SystemBytes"
-                                                        Width="92"
+                                                        Width="84"
                                                         DisplayMemberBinding="{Binding SystemBytesText}" />
+                                        <!-- 状态列 112：最长的是「无人等待的回复」7 个字，
+                                             100 时最后一个字会被裁掉。 -->
                                         <GridViewColumn Header="状态"
                                                         Width="112"
                                                         DisplayMemberBinding="{Binding StatusText}" />
+                                        <!-- 耗时列 84：T3 到点后是 "45005 ms"，56 时最后半个字
+                                             会被裁；T3 配成一天的极端值是 8 位数，84 才够。 -->
                                         <GridViewColumn Header="耗时"
-                                                        Width="62"
+                                                        Width="84"
                                                         DisplayMemberBinding="{Binding ElapsedText}" />
                                     </GridView>
                                 </ListView.View>
                             </ListView>
-                            <TextBlock HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       Foreground="{StaticResource MutedBrush}"
+                            <TextBlock Style="{StaticResource EmptyHintStyle}"
                                        Text="{Binding RecordsHint}" />
                         </Grid>
                     </Grid>
@@ -1272,34 +2470,58 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <TextBlock Margin="10,8"
-                                   Style="{StaticResource SectionTitleStyle}"
-                                   Text="详情" />
+                        <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
+                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="详情" />
+                        </Border>
+                        <!-- 和上面那张表用同一套表面：浅底、1px 描边、4 圆角。
+                             以前这里是零边框的裸文本，和上方的表格格格不入。 -->
                         <TextBox x:Name="RecordDetailBox"
                                  Grid.Row="1"
-                                 Margin="8,0,8,8"
-                                 BorderThickness="0"
-                                 IsReadOnly="True"
+                                 Margin="4,4,4,8"
+                                 Padding="10,8"
                                  AcceptsReturn="True"
-                                 FontFamily="Cascadia Mono"
+                                 Background="{StaticResource SubtleSurfaceBrush}"
+                                 BorderBrush="{StaticResource DividerBrush}"
+                                 FontFamily="{StaticResource MonoFontFamily}"
+                                 FontSize="12"
                                  HorizontalScrollBarVisibility="Auto"
+                                 IsReadOnly="True"
                                  MouseDoubleClick="ToggleDetailExpand"
                                  Text="{Binding RecordDetail, Mode=OneWay}"
                                  TextWrapping="NoWrap"
-                                 VerticalScrollBarVisibility="Auto"
-                                 ToolTip="大消息的正文折叠着，双击展开或收起" />
+                                 ToolTip="大消息正文默认折叠，双击展开"
+                                 VerticalScrollBarVisibility="Auto">
+                            <TextBox.Style>
+                                <!-- 没选中记录时框里放的是那句空态提示，按空态文字的规矩居中、
+                                     用灰色；选中之后是正文，从左上角写起，和 SML 预览同一个摆法。
+                                     只设 VerticalContentAlignment 只做到上下居中，文字还贴在
+                                     左边，和上面「尚无通信记录」的居中对不上，所以补 TextAlignment。 -->
+                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedRecord}" Value="{x:Null}">
+                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                            <Setter Property="TextAlignment" Value="Center" />
+                                            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
                     </Grid>
                 </Border>
             </Grid>
         </Grid>
 
         <Border Grid.Row="2"
-                Padding="10,5"
+                Height="30"
+                Padding="12,0"
                 Background="White"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,1,0,0">
             <!-- 出错时变红：状态栏一句话要能区分「刚才那句是报错了」还是「已保存」这类提示。 -->
-            <TextBlock AutomationProperties.AutomationId="StatusBar"
+            <TextBlock VerticalAlignment="Center"
+                       AutomationProperties.AutomationId="StatusBar"
+                       FontSize="12"
                        Foreground="{Binding StatusBrush}"
                        Text="{Binding StatusMessage}"
                        TextTrimming="CharacterEllipsis"
