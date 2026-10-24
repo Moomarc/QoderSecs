@@ -11,7 +11,6 @@
         Background="#F4F5F7"
         FontFamily="{DynamicResource UiFontFamily}"
         FontSize="13"
-        Deactivated="WindowDeactivated"
         PreviewMouseDown="WindowPreviewMouseDown">
     <!-- MinWidth 880 的来由：三栏下限 230 + 300 + 300、两条分隔条 10、主区左右
          外边距 20，再加窗口左右那圈不可见的 12px 拉伸边框（150% 下约 8 DIP），
@@ -1374,10 +1373,6 @@
         </HierarchicalDataTemplate>
     </Window.Resources>
 
-    <Window.InputBindings>
-        <KeyBinding Command="{Binding CloseConfigPanelCommand}" Key="Escape" />
-    </Window.InputBindings>
-
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -1502,7 +1497,7 @@
                                             Style="{StaticResource IconButtonStyle}"
                                             Command="{Binding CloseConfigPanelCommand}"
                                             Content="&#xE8BB;"
-                                            ToolTip="关闭 (Esc)" />
+                                            ToolTip="关闭" />
                                     <TextBlock FontSize="15"
                                                Style="{StaticResource SectionTitleStyle}"
                                                Text="连接参数" />

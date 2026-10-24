@@ -83,7 +83,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 弹层被别的途径关掉时（例如 Esc、窗口失活），把按钮的选中态也收回来，
+    /// 弹层被别的途径关掉时，把按钮的选中态也收回来，
     /// 免得留下「按钮亮着、面板已经没了」的状态，下一次点击还得按两下。
     /// </summary>
     private void ConfigPanelPopupClosed(object? sender, EventArgs e)
@@ -92,28 +92,6 @@ public partial class MainWindow : Window
         {
             ConfigPanelToggle.IsChecked = false;
         }
-    }
-
-    /// <summary>切到别的窗口也算「点在外面」：参数面板没有理由留在别的程序后面。</summary>
-    private void WindowDeactivated(object? sender, EventArgs e)
-    {
-        if (ConfigPanelToggle.IsChecked == true)
-        {
-            ConfigPanelToggle.IsChecked = false;
-        }
-    }
-
-    private static bool IsWithinVisual(DependencyObject? source, DependencyObject ancestor)
-    {
-        for (var node = source; node is not null; node = VisualTreeHelper.GetParent(node))
-        {
-            if (ReferenceEquals(node, ancestor))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void FollowDetail()
@@ -393,14 +371,6 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel viewModel)
         {
             return;
-        }
-
-        // 参数弹层是独立顶层窗口，点它内部的控件走不到这里；能走到就说明点在别处。
-        // 点在「连接参数」按钮上时不在这里关：那一下交给按钮自己的开关，
-        // 否则先在按下时关掉，松开时按钮又把面板翻开了。
-        if (ConfigPanelPopup.IsOpen && !IsWithinVisual(e.OriginalSource as DependencyObject, ConfigPanelToggle))
-        {
-            ConfigPanelToggle.IsChecked = false;
         }
 
         if (e.OriginalSource is Visual source)
