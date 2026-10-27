@@ -259,8 +259,41 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 树的快捷键：Delete 直接删选中节点；F2 就地编辑选中那一行；Insert 打开选中节点的右键菜单，
-    /// 键盘用户从那里进「添加子项 / 添加同级」的类型二级菜单；Ctrl+C / Ctrl+V 复制粘贴选中子树。
+    /// 窗口级快捷键：Ctrl+C / Ctrl+V 复制粘贴结构节点。只绑在树上是不够的——切页签之后
+    /// 键盘焦点不会跟着走，空结构树更是连一行都没有，两件事合起来就是「字典里复制的东西
+    /// 切到结构页按 Ctrl+V 没反应」。文本框和打开着的菜单放过，那些地方自己有这组快捷键。
+    /// </summary>
+    private void WindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel
+            || !e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            return;
+        }
+
+        if (Keyboard.FocusedElement is TextBoxBase or PasswordBox or MenuItem)
+        {
+            return;
+        }
+
+        if (e.Key == Key.C && viewModel.CopyNodeCommand.CanExecute(null))
+        {
+            viewModel.CopyNodeCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.V && viewModel.PasteNodeCommand.CanExecute(null))
+        {
+            viewModel.PasteNodeCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// 树自己的快捷键：Delete 直接删选中节点；F2 就地编辑选中那一行；Insert 打开选中节点的右键菜单，
+    /// 键盘用户从那里进「添加子项 / 添加同级」的类型二级菜单。
+    /// Ctrl+C / Ctrl+V 在窗口那一层收，切了页签也照样能按。
     /// </summary>
     private void NodeTreePreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -280,24 +313,6 @@ public partial class MainWindow : Window
 
             e.Handled = true;
             return;
-        }
-
-        // 就地编辑的输入框里 Ctrl+C / Ctrl+V 是复制粘贴文本，不能抢成节点的复制粘贴。
-        if (e.OriginalSource is not TextBox && e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
-        {
-            if (e.Key == Key.C && viewModel.CopyNodeCommand.CanExecute(null))
-            {
-                viewModel.CopyNodeCommand.Execute(null);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Key == Key.V && viewModel.PasteNodeCommand.CanExecute(null))
-            {
-                viewModel.PasteNodeCommand.Execute(null);
-                e.Handled = true;
-                return;
-            }
         }
 
         if (e.Key == Key.Delete)

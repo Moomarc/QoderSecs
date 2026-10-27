@@ -1957,7 +1957,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             .Where(node => !node.IsExpanded)
             .Select(node => node.Element)
             .ToHashSet(ReferenceEqualityComparer.Instance);
-        var selected = SelectedNode?.Element;
+        // 这里问的是结构那一轨，不能问 SelectedNode：后者跟着页签走，人停在字典页时
+        // 换一条消息也会走到这里，拿到的会是字典条目，塞回结构轨之后所有结构命令
+        // 都会作用在字典元素上（条目被加子项、结构树看起来「点不动」）。
+        var selected = _selectedStructureNode?.Element;
 
         _structureNodes.Clear();
         StructureRootItems.Clear();

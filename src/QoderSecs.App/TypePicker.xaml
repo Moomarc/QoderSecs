@@ -1,0 +1,82 @@
+<UserControl x:Class="QoderSecs.App.TypePicker"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:QoderSecs.App"
+             x:Name="Root"
+             Focusable="False"
+             PreviewKeyDown="RootPreviewKeyDown">
+    <UserControl.Resources>
+        <!-- 弹层里的一格类型。尺寸和右键菜单那套 TypeSubmenuItemStyle 对齐（120 宽、13 号字、
+             10 的内边距），另起一份模板只是为了不受 Menu 开关行为的约束：这里要点外面才收。 -->
+        <Style x:Key="PickerItemStyle" TargetType="Button">
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Padding="{TemplateBinding Padding}"
+                                Background="Transparent"
+                                CornerRadius="4"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                            <!-- 键盘走到的位置和鼠标悬停同一个底色：焦点不进弹出层，
+                                 高亮是这边挂的 IsActive，不画额外焦点框。 -->
+                            <Trigger Property="local:TypePicker.IsActive" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource SelectedBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Button x:Name="Toggle"
+                Content="{Binding Text, ElementName=Root}"
+                Click="ToggleClick" />
+        <!-- StaysOpen=False 就是「点外面才关」：鼠标划出去它不动，点下去才收。 -->
+        <Popup x:Name="TypeDrop"
+               AllowsTransparency="True"
+               Closed="DropClosed"
+               Focusable="False"
+               HorizontalOffset="0"
+               Opened="DropOpened"
+               Placement="Bottom"
+               PlacementTarget="{Binding ElementName=Toggle}"
+               PopupAnimation="None"
+               StaysOpen="False"
+               VerticalOffset="4">
+            <Border Margin="0,0,12,12"
+                    Padding="4,5"
+                    Background="{DynamicResource PanelBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource OverlayCornerRadius}">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="18"
+                                      Opacity="0.14"
+                                      ShadowDepth="3" />
+                </Border.Effect>
+                <!-- 15 个类型排 3 列 × 5 行，和右键菜单那份一个排法。 -->
+                <WrapPanel x:Name="TypePanel" Width="366" Orientation="Horizontal" />
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>
