@@ -269,10 +269,10 @@
             </Setter>
         </Style>
 
-        <!-- 类型子菜单：只写元素代号后一格 76 就够，15 个类型排 5 列 × 3 行。
-             定宽 76 保证五列等宽，列内文字左对齐；弹层宽 388（380 + 左右内边距 4）。 -->
+        <!-- 类型子菜单：只写元素代号，15 个类型按组排四行，组间由面板画分隔线。
+             一格 76×28 保证五列等宽；弹层宽 390（380 + 左右内边距 4 和边框）。 -->
         <ItemsPanelTemplate x:Key="TypeMenuPanelTemplate">
-            <WrapPanel Width="380" Orientation="Horizontal" />
+            <app:TypeMenuPanel SeparatorBrush="{DynamicResource BorderBrush}" />
         </ItemsPanelTemplate>
 
         <!-- 顶栏那颗开着参数面板的开关按钮：按下态用浅强调底色，和主按钮区分开。 -->
@@ -690,16 +690,21 @@
              往前找——那会落到系统主题样式上（深色主题下菜单字是白的，落在白底上就看不见了）。 -->
         <Style TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}" />
 
-        <!-- 类型选项网格：15 个类型排 5 列 × 3 行，单列那一长串会把弹层拉到屏幕外。
-             一格 76×28，上下各留 1 的间距：行与行之间空 2px，悬停底色不会连成一片。 -->
+        <!-- 类型选项网格：15 个类型按组排四行，单列那一长串会把弹层拉到屏幕外。
+             一格 76×28，内容为 App.xaml 里那份彩色代号块并居中；上下各留 1 的间距，
+             行与行之间空 2px，悬停底色不会连成一片。 -->
         <Style x:Key="TypeSubmenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}">
             <Setter Property="Width" Value="76" />
             <Setter Property="MinHeight" Value="28" />
             <Setter Property="Margin" Value="0,1" />
-            <!-- 外层操作栏压到 12 号，展开的类型网格仍按正文 13 号，不跟着变小。 -->
             <Setter Property="FontSize" Value="13" />
-            <Setter Property="Padding" Value="10,0" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <!-- 内容是 ItemTypeOption 对象，模板负责画彩色代号块。
+                 不设这份模板的话，Menu 会把 ToString 出来的整条记录当文字。 -->
+            <Setter Property="HeaderTemplate" Value="{StaticResource TypeOptionContentTemplate}" />
+            <!-- 同上：UIA 名字显式取代号，不然读屏读到的是记录类型名。 -->
+            <Setter Property="AutomationProperties.Name" Value="{Binding Header}" />
         </Style>
 
         <!-- 页签上方那条操作栏：结构页六项、字典页四项。行高统一 30、12 号字、左右各 4 的
@@ -1138,7 +1143,7 @@
                       ItemsSource="{Binding Owner.ItemTypeOptions}">
                 <MenuItem.ItemContainerStyle>
                     <Style TargetType="MenuItem" BasedOn="{StaticResource TypeSubmenuItemStyle}">
-                        <Setter Property="Header" Value="{Binding Header}" />
+                        <Setter Property="Header" Value="{Binding}" />
                         <Setter Property="Command"
                                 Value="{Binding DataContext.Owner.AddChildCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                         <Setter Property="CommandParameter" Value="{Binding Type}" />
@@ -1151,7 +1156,7 @@
                       ItemsSource="{Binding Owner.ItemTypeOptions}">
                 <MenuItem.ItemContainerStyle>
                     <Style TargetType="MenuItem" BasedOn="{StaticResource TypeSubmenuItemStyle}">
-                        <Setter Property="Header" Value="{Binding Header}" />
+                        <Setter Property="Header" Value="{Binding}" />
                         <Setter Property="Command"
                                 Value="{Binding DataContext.Owner.AddSiblingCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                         <Setter Property="CommandParameter" Value="{Binding Type}" />
@@ -1306,7 +1311,7 @@
                  边敲边写、红框实时校验，和底部那两个框同一套语义（2026-10-18 定）。
                  多行值（A / J）在行内只占一行，改长内容仍走底部那块。 -->
             <Grid>
-                <StackPanel Orientation="Horizontal" ToolTip="{Binding ValidationError}">
+                <StackPanel Orientation="Horizontal" ToolTip="{Binding RowToolTip}">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
                             <Style.Triggers>
@@ -1770,6 +1775,10 @@
                                         <MenuItem Command="{Binding ImportLibraryCommand}" Header="导入 .sxml…" />
                                         <MenuItem Command="{Binding ExportLibraryCommand}" Header="导出 .sxml…" />
                                         <Separator />
+                                        <MenuItem Command="{Binding CheckAutoReplyCommand}"
+                                                  AutomationProperties.AutomationId="CheckAutoReplyMenuItem"
+                                                  Header="检查自动回复…" />
+                                        <Separator />
                                         <MenuItem Command="{Binding ClearLibraryCommand}" Header="清空消息库…" />
                                     </MenuItem>
                                 </Menu>
@@ -2035,11 +2044,13 @@
                                 </Grid.RowDefinitions>
                                 <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
                                     <app:TypePicker Text="+子项"
+                                                    AutomationProperties.AutomationId="AddChildTypePicker"
                                                     ToggleStyle="{StaticResource TabToolbarButtonStyle}"
                                                     IsEnabled="{Binding HasAddChildTarget}"
                                                     ItemsSource="{Binding ItemTypeOptions}"
                                                     Command="{Binding AddChildCommand}" />
                                     <app:TypePicker Text="+同级"
+                                                    AutomationProperties.AutomationId="AddSiblingTypePicker"
                                                     ToggleStyle="{StaticResource TabToolbarButtonStyle}"
                                                     IsEnabled="{Binding HasAddSiblingTarget}"
                                                     ItemsSource="{Binding ItemTypeOptions}"
@@ -2125,6 +2136,7 @@
                                                 </Style>
                                             </Grid.Style>
                                             <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
@@ -2238,6 +2250,25 @@
                                                 </TextBlock.Style>
                                             </TextBlock>
                                             </Grid>
+                                            <!-- 描述只在这一行编辑，宽度固定不跟着窗口拉：
+                                                 描述可能很长，但它不参与发送，没必要占满整条属性栏。 -->
+                                            <TextBlock Grid.Row="2"
+                                                       Grid.Column="1"
+                                                       Margin="0,8,6,0"
+                                                       VerticalAlignment="Center"
+                                                       Style="{StaticResource FieldLabelStyle}"
+                                                       Text="描述" />
+                                            <TextBox Grid.Row="2"
+                                                     Grid.Column="2"
+                                                     Width="180"
+                                                     Margin="0,8,0,0"
+                                                     HorizontalAlignment="Left"
+                                                     VerticalAlignment="Center"
+                                                     AutomationProperties.AutomationId="SelectedNodeDescription"
+                                                     AutomationProperties.Name="元素描述"
+                                                     KeyDown="CommitOnEnter"
+                                                     Text="{Binding EditDescription, UpdateSourceTrigger=LostFocus}"
+                                                     ToolTip="可选；悬停元素时显示" />
                                         </Grid>
                                         <!-- 大值不进输入框：只报大小，正文从剪贴板整段替换。 -->
                                         <Grid Grid.Row="1"
@@ -2408,6 +2439,16 @@
                                              IsEnabled="{Binding HasSelectedDataEntry}"
                                              ToolTip="改名不影响已复制内容；元素名可空、可重名"
                                              Text="{Binding DataEntryName, UpdateSourceTrigger=LostFocus}" />
+                                    <TextBlock Margin="10,8,0,4"
+                                               Style="{StaticResource FieldLabelStyle}"
+                                               Text="元素描述" />
+                                    <TextBox Margin="0"
+                                             AutomationProperties.AutomationId="EntryNodeDescription"
+                                             AutomationProperties.Name="元素描述"
+                                             KeyDown="CommitOnEnter"
+                                             IsEnabled="{Binding HasSelectedNode}"
+                                             Text="{Binding SelectedNode.EditDescription, UpdateSourceTrigger=LostFocus}"
+                                             ToolTip="可选；悬停元素时显示" />
                                 </StackPanel>
                             </Grid>
                         </TabItem>

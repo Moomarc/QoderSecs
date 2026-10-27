@@ -227,6 +227,55 @@ public sealed class MessageLibraryTests
         StringAssert.Contains(library.Export(), "Description=\"\"");
     }
 
+    /// <summary>
+    /// 元素级 Description 是 SecsExpress 写在元素属性上的，和消息级 Description 不是同一个位置。
+    /// 只改目标元素，消息结构里别的描述和 DataDictionary 里的描述都不能跟着动。
+    /// </summary>
+    [TestMethod]
+    public void ElementDescriptions_SurviveRoundTripAndTargetedEdits()
+    {
+        const string xml = """
+            <SXML>
+                <DataDictionary>
+                    <L Name="sample" Description="条目说明">
+                        <U4 Name="SVID"><Value>1</Value></U4>
+                    </L>
+                </DataDictionary>
+                <MessageDictionary>
+                    <Message Name="S1F1">
+                        <Stream>1</Stream>
+                        <Function>1</Function>
+                        <Structure>
+                            <L Name="root" Description="根说明">
+                                <U4 Name="SVID" Description="control state"><Value>10000</Value></U4>
+                            </L>
+                        </Structure>
+                    </Message>
+                </MessageDictionary>
+            </SXML>
+            """;
+        var library = MessageLibrary.Load(xml);
+        var root = library.Messages[0].Structure!.Element("L")!;
+        var svid = root.Element("U4")!;
+
+        Assert.AreEqual("根说明", new StructureNode(root).Description);
+        Assert.AreEqual("control state", new StructureNode(svid).Description);
+        Assert.AreEqual("条目说明", library.DataEntries[0].Node.Description);
+
+        StructureEditor.SetDescription(svid, " 控制状态 ");
+
+        var exported = library.Export();
+        StringAssert.Contains(exported, "Name=\"SVID\" Description=\"控制状态\"");
+        Assert.IsFalse(exported.Contains("control state", StringComparison.Ordinal));
+
+        var reloaded = MessageLibrary.Load(exported);
+        var reloadedRoot = reloaded.Messages[0].Structure!.Element("L")!;
+        Assert.AreEqual("根说明", new StructureNode(reloadedRoot).Description, "没改的那一层描述原样保留");
+        Assert.AreEqual("条目说明", reloaded.DataEntries[0].Node.Description);
+        Assert.AreEqual("控制状态", new StructureNode(reloadedRoot.Element("U4")!).Description);
+        Assert.AreEqual("10000", new StructureNode(reloadedRoot.Element("U4")!).ValueText);
+    }
+
     [TestMethod]
     public void SetHeader_RewritesStreamFunctionAndPutsWBitAfterFunction()
     {

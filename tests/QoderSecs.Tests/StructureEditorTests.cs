@@ -354,6 +354,28 @@ public sealed class StructureEditorTests
         Assert.IsNull(ppid.Attribute("Name"), "全空白也算没名字");
     }
 
+    // ---------- 改描述 ----------
+
+    [TestMethod]
+    public void SetDescription_WritesTheAttributeAndLeavesOtherContentAlone()
+    {
+        var root = Root(Sample());
+        var ppid = root.Elements().First();
+        ppid.SetAttributeValue("Custom", "keep");
+        var childCount = ppid.Elements().Count();
+
+        StructureEditor.SetDescription(ppid, "  配方号  ");
+
+        Assert.AreEqual("配方号", ppid.Attribute("Description")!.Value);
+        Assert.AreEqual("PPID", ppid.Attribute("Name")!.Value);
+        Assert.AreEqual("keep", ppid.Attribute("Custom")!.Value);
+        Assert.AreEqual(childCount, ppid.Elements().Count(), "描述只动属性，子节点一个不碰");
+
+        StructureEditor.SetDescription(ppid, "  ");
+        Assert.IsNull(ppid.Attribute("Description"), "清空描述是把属性去掉，不给没写过的元素添空属性");
+        Assert.AreEqual("keep", ppid.Attribute("Custom")!.Value);
+    }
+
     // ---------- 改值 ----------
 
     [TestMethod]

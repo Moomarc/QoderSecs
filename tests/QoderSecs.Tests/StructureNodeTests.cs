@@ -57,6 +57,20 @@ public sealed class StructureNodeTests
     }
 
     [TestMethod]
+    public void Description_ComesFromTheElementAttribute()
+    {
+        var described = Node("""<U4 Name="SVID" Description="control state"><Value>10000</Value></U4>""");
+
+        Assert.AreEqual("control state", described.Description);
+        Assert.IsTrue(described.HasDescription);
+        Assert.AreEqual("SVID", described.Name);
+
+        Assert.AreEqual(string.Empty, Node("<U4><Value>1</Value></U4>").Description);
+        Assert.IsFalse(Node("<U4><Value>1</Value></U4>").HasDescription);
+        Assert.IsFalse(Node("""<U4 Description="   "><Value>1</Value></U4>""").HasDescription);
+    }
+
+    [TestMethod]
     public void Children_ExcludeValueAndMaps()
     {
         var list = Node("""

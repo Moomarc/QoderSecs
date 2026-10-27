@@ -30,6 +30,9 @@
 
     <!-- 发布落点固定为仓库根的 release\；bin 下只是编译缓存，不是发布目录。 -->
     <PublishDir>$(MSBuildThisFileDirectory)..\..\release\</PublishDir>
+
+    <!-- exe 的版本号跟 Release 标签走，发新版时一起改。 -->
+    <Version>1.5.0</Version>
   </PropertyGroup>
 
 </Project>

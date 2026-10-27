@@ -7,29 +7,44 @@ using QoderSecs.Core.Messages;
 namespace QoderSecs.App.ViewModels;
 
 /// <summary>
+/// 类型选项在哪一组。菜单按组分行、组间画线：只写代号的排法不变，
+/// 但 I 系列、U 系列、F 系列各自成块，不用逐格读代号也能看出边界。
+/// </summary>
+public enum ItemTypeGroup
+{
+    Basic,
+    Signed,
+    Unsigned,
+    Float
+}
+
+/// <summary>
 /// 右键菜单和工具栏「+子项 / +同级」共用的类型选项表，顺序即菜单顺序。
 /// 只给元素代号（L / A / U4 …）：SECS-II 工程师看代号就够，带上中文会让
-/// 15 格排不进 3 行，窗口压到下限时还得滚动。
+/// 15 格排不开；分组靠行距、分隔线和色块，不靠文字说明。
 /// </summary>
-public sealed record ItemTypeOption(SecsItemType Type, string Header)
+public sealed record ItemTypeOption(SecsItemType Type, string Header, ItemTypeGroup Group)
 {
+    /// <summary>和结构树的类型色块同一份颜色，两处对同一类型不会认成两种颜色。</summary>
+    public SolidColorBrush Accent => TypePalette.Of(Type);
+
     public static IReadOnlyList<ItemTypeOption> All { get; } =
     [
-        new(SecsItemType.List, "L"),
-        new(SecsItemType.A, "A"),
-        new(SecsItemType.B, "B"),
-        new(SecsItemType.Boolean, "Boolean"),
-        new(SecsItemType.J, "J"),
-        new(SecsItemType.I1, "I1"),
-        new(SecsItemType.I2, "I2"),
-        new(SecsItemType.I4, "I4"),
-        new(SecsItemType.I8, "I8"),
-        new(SecsItemType.U1, "U1"),
-        new(SecsItemType.U2, "U2"),
-        new(SecsItemType.U4, "U4"),
-        new(SecsItemType.U8, "U8"),
-        new(SecsItemType.F4, "F4"),
-        new(SecsItemType.F8, "F8")
+        new(SecsItemType.List, "L", ItemTypeGroup.Basic),
+        new(SecsItemType.A, "A", ItemTypeGroup.Basic),
+        new(SecsItemType.J, "J", ItemTypeGroup.Basic),
+        new(SecsItemType.B, "B", ItemTypeGroup.Basic),
+        new(SecsItemType.Boolean, "Boolean", ItemTypeGroup.Basic),
+        new(SecsItemType.I1, "I1", ItemTypeGroup.Signed),
+        new(SecsItemType.I2, "I2", ItemTypeGroup.Signed),
+        new(SecsItemType.I4, "I4", ItemTypeGroup.Signed),
+        new(SecsItemType.I8, "I8", ItemTypeGroup.Signed),
+        new(SecsItemType.U1, "U1", ItemTypeGroup.Unsigned),
+        new(SecsItemType.U2, "U2", ItemTypeGroup.Unsigned),
+        new(SecsItemType.U4, "U4", ItemTypeGroup.Unsigned),
+        new(SecsItemType.U8, "U8", ItemTypeGroup.Unsigned),
+        new(SecsItemType.F4, "F4", ItemTypeGroup.Float),
+        new(SecsItemType.F8, "F8", ItemTypeGroup.Float)
     ];
 }
 
@@ -39,13 +54,6 @@ public sealed record ItemTypeOption(SecsItemType Type, string Header)
 /// </summary>
 public sealed class StructureNodeViewModel : ObservableObject
 {
-    private static readonly SolidColorBrush ListBrush = FrozenBrush(0x64, 0x74, 0x8B);
-    private static readonly SolidColorBrush TextBrush = FrozenBrush(0x16, 0xA3, 0x4A);
-    private static readonly SolidColorBrush BinaryBrush = FrozenBrush(0xD9, 0x77, 0x06);
-    private static readonly SolidColorBrush BooleanBrush = FrozenBrush(0x93, 0x33, 0xEA);
-    private static readonly SolidColorBrush UnknownBrush = FrozenBrush(0x9C, 0xA3, 0xAF);
-    private static readonly SolidColorBrush NumericBrush = FrozenBrush(0x25, 0x63, 0xEB);
-
     private bool _isExpanded = true;
     private bool _isSelected;
     private bool _isEditing;
@@ -110,17 +118,25 @@ public sealed class StructureNodeViewModel : ObservableObject
     /// <summary>色块上的字。未知类型原样显示元素名，让"v1 不编辑"的东西也看得见是什么。</summary>
     public string TypeLabel => Node.ElementName;
 
-    public SolidColorBrush BadgeBrush => Node.ItemType switch
-    {
-        SecsItemType.List => ListBrush,
-        SecsItemType.A or SecsItemType.J => TextBrush,
-        SecsItemType.B => BinaryBrush,
-        SecsItemType.Boolean => BooleanBrush,
-        null => UnknownBrush,
-        _ => NumericBrush
-    };
+    public SolidColorBrush BadgeBrush => TypePalette.Of(Node.ItemType);
 
     public string DisplayName => Node.Name ?? string.Empty;
+
+    public string Description => Node.Description;
+
+    public bool HasDescription => Node.HasDescription;
+
+    /// <summary>
+    /// 树行的悬停文字。没有描述时保持原来的校验错误提示；
+    /// 空描述不挂空提示，鼠标停上去不会弹一个空白小框。
+    /// </summary>
+    public string? RowToolTip => (HasDescription ? Description.Trim() : null, ValidationError) switch
+    {
+        (null, null) => null,
+        (not null, null) => Description.Trim(),
+        (null, not null) => ValidationError,
+        _ => $"{Description.Trim()}{Environment.NewLine}{ValidationError}"
+    };
 
     /// <summary>树行上的值摘要。大值只报大小，不把整段正文拉进界面；数组末尾点个数的标记，行内不用点开就知道填了几项。</summary>
     public string ValuePreview => Node.ItemType switch
@@ -228,6 +244,26 @@ public sealed class StructureNodeViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 元素描述只在底部那个小框里编辑：它不参与 SML 生成，也不影响发送，
+    /// 所以不走 OnStructureEdited 那套预览刷新，失焦提交一次就够。
+    /// </summary>
+    public string EditDescription
+    {
+        get => Description;
+        set
+        {
+            var trimmed = value?.Trim() ?? string.Empty;
+            if (string.Equals(trimmed, Description.Trim(), StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            StructureEditor.SetDescription(Element, value);
+            RefreshSnapshot();
+        }
+    }
+
     public string EditValue
     {
         // 大值不给绑定值：就算框已经折叠，WPF 仍会把 Text 送进控件，几十兆文本照样要排版。
@@ -298,6 +334,10 @@ public sealed class StructureNodeViewModel : ObservableObject
     {
         Node = new StructureNode(Element);
         OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(HasDescription));
+        OnPropertyChanged(nameof(EditDescription));
+        OnPropertyChanged(nameof(RowToolTip));
         OnPropertyChanged(nameof(ValuePreview));
         OnPropertyChanged(nameof(IsInvalid));
         OnPropertyChanged(nameof(ValidationError));
@@ -332,12 +372,5 @@ public sealed class StructureNodeViewModel : ObservableObject
 
         var flat = value[..40].Replace('\r', ' ').Replace('\n', ' ');
         return $"{flat}…";
-    }
-
-    private static SolidColorBrush FrozenBrush(byte r, byte g, byte b)
-    {
-        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
-        brush.Freeze();
-        return brush;
     }
 }

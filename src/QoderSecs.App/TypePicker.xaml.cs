@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -11,7 +12,7 @@ namespace QoderSecs.App;
 /// <summary>
 /// 工具栏上的类型下拉：点一下展开，点外面或者按 Esc 才收。
 /// 不用 MenuItem 的子菜单，是因为那种子菜单的开关归 Menu 管，鼠标划到别处就会自己收起，
-/// 外面改不动；这里换成自己控制的 Popup。类型格是 5 列 × 3 行，尺寸和右键菜单那套对齐。
+/// 外面改不动；这里换成自己控制的 Popup。类型格按组排四行，尺寸和右键菜单那套对齐。
 /// 键盘焦点一直留在那只按钮上，格子里的高亮由 IsActive 画：弹出层是独立 HWND，
 /// 焦点一进去，方向键和回车就交给它自己的窗口，主窗这边什么也收不到。
 /// </summary>
@@ -50,8 +51,11 @@ public partial class TypePicker : UserControl
         typeof(ICommand),
         typeof(TypePicker));
 
-    /// <summary>类型格的列数。要和 TypePicker.xaml 里 WrapPanel 的宽度、单元格宽度对上。</summary>
-    private const int ColumnCount = 5;
+    /// <summary>按当前顺序排好的类型，下标和 TypePanel 的子项一一对应。</summary>
+    private readonly List<ItemTypeOption> _options = [];
+
+    /// <summary>每一行在 _options 里的下标；上下移动要按组换行，不能拿总数做算术。</summary>
+    private readonly List<List<int>> _rows = [];
 
     private int _activeIndex = -1;
 
@@ -93,6 +97,8 @@ public partial class TypePicker : UserControl
     private void RebuildItems()
     {
         TypePanel.Children.Clear();
+        _options.Clear();
+        _rows.Clear();
         _activeIndex = -1;
         if (ItemsSource is null)
         {
@@ -100,6 +106,7 @@ public partial class TypePicker : UserControl
         }
 
         var style = (Style)FindResource("PickerItemStyle");
+        var contentTemplate = TryFindResource("TypeOptionContentTemplate") as DataTemplate;
         foreach (var item in ItemsSource)
         {
             if (item is not ItemTypeOption option)
@@ -107,14 +114,37 @@ public partial class TypePicker : UserControl
                 continue;
             }
 
+            _options.Add(option);
             var button = new Button
             {
-                Content = option.Header,
+                Content = option,
+                DataContext = option,
                 Tag = option,
-                Style = style
+                Style = style,
+                ContentTemplate = contentTemplate
             };
+            // 内容是对象而不是字符串，UIA 不会自己取 Header，必须显式给一个念得出来的名字。
+            AutomationProperties.SetName(button, option.Header);
             button.Click += TypeClick;
             TypePanel.Children.Add(button);
+        }
+
+        BuildRows();
+    }
+
+    /// <summary>相邻同组切成一行，给上下方向键用；行内左右移动不跨组。</summary>
+    private void BuildRows()
+    {
+        ItemTypeGroup? current = null;
+        for (var index = 0; index < _options.Count; index++)
+        {
+            if (_rows.Count == 0 || _options[index].Group != current)
+            {
+                _rows.Add([]);
+                current = _options[index].Group;
+            }
+
+            _rows[^1].Add(index);
         }
     }
 
@@ -141,7 +171,7 @@ public partial class TypePicker : UserControl
 
     /// <summary>
     /// 键盘都在这一侧收：焦点从没离开按钮，所以弹出层里收不到键。
-    /// 收起时只认 Esc，展开后 Esc 收、方向键在 5 列 × 3 行的格子里走、Enter / Space 落项。
+    /// 收起时只认 Esc，展开后 Esc 收、方向键在分组网格里走、Enter / Space 落项。
     /// </summary>
     private void RootPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -186,28 +216,54 @@ public partial class TypePicker : UserControl
 
     private void MoveActive(Key key)
     {
-        var count = TypePanel.Children.Count;
-        if (count == 0)
+        if (_options.Count == 0)
         {
             return;
         }
 
         if (_activeIndex < 0)
         {
-            SetActive(key == Key.Up ? count - 1 : 0);
+            SetActive(key == Key.Up ? _options.Count - 1 : 0);
             return;
         }
 
-        var column = _activeIndex % ColumnCount;
-        var next = key switch
+        var (rowIndex, column) = Locate(_activeIndex);
+        switch (key)
         {
-            Key.Left => column > 0 ? _activeIndex - 1 : _activeIndex,
-            Key.Right => column < ColumnCount - 1 && _activeIndex + 1 < count ? _activeIndex + 1 : _activeIndex,
-            Key.Up => _activeIndex - ColumnCount >= 0 ? _activeIndex - ColumnCount : _activeIndex,
-            _ => _activeIndex + ColumnCount < count ? _activeIndex + ColumnCount : _activeIndex
-        };
+            case Key.Left when column > 0:
+                SetActive(_rows[rowIndex][column - 1]);
+                break;
+            case Key.Right when column + 1 < _rows[rowIndex].Count:
+                SetActive(_rows[rowIndex][column + 1]);
+                break;
+            case Key.Up when rowIndex > 0:
+                SetActive(NearestInRow(_rows[rowIndex - 1], column));
+                break;
+            case Key.Down when rowIndex + 1 < _rows.Count:
+                SetActive(NearestInRow(_rows[rowIndex + 1], column));
+                break;
+        }
+    }
 
-        SetActive(next);
+    /// <summary>
+    /// 换行时列数会变（第一行 5 格、第二三行 4 格、最后一行 2 格），
+    /// 落点取目标行里最接近原列的那一格，而不是落空或跳回开头。
+    /// </summary>
+    private static int NearestInRow(List<int> row, int column) =>
+        row[Math.Min(column, row.Count - 1)];
+
+    private (int Row, int Column) Locate(int index)
+    {
+        for (var row = 0; row < _rows.Count; row++)
+        {
+            var column = _rows[row].IndexOf(index);
+            if (column >= 0)
+            {
+                return (row, column);
+            }
+        }
+
+        return (0, 0);
     }
 
     private void SetActive(int index)

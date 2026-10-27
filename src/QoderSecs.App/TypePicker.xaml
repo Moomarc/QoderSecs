@@ -6,18 +6,18 @@
              Focusable="False"
              PreviewKeyDown="RootPreviewKeyDown">
     <UserControl.Resources>
-        <!-- 弹层里的一格类型。尺寸和右键菜单那套 TypeSubmenuItemStyle 对齐（76 宽、28 高、
-             13 号字），另起一份模板只是为了不受 Menu 开关行为的约束：这里要点外面才收。
-             只写代号之后格子缩到 76：Boolean 是最长的一格，13 号字约 50，留 10+10 的内边距刚好。
-             上下各留 1 的内边距，行高 28 之间隔着 2px，悬停底色不会连成一片。 -->
+        <!-- 弹层里的一格类型。尺寸和右键菜单那套 TypeSubmenuItemStyle 对齐（76 宽、28 高），
+             另起一份模板只是为了不受 Menu 开关行为的约束：这里要点外面才收。
+             内容不再是一行文字，而是 App.xaml 里那份彩色代号块，格子居中：
+             每格一个色块，加上 TypeMenuPanel 的组间分隔线，选项边界不用逐字读。 -->
         <Style x:Key="PickerItemStyle" TargetType="Button">
             <Setter Property="Width" Value="76" />
             <Setter Property="Height" Value="28" />
             <Setter Property="Margin" Value="0,1" />
-            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Padding" Value="0" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
@@ -77,8 +77,10 @@
                                       Opacity="0.14"
                                       ShadowDepth="3" />
                 </Border.Effect>
-                <!-- 15 个类型排 5 列 × 3 行，和右键菜单那份一个排法。 -->
-                <WrapPanel x:Name="TypePanel" Width="380" Orientation="Horizontal" />
+                <!-- 按组排四行（基础类型 5 格、有符号 4 格、无符号 4 格、浮点 2 格），
+                     组间画分隔线；和右键菜单那份是同一个面板。 -->
+                <local:TypeMenuPanel x:Name="TypePanel"
+                                     SeparatorBrush="{DynamicResource BorderBrush}" />
             </Border>
         </Popup>
     </Grid>

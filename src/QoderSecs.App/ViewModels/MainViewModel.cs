@@ -136,6 +136,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ClearLibrary();
             return Task.CompletedTask;
         });
+        CheckAutoReplyCommand = new RelayCommand(CheckAutoReply);
         NewMessageCommand = AsyncCommand(() =>
         {
             NewMessage();
@@ -205,6 +206,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand ExportLibraryCommand { get; }
 
     public AsyncRelayCommand ClearLibraryCommand { get; }
+
+    public RelayCommand CheckAutoReplyCommand { get; }
 
     public AsyncRelayCommand NewMessageCommand { get; }
 
@@ -1545,6 +1548,50 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RefreshEntryTree();
         StatusMessage = $"已清空消息库（原有 {summary}）。";
     }
+
+    /// <summary>
+    /// 整库扫一遍 AutoReply，只报不改。状态栏不标红：检查跑完了，不是程序出错；
+    /// 问题逐条写在报告里，断指仍走改名/删除那条置空口径，不在这里顺手改文本。
+    /// </summary>
+    private void CheckAutoReply()
+    {
+        var report = AutoReplyAudit.Run(_library);
+        var count = _library.Messages.Count;
+
+        if (!report.HasIssues)
+        {
+            StatusMessage = $"自动回复检查：{count} 条消息，未发现问题。";
+            MessageBox.Show(
+                $"检查了 {count} 条消息，自动回复配置一致。",
+                "自动回复检查",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        var lines = new List<string>
+        {
+            $"检查了 {count} 条消息，发现 {report.Issues.Count} 处问题"
+            + $"（错误 {report.ErrorCount}、警告 {report.WarningCount}）。",
+            string.Empty
+        };
+        lines.AddRange(report.Issues.Select(issue =>
+            $"[{SeverityLabel(issue.Severity)}] {MessageLabel(issue.Message)}：{issue.Text}"));
+
+        StatusMessage = $"自动回复检查：{count} 条消息，发现 {report.Issues.Count} 处问题"
+            + $"（错误 {report.ErrorCount}、警告 {report.WarningCount}）。";
+        MessageBox.Show(
+            string.Join(Environment.NewLine, lines),
+            "自动回复检查",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
+    private static string SeverityLabel(AutoReplyIssueSeverity severity) =>
+        severity == AutoReplyIssueSeverity.Error ? "错误" : "警告";
+
+    private static string MessageLabel(MessageEntry entry) =>
+        entry.Name.Length == 0 ? entry.Signature : $"{entry.Signature} · {entry.Name}";
 
     private void NewMessage()
     {

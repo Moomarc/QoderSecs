@@ -53,6 +53,11 @@ public sealed class StructureNode
 
     public string? Name => Element.Attribute("Name")?.Value;
 
+    /// <summary>SecsExpress 的元素级描述，写在元素的 Description 属性上；没有这个属性时是空串。</summary>
+    public string Description => Element.Attribute("Description")?.Value ?? string.Empty;
+
+    public bool HasDescription => !string.IsNullOrWhiteSpace(Description);
+
     public IReadOnlyList<StructureNode> Children { get; }
 
     /// <summary>&lt;Value&gt; 里的原文，多个值就是空格分隔的那一段。没有 Value 子元素时是空串。</summary>
