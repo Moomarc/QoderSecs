@@ -133,7 +133,8 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
         _ => _status.ToString()
     };
 
-    public string ElapsedText => ElapsedMilliseconds is { } ms ? $"{ms} ms" : string.Empty;
+    /// <summary>只给格子里填数字，单位在表头「耗时(ms)」上，列宽才收得下来。</summary>
+    public string ElapsedText => ElapsedMilliseconds is { } ms ? ms.ToString() : string.Empty;
 
     public string Signature => Header.Signature;
 
@@ -145,6 +146,10 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
     public string DirectionText => Direction == SecsDirection.Out ? "发出" : "收到";
 
     public string SystemBytesText => SystemBytes.ToString("X8");
+
+    /// <summary>行提示的完整文本。SystemBytes 不再占列，但值还得能查到；
+    /// 不在 XAML 里用 StringFormat 拼，那个写法在标记扩展里会被吞掉只剩裸值。</summary>
+    public string SystemBytesTooltip => $"SystemBytes {SystemBytesText}";
 
     public string TimeText => Timestamp.ToLocalTime().ToString("HH:mm:ss.fff");
 

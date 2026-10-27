@@ -23,7 +23,8 @@
     <None Update="TestData\sample-library.sxml" CopyToOutputDirectory="PreserveNewest" />
     <None Update="TestData\wafer-map-s12f9.sml" CopyToOutputDirectory="PreserveNewest" />
     <None Update="TestData\wafer-map.sxml" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\samples\common-commands.sxml" Link="TestData\common-commands.sxml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\rich-set.sxml" Link="TestData\rich-set.sxml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\samples\raw-set.sxml" Link="TestData\raw-set.sxml" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

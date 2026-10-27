@@ -15,11 +15,21 @@ public sealed class AppDataPaths
     private const string LegacyDataDirectoryName = "data";
 
     /// <summary>
-    /// 内嵌在程序里、启动时解到数据目录第一层的样本库文件名。
-    /// 它是 GEM 常用命令的骨架：结构留着、数值一律空，自动回复只配到同名的标准应答。
-    /// 这个名字同时是 exe 里内嵌资源的后缀，改一处要改两处（见 QoderSecs.App.csproj）。
+    /// 内嵌在程序里、启动时解到数据目录第一层的两份样本库。
+    /// rich-set 是 GEM 常用命令的全量骨架：结构留着、数值一律空，自动回复只配到同名的标准应答；
+    /// raw-set 只留 S1F1/2、S1F13/14 四条，变量带默认值，导入就能走完一轮自动回复。
+    /// 这两个名字同时是 exe 里内嵌资源的后缀，改一处要改两处（见 QoderSecs.App.csproj）。
     /// </summary>
-    public const string SampleFileName = "common-commands.sxml";
+    public const string RichSampleFileName = "rich-set.sxml";
+
+    public const string RawSampleFileName = "raw-set.sxml";
+
+    /// <summary>启动时按这个顺序解包。两份都缺才需要提示，缺一份也只提示一份。</summary>
+    public static readonly IReadOnlyList<string> SampleFileNames = new[]
+    {
+        RichSampleFileName,
+        RawSampleFileName
+    };
 
     public AppDataPaths(string executableDirectory)
     {
@@ -30,7 +40,8 @@ public sealed class AppDataPaths
         SettingsPath = Path.Combine(DataDirectory, "settings.json");
         LogsDirectory = Path.Combine(DataDirectory, "logs");
         SampleDirectory = DataDirectory;
-        SampleFilePath = Path.Combine(SampleDirectory, SampleFileName);
+        SampleFilePath = Path.Combine(SampleDirectory, RichSampleFileName);
+        RawSampleFilePath = Path.Combine(SampleDirectory, RawSampleFileName);
     }
 
     /// <summary>exe 所在目录，所有伴生文件都以这儿为根。</summary>
@@ -48,8 +59,11 @@ public sealed class AppDataPaths
     /// <summary>样本消息库所在目录：和 settings.json 同层，不再单独占一个 samples 文件夹。</summary>
     public string SampleDirectory { get; }
 
-    /// <summary>内嵌样本解出来之后的完整路径。程序只负责在文件不存在时解一份，之后不再管。</summary>
+    /// <summary>rich-set 解出来之后的完整路径。程序只负责在文件不存在时解一份，之后不再管。</summary>
     public string SampleFilePath { get; }
+
+    /// <summary>raw-set 解出来之后的完整路径，规则同上。</summary>
+    public string RawSampleFilePath { get; }
 
     /// <summary>
     /// 建目录，顺手把老名字的 data 整体改名过来。

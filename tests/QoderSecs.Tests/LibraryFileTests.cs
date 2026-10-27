@@ -180,7 +180,7 @@ public sealed class LibraryFileTests
     [TestMethod]
     public void HasLibraryExtension_AcceptsSxmlAndXmlOnly()
     {
-        Assert.IsTrue(LibraryFile.HasLibraryExtension(@"C:\库\common-commands.sxml"));
+        Assert.IsTrue(LibraryFile.HasLibraryExtension(@"C:\库\rich-set.sxml"));
         Assert.IsTrue(LibraryFile.HasLibraryExtension(@"C:\库\SAMPLE.XML"));
 
         // 拖进来的还可能是文件夹、没后缀的文件和别的文本：一律不收，不去读内容。

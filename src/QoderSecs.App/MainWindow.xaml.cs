@@ -1,5 +1,4 @@
-﻿using System.Collections.ObjectModel;
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -9,7 +8,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using QoderSecs.App.ViewModels;
-using QoderSecs.Core.Connection;
 using QoderSecs.Core.Messages;
 
 namespace QoderSecs.App;
@@ -26,7 +24,11 @@ public partial class MainWindow : Window
 
     private string _previousDetail = string.Empty;
 
-    private ObservableCollection<CommunicationRecord>? _recordsSource;
+    /// <summary>
+    /// 跟的是筛选后的视图，不是原始集合：被筛掉的消息不该把视口拽到底，
+    /// 筛选生效时也要贴着最后一条可见记录。
+    /// </summary>
+    private INotifyCollectionChanged? _recordsSource;
 
     private MainViewModel? _detailSource;
 
@@ -149,7 +151,7 @@ public partial class MainWindow : Window
             previous.CollectionChanged -= OnRecordsChanged;
         }
 
-        _recordsSource = (DataContext as MainViewModel)?.Records;
+        _recordsSource = (DataContext as MainViewModel)?.RecordsView;
         if (_recordsSource is { } current)
         {
             current.CollectionChanged += OnRecordsChanged;
@@ -158,21 +160,59 @@ public partial class MainWindow : Window
 
     private void OnRecordsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (!_followLatest || e.Action is not (NotifyCollectionChangedAction.Add or NotifyCollectionChangedAction.Remove))
+        if (!_followLatest
+            || e.Action is not (NotifyCollectionChangedAction.Add
+                or NotifyCollectionChangedAction.Remove
+                or NotifyCollectionChangedAction.Reset))
         {
             return;
         }
 
         // 追加要贴到最新一条，上限挤掉最老那条也一样：头部少一行时视口不会自己跟到底，
-        // 列表就卡在离底部差一行的地方。两种情况收成同一个动作。
+        // 列表就卡在离底部差一行的地方。筛选切换走 Reset，也收在同一个动作里。
         // 容器还没生成就滚动会什么都没发生，排到本轮布局之后再滚。
         _ = Dispatcher.BeginInvoke(new Action(() =>
         {
-            if (_recordsSource is { Count: > 0 } records)
+            if (RecordList.Items.Count > 0)
             {
-                RecordList.ScrollIntoView(records[records.Count - 1]);
+                RecordList.ScrollIntoView(RecordList.Items[RecordList.Items.Count - 1]);
             }
         }));
+    }
+
+    /// <summary>
+    /// 筛选框的回车 / Esc。Enter 应用当前写法；Esc 只在筛选生效时取消，
+    /// 不生效时把 Esc 留给窗口，别吞掉。
+    /// </summary>
+    private void RecordFilterKeyDown(object sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Enter && viewModel.ApplyRecordFilterCommand.CanExecute(null))
+        {
+            viewModel.ApplyRecordFilterCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && viewModel.IsRecordFilterActive)
+        {
+            viewModel.ClearRecordFilterCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// GridSplitter 失去键盘焦点时会撤销正在进行的拖动，把行高还原；
+    /// 通信中焦点被别处拿走就表现为"拖不动"。拖动期间把焦点锁在分栏条上。
+    /// </summary>
+    private void RecordDetailSplitterPreviewLostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is UIElement { IsMouseCaptured: true })
+        {
+            e.Handled = true;
+        }
     }
 
     /// <summary>WPF 的 TreeViewItem 右键不会自动选中，不补这一步右键菜单就会作用在旧选中项上。</summary>
@@ -292,7 +332,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// 树自己的快捷键：Delete 直接删选中节点；F2 就地编辑选中那一行；Insert 打开选中节点的右键菜单，
-    /// 键盘用户从那里进「添加子项 / 添加同级」的类型二级菜单。
+    /// 键盘用户从那里进「+子项 / +同级」的类型二级菜单。
     /// Ctrl+C / Ctrl+V 在窗口那一层收，切了页签也照样能按。
     /// </summary>
     private void NodeTreePreviewKeyDown(object sender, KeyEventArgs e)
@@ -619,7 +659,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 右键先选中被点的那一行。上下菜单里的删除、复制、存为条目都作用在 SelectedNode 上，
+    /// 右键先选中被点的那一行。上下菜单里的删除、复制、存入字典都作用在 SelectedNode 上，
     /// 不先选中就会对着上一次选中的节点下手。不 Handled，右键菜单照常弹出。
     /// </summary>
     private void NodeItemPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)

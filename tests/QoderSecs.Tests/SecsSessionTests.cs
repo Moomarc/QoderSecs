@@ -89,6 +89,39 @@ public sealed class SecsSessionTests
         }
     }
 
+    /// <summary>
+    /// 断开只清当前会话目录，最后一次会话目录要留着：界面的「查看日志」在断开后
+    /// 还得靠它打开刚才那份 sml.log / detail.log。
+    /// </summary>
+    [TestMethod]
+    public async Task LastSessionDirectorySurvivesDisconnectAndAbort()
+    {
+        var directory = NewSessionDirectory();
+        try
+        {
+            var session = new SecsSession { SessionDirectoryFactory = _ => directory };
+            session.Open(ConnectionProfile.CreateDefault(), "HSMS", "测试会话");
+            Assert.AreEqual(directory, session.SessionDirectory);
+            Assert.AreEqual(directory, session.LastSessionDirectory);
+
+            await session.CloseAsync();
+            Assert.IsNull(session.SessionDirectory);
+            Assert.AreEqual(directory, session.LastSessionDirectory);
+
+            session.Open(ConnectionProfile.CreateDefault(), "HSMS", "再开一次");
+            await session.AbortOpenAsync("连不上");
+            Assert.IsNull(session.SessionDirectory);
+            Assert.AreEqual(directory, session.LastSessionDirectory);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+    }
+
     private static string NewSessionDirectory() =>
         Path.Combine(Path.GetTempPath(), "qodersecs-session-tests", Guid.NewGuid().ToString("N"));
 }

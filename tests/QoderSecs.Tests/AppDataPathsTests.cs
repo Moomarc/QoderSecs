@@ -110,9 +110,12 @@ public sealed class AppDataPathsTests
         Assert.AreEqual(paths.DataDirectory, paths.SampleDirectory);
 
         // 样本和 settings.json 并排，不再单独占一个 samples 文件夹；
-        // 解包按这个文件名去找内嵌资源，它和 csproj 里的文件对不上就会静默少解一份。
+        // 解包按这些文件名去找内嵌资源，它们和 csproj 里的文件对不上就会静默少解一份。
         Assert.AreEqual(
-            Path.Combine(paths.DataDirectory, AppDataPaths.SampleFileName),
+            Path.Combine(paths.DataDirectory, AppDataPaths.RichSampleFileName),
             paths.SampleFilePath);
+        Assert.AreEqual(
+            Path.Combine(paths.DataDirectory, AppDataPaths.RawSampleFileName),
+            paths.RawSampleFilePath);
     }
 }

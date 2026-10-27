@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:app="clr-namespace:QoderSecs.App"
+        xmlns:conn="clr-namespace:QoderSecs.Core.Connection;assembly=QoderSecs.Core"
         Title="QoderSecs"
         Width="1360"
         Height="860"
@@ -40,6 +41,8 @@
         <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#1D4ED8" />
         <SolidColorBrush x:Key="PrimaryPressedBrush" Color="#1E40AF" />
         <SolidColorBrush x:Key="DangerBrush" Color="#D92D20" />
+        <!-- 成功色目前只给「收到」那个方向点：发出用强调蓝，收到用绿，一眼分左右。 -->
+        <SolidColorBrush x:Key="SuccessBrush" Color="#15803D" />
         <SolidColorBrush x:Key="ScrollThumbBrush" Color="#C9CFD9" />
         <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#A8B0BC" />
         <SolidColorBrush x:Key="WarningBrush" Color="#B45309" />
@@ -78,6 +81,7 @@
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
+        <app:MinWidthToVisibilityConverter x:Key="MinWidthToVisibilityConverter" />
         <!-- 左缩进 10 = 输入框 9 内边距 + 1 边框：标签要和框里的文字同一条竖线，
              只看外框会显得标签比正文更靠左。横向并排的标签自己覆盖 Margin。 -->
         <Style x:Key="FieldLabelStyle" TargetType="TextBlock">
@@ -265,10 +269,10 @@
             </Setter>
         </Style>
 
-        <!-- 类型子菜单：15 种元素排成单列会拖到屏幕外，这里 3 列 × 5 行。
-             定宽 120 保证三列等宽，列内文字左对齐；弹层宽 366（360 + 左右内边距 4）。 -->
+        <!-- 类型子菜单：只写元素代号后一格 76 就够，15 个类型排 5 列 × 3 行。
+             定宽 76 保证五列等宽，列内文字左对齐；弹层宽 388（380 + 左右内边距 4）。 -->
         <ItemsPanelTemplate x:Key="TypeMenuPanelTemplate">
-            <WrapPanel Width="366" Orientation="Horizontal" />
+            <WrapPanel Width="380" Orientation="Horizontal" />
         </ItemsPanelTemplate>
 
         <!-- 顶栏那颗开着参数面板的开关按钮：按下态用浅强调底色，和主按钮区分开。 -->
@@ -576,7 +580,7 @@
 
         <!-- ============================ 菜单 ============================
              一套模板管住四种 Role：顶栏的「文件」是 TopLevelHeader，右键菜单里的行是
-             SubmenuItem，「添加子项 / 添加同级」那种带下级的行是 SubmenuHeader。
+             SubmenuItem，「+子项 / +同级」那种带下级的行是 SubmenuHeader。
              Role 触发器决定弹层往哪边开、要不要画右箭头，删掉的话子菜单就展不开了。 -->
         <Style x:Key="MenuRowStyle" TargetType="MenuItem">
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
@@ -662,7 +666,7 @@
                                 <Setter TargetName="Arrow" Property="Visibility" Value="Visible" />
                             </Trigger>
                             <!-- 没有快捷键的行要把它彻底拿掉：这个 TextBlock 留着 28 的左边距，
-                                 空着也占位，会把「U1 无符号整数」这类长标题截掉最后一个字。 -->
+                                 空着也占位，会在 76 宽的类型格里把 Boolean 挤出去。 -->
                             <Trigger Property="InputGestureText" Value="">
                                 <Setter TargetName="Gesture" Property="Visibility" Value="Collapsed" />
                             </Trigger>
@@ -686,9 +690,12 @@
              往前找——那会落到系统主题样式上（深色主题下菜单字是白的，落在白底上就看不见了）。 -->
         <Style TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}" />
 
-        <!-- 类型选项网格：15 个类型排 3 列 × 5 行，单列那一长串会把弹层拉到屏幕外。 -->
+        <!-- 类型选项网格：15 个类型排 5 列 × 3 行，单列那一长串会把弹层拉到屏幕外。
+             一格 76×28，上下各留 1 的间距：行与行之间空 2px，悬停底色不会连成一片。 -->
         <Style x:Key="TypeSubmenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}">
-            <Setter Property="Width" Value="120" />
+            <Setter Property="Width" Value="76" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Margin" Value="0,1" />
             <!-- 外层操作栏压到 12 号，展开的类型网格仍按正文 13 号，不跟着变小。 -->
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Padding" Value="10,0" />
@@ -697,7 +704,8 @@
 
         <!-- 页签上方那条操作栏：结构页六项、字典页四项。行高统一 30、12 号字、左右各 4 的
              内边距——窗口压到下限 880（中栏 300）时六项也要排得下一行，13 号字或 8 的内边距
-             都会让末尾「存为条目」掉到第二行。右键菜单里仍按 13 号显示，快捷键提示也在那边。 -->
+             都会让末尾「删除」挤到第二行。删除排最后：和前面几项隔开，少误触。
+             右键菜单里仍按 13 号显示，快捷键提示也在那边。 -->
         <Style x:Key="TabToolbarButtonStyle" TargetType="Button">
             <Setter Property="MinHeight" Value="30" />
             <Setter Property="Padding" Value="4,0" />
@@ -771,12 +779,21 @@
             </Setter>
         </Style>
 
-        <!-- 提示条：默认那种灰底黑边在浅色界面上很扎眼，换成白卡片细描边。 -->
+        <!-- 提示条：默认那种灰底黑边在浅色界面上很扎眼，换成白卡片细描边。
+             内容必须换行：日志目录是整条绝对路径，不换行时超出 MaxWidth 的
+             session 后缀会被裁掉，恰好是最有用的一段。 -->
         <Style TargetType="ToolTip">
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Padding" Value="9,6" />
             <Setter Property="MaxWidth" Value="460" />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToolTip">
@@ -924,8 +941,10 @@
              对象的 ToString()，整列都会变成类型名。表头与单元格的竖线对齐换算见下面
              ListViewItem 的注释。 -->
         <ControlTemplate x:Key="GridViewRowTemplate" TargetType="ListViewItem">
+            <!-- 背景从 TemplateBinding 取：斑马纹由外层样式按 AlternationIndex 给。
+                 悬停、选中两支触发器仍然直接改 Chrome，优先级高于这一层。 -->
             <Border x:Name="Chrome"
-                    Background="Transparent"
+                    Background="{TemplateBinding Background}"
                     CornerRadius="{StaticResource ControlCornerRadius}"
                     SnapsToDevicePixels="True">
                 <Grid>
@@ -958,17 +977,25 @@
         </ControlTemplate>
 
         <Style TargetType="ListViewItem">
-            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="MinHeight" Value="32" />
             <!-- 行内缩进会和列表头错开：GridView 的单元格比行首多缩 6px，表头行比
                  列表多缩 2px，两者要同一竖线就得让 行内边距 + 6 = 表头内边距 + 2。
                  取 2 / 6 之后文字落在距面板内沿 12px 的位置，正好和「通信记录」标题对齐；
                  缩进再大就会从每一列的可视宽度里扣同样的值，7 个字的「无人等待的回复」会被切。 -->
             <Setter Property="Padding" Value="2,0" />
             <Setter Property="Margin" Value="0,1,0,1" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusOutlineStyle}" />
             <Setter Property="Template" Value="{StaticResource GridViewRowTemplate}" />
+            <Style.Triggers>
+                <!-- 相邻两条靠底色分开，不叠分割线：符合方法论第 3 条
+                     「分隔优先用间距或浅底，线和线不要叠」。 -->
+                <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="{StaticResource SubtleSurfaceBrush}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <Style TargetType="GridViewColumnHeader">
@@ -997,6 +1024,14 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- 数值型列：表头跟着单元格一起靠右，否则标题贴左、数字贴右，
+             中间空一大片，读起来像两列。 -->
+        <Style x:Key="RightAlignedColumnHeaderStyle"
+               TargetType="GridViewColumnHeader"
+               BasedOn="{StaticResource {x:Type GridViewColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
         </Style>
 
         <!-- ============================ 滚动条 ============================
@@ -1097,7 +1132,7 @@
              两个添加项按节点类型收掉：非列表元素加不了子项、根元素没有同级，
              留着只会让人点下去看状态栏报错。 -->
         <ContextMenu x:Key="NodeContextMenu">
-            <MenuItem Header="添加子项"
+            <MenuItem Header="+子项"
                       Visibility="{Binding AddChildVisibility}"
                       ItemsPanel="{StaticResource TypeMenuPanelTemplate}"
                       ItemsSource="{Binding Owner.ItemTypeOptions}">
@@ -1110,7 +1145,7 @@
                     </Style>
                 </MenuItem.ItemContainerStyle>
             </MenuItem>
-            <MenuItem Header="添加同级"
+            <MenuItem Header="+同级"
                       Visibility="{Binding AddSiblingVisibility}"
                       ItemsPanel="{StaticResource TypeMenuPanelTemplate}"
                       ItemsSource="{Binding Owner.ItemTypeOptions}">
@@ -1134,7 +1169,7 @@
                       Command="{Binding Owner.PasteNodeCommand}" />
             <Separator />
             <Separator Visibility="{Binding SaveAsEntryVisibility}" />
-            <MenuItem Header="存为条目"
+            <MenuItem Header="存入字典"
                       Visibility="{Binding SaveAsEntryVisibility}"
                       Command="{Binding Owner.SaveNodeAsEntryCommand}"
                       ToolTip="存一份到数据字典，供其他消息复制" />
@@ -1701,13 +1736,13 @@
                      左栏下限 230 时内容宽 227：右边「文件 + ＋新消息」占 135，
                      标题是 DockPanel 的填充项，至少还能留下 60 多。
                      份数按 1130 DIP 宽的窗口校过：左 2.2 份刚好放下「消息库 29」，
-                     中 3 份 335 够放各输入框，剩下的都给右栏那张六列表格。 -->
+                     中 3 份 335 够放各输入框，剩下的都给右栏那张通信记录表格。 -->
                 <ColumnDefinition Width="2.2*" MinWidth="230" />
                 <ColumnDefinition Width="5" />
                 <ColumnDefinition Width="3*" MinWidth="300" />
                 <ColumnDefinition Width="5" />
-                <!-- 右栏比中栏多给 1.6 份：通信记录是六列表格，中栏只有几个输入框。
-                     按 4 份分时表格在常见的 1130 DIP 宽窗口里要横向滚动，最后一列被挡掉。 -->
+                <!-- 右栏比中栏多给 1.6 份：通信记录是五列表格，中栏只有几个输入框。
+                     按 4 份分时表格在 1360 DIP 的默认窗口里也会横向滚动，最后一列被挡掉。 -->
                 <ColumnDefinition Width="4.6*" MinWidth="300" />
             </Grid.ColumnDefinitions>
 
@@ -1999,29 +2034,29 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
-                                    <app:TypePicker Text="添加子项"
+                                    <app:TypePicker Text="+子项"
                                                     ToggleStyle="{StaticResource TabToolbarButtonStyle}"
                                                     IsEnabled="{Binding HasAddChildTarget}"
                                                     ItemsSource="{Binding ItemTypeOptions}"
                                                     Command="{Binding AddChildCommand}" />
-                                    <app:TypePicker Text="添加同级"
+                                    <app:TypePicker Text="+同级"
                                                     ToggleStyle="{StaticResource TabToolbarButtonStyle}"
                                                     IsEnabled="{Binding HasAddSiblingTarget}"
                                                     ItemsSource="{Binding ItemTypeOptions}"
                                                     Command="{Binding AddSiblingCommand}" />
-                                    <Button Content="删除"
-                                            Style="{StaticResource TabToolbarButtonStyle}"
-                                            Command="{Binding DeleteNodeCommand}" />
                                     <Button Content="复制"
                                             Style="{StaticResource TabToolbarButtonStyle}"
                                             Command="{Binding CopyNodeCommand}" />
                                     <Button Content="粘贴"
                                             Style="{StaticResource TabToolbarButtonStyle}"
                                             Command="{Binding PasteNodeCommand}" />
-                                    <Button Content="存为条目"
+                                    <Button Content="存入字典"
                                             Style="{StaticResource TabToolbarButtonStyle}"
                                             Command="{Binding SaveNodeAsEntryCommand}"
                                             ToolTip="存一份到数据字典，供其他消息复制" />
+                                    <Button Content="删除"
+                                            Style="{StaticResource TabToolbarButtonStyle}"
+                                            Command="{Binding DeleteNodeCommand}" />
                                 </StackPanel>
                                 <TreeView x:Name="StructureTree"
                                           Grid.Row="1"
@@ -2396,55 +2431,268 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
-                        <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
-                            <TextBlock Style="{StaticResource SectionTitleStyle}" Text="{Binding RecordsTitle}" />
+                        <Border Grid.Row="0"
+                                Padding="12,0,8,0"
+                                Style="{StaticResource PanelHeaderBorderStyle}">
+                            <DockPanel LastChildFill="True">
+                                <!-- 筛选和日志都塞在栏头这一行：表格上方的 36px 是唯一不占
+                                     记录可视高度的地方，再起一行工具栏会把十行压成九行。
+                                     筛选框写成可收缩的星号列：窗口压到下限时先收它，
+                                     四个控件也不会挤掉或被裁。 -->
+                                <Grid DockPanel.Dock="Right" VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MinWidth="72" MaxWidth="108" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid>
+                                        <TextBox x:Name="RecordFilterBox"
+                                                 Height="28"
+                                                 MinHeight="0"
+                                                 Margin="0"
+                                                 Padding="8,0"
+                                                 AutomationProperties.AutomationId="RecordFilter"
+                                                 AutomationProperties.Name="通信记录筛选"
+                                                 FontSize="12"
+                                                 KeyDown="RecordFilterKeyDown"
+                                                 Text="{Binding RecordFilterText, UpdateSourceTrigger=PropertyChanged}">
+                                            <TextBox.Style>
+                                                <!-- 写法被回车拒绝时就地描红，提示条也换成错误文案；
+                                                     状态栏在最底下，光靠它用户得把视线挪出输入区。 -->
+                                                <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                    <Setter Property="ToolTip"
+                                                            Value="S6F11、6 11 或 S6；回车同「筛选」" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RecordFilterHasError}" Value="True">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
+                                                            <Setter Property="ToolTip" Value="筛选写法不对，例如 S6 或 S6F11。" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                        <TextBlock Margin="9,0,8,0"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource MutedBrush}"
+                                                   IsHitTestVisible="False"
+                                                   Text="输入SF筛选消息"
+                                                   TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RecordFilterText}" Value="">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                    <!-- 筛选是这一组的主操作，给实心主色；取消是退路，用描边按钮。
+                                         两个命令自带 CanExecute：框空时「筛选」灰，没筛选时「取消」灰，
+                                         用户不用记 Enter / Esc 也知道该点哪。 -->
+                                    <Button Grid.Column="1"
+                                            Height="28"
+                                            MinHeight="0"
+                                            Margin="6,0,0,0"
+                                            Padding="10,0"
+                                            AutomationProperties.AutomationId="RecordFilterApply"
+                                            AutomationProperties.Name="筛选"
+                                            Command="{Binding ApplyRecordFilterCommand}"
+                                            Content="筛选"
+                                            FontSize="12"
+                                            Style="{StaticResource PrimaryButtonStyle}"
+                                            ToolTip="只看匹配的 SxFy" />
+                                    <Button Grid.Column="2"
+                                            Height="28"
+                                            MinHeight="0"
+                                            Margin="6,0,0,0"
+                                            Padding="10,0"
+                                            AutomationProperties.AutomationId="RecordFilterCancel"
+                                            AutomationProperties.Name="取消筛选"
+                                            Command="{Binding ClearRecordFilterCommand}"
+                                            Content="取消"
+                                            FontSize="12"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            ToolTip="显示全部记录（Esc）" />
+                                    <!-- 和筛选组之间留 16：不加边框的「查看日志」贴着输入框时
+                                         会被读成筛选的一部分，有分隔才看得出一组是筛选、一组是工具。 -->
+                                    <Button Grid.Column="3"
+                                            Height="28"
+                                            MinHeight="0"
+                                            Margin="16,0,0,0"
+                                            Padding="10,0"
+                                            AutomationProperties.AutomationId="ViewLogFolder"
+                                            AutomationProperties.Name="查看日志"
+                                            Command="{Binding OpenLogFolderCommand}"
+                                            Content="查看日志"
+                                            FontSize="12"
+                                            Style="{StaticResource SecondaryButtonStyle}"
+                                            ToolTip="{Binding LogFolderHint}"
+                                            ToolTipService.ShowOnDisabled="True" />
+                                </Grid>
+                                <!-- 栏头窄到放不下标题时（窗口压到下限）把标题收掉：
+                                     留半个字贴在按钮旁边比没有标题更像坏掉。 -->
+                                <TextBlock Margin="0,0,8,0"
+                                           Text="{Binding RecordsTitle}"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding RecordsTitle}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource SectionTitleStyle}">
+                                            <Setter Property="Visibility"
+                                                    Value="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=DockPanel}, Converter={StaticResource MinWidthToVisibilityConverter}, ConverterParameter=340}" />
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DockPanel>
                         </Border>
                         <Grid Grid.Row="1" Margin="0,2,0,0">
                             <!-- 边框必须显式关掉：ListView 不写 BorderThickness 时走系统模板，
                                  会在面板里再套一圈深色 1px 描边，和面板边框错开 2px。 -->
                             <ListView x:Name="RecordList"
                                       Margin="4,0,4,4"
+                                      AlternationCount="2"
                                       Background="Transparent"
                                       BorderThickness="0"
-                                      ItemsSource="{Binding Records}"
+                                      ItemsSource="{Binding RecordsView}"
                                       SelectedItem="{Binding SelectedRecord, Mode=TwoWay}"
                                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                       ScrollViewer.VerticalScrollBarVisibility="Auto"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                                        <!-- SystemBytes 不再占列，值留在行提示里；消息名过长时
+                                             格子自己的 ToolTip 优先，不受这里影响。 -->
+                                        <Setter Property="ToolTip"
+                                                Value="{Binding SystemBytesTooltip}" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
                                 <ListView.View>
                                     <GridView>
-                                        <GridViewColumn Header="时间"
-                                                        Width="86"
-                                                        DisplayMemberBinding="{Binding TimeText}" />
-                                        <GridViewColumn Header="方向"
-                                                        Width="40"
-                                                        DisplayMemberBinding="{Binding DirectionText}" />
-                                        <!-- 名称长了会裁，裁了必须能悬停看全，不然只能去翻日志。 -->
-                                        <!-- 消息列 160：默认窗宽下 "S2F41W NewMessage" 这种
-                                             短名也得完整显示，108 时十几个字符就要打点。 -->
-                                        <GridViewColumn Header="消息" Width="160">
+                                        <!-- 时间列 96：HH:mm:ss.fff 是 12 个等宽字符，
+                                             11.5 号 Cascadia Mono 在 150% 下 86 宽会把最后一位裁掉。 -->
+                                        <GridViewColumn Header="时间" Width="96">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <TextBlock Text="{Binding MessageText}"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               ToolTip="{Binding MessageText}" />
+                                                    <TextBlock FontFamily="{StaticResource MonoFontFamily}"
+                                                               FontSize="11.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               Text="{Binding TimeText}" />
                                                 </DataTemplate>
                                             </GridViewColumn.CellTemplate>
                                         </GridViewColumn>
-                                        <GridViewColumn Header="SystemBytes"
-                                                        Width="84"
-                                                        DisplayMemberBinding="{Binding SystemBytesText}" />
+                                        <!-- 方向列 48：6px 点和 6px 间距之后还要放得下两个 12 号汉字；
+                                             44 时「出」的右半边会被裁掉。 -->
+                                        <GridViewColumn Header="方向" Width="48">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <Ellipse Width="6"
+                                                                 Height="6"
+                                                                 Margin="0,0,6,0"
+                                                                 VerticalAlignment="Center">
+                                                            <Ellipse.Style>
+                                                                <Style TargetType="Ellipse">
+                                                                    <!-- 收到绿、发出蓝：左栏这三点颜色比字更早被看见，
+                                                                         扫一眼就能分出两个方向。 -->
+                                                                    <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Direction}"
+                                                                                     Value="{x:Static conn:SecsDirection.Out}">
+                                                                            <Setter Property="Fill" Value="{StaticResource PrimaryBrush}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Ellipse.Style>
+                                                        </Ellipse>
+                                                        <TextBlock FontSize="12"
+                                                                   Foreground="{StaticResource MutedBrush}"
+                                                                   Text="{Binding DirectionText}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
+                                        <!-- 消息列 216：默认窗宽下 "S2F41W NewMessage" 这种短名完整显示；
+                                             名称才是这一行的重点，SxFy 用等宽、名称用正文半粗。 -->
+                                        <GridViewColumn Header="消息" Width="216">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <!-- 不用 Run 拼两段字：带 TextTrimming 的多 Run TextBlock
+                                                         在首次布局时会踩到 WPF 文本裁剪的栈溢出（实测崩进程），
+                                                         拆成两格反而更好——SxFy 永远完整，只截名称。 -->
+                                                    <Grid ToolTip="{Binding MessageText}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontFamily="{StaticResource MonoFontFamily}"
+                                                                   FontSize="12.5"
+                                                                   FontWeight="SemiBold"
+                                                                   Text="{Binding Signature}" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Margin="6,0,0,0"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Text="{Binding Header.Name}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
                                         <!-- 状态列 112：最长的是「无人等待的回复」7 个字，
                                              100 时最后一个字会被裁掉。 -->
-                                        <GridViewColumn Header="状态"
-                                                        Width="112"
-                                                        DisplayMemberBinding="{Binding StatusText}" />
-                                        <!-- 耗时列 84：T3 到点后是 "45005 ms"，56 时最后半个字
-                                             会被裁；T3 配成一天的极端值是 8 位数，84 才够。 -->
-                                        <GridViewColumn Header="耗时"
-                                                        Width="84"
-                                                        DisplayMemberBinding="{Binding ElapsedText}" />
+                                        <GridViewColumn Header="状态" Width="112">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock FontSize="12" Text="{Binding StatusText}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Status}"
+                                                                                 Value="{x:Static conn:RecordStatus.TimedOut}">
+                                                                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Status}"
+                                                                                 Value="{x:Static conn:RecordStatus.SendFailed}">
+                                                                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Status}"
+                                                                                 Value="{x:Static conn:RecordStatus.LateSecondary}">
+                                                                        <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding Status}"
+                                                                                 Value="{x:Static conn:RecordStatus.OrphanSecondary}">
+                                                                        <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
+                                        <!-- 耗时列 68，单位只写在表头：每格重复 " ms" 白占 3 个字宽。
+                                             11.5 号 Cascadia Mono 一格 6.9，"86400000"（T3 配到
+                                             一天的极端值）是 8 位 55.2，加两侧内缩 12 正好收得下。 -->
+                                        <GridViewColumn Width="68"
+                                                        Header="耗时(ms)"
+                                                        HeaderContainerStyle="{StaticResource RightAlignedColumnHeaderStyle}">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock HorizontalAlignment="Stretch"
+                                                               FontFamily="{StaticResource MonoFontFamily}"
+                                                               FontSize="11.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               Text="{Binding ElapsedText}"
+                                                               TextAlignment="Right" />
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
                                     </GridView>
                                 </ListView.View>
                             </ListView>
@@ -2453,10 +2701,18 @@
                         </Grid>
                     </Grid>
                 </Border>
+                <!-- 两个方向都 Stretch 时 ResizeDirection=Auto 会判成拖列，
+                     而这里只有一列，等于整条中缝点了没反应。必须显式写 Rows。 -->
                 <GridSplitter Grid.Row="1"
-                              VerticalAlignment="Stretch"
+                              AutomationProperties.AutomationId="RecordDetailSplitter"
+                              AutomationProperties.Name="调整通信记录与详情高度"
+                              Background="Transparent"
+                              Cursor="SizeNS"
                               HorizontalAlignment="Stretch"
-                              Background="Transparent" />
+                              PreviewLostKeyboardFocus="RecordDetailSplitterPreviewLostKeyboardFocus"
+                              ResizeBehavior="PreviousAndNext"
+                              ResizeDirection="Rows"
+                              VerticalAlignment="Stretch" />
                 <Border Grid.Row="2" Style="{StaticResource PanelStyle}">
                     <Grid>
                         <Grid.RowDefinitions>

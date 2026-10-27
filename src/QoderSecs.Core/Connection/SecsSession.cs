@@ -44,6 +44,13 @@ public sealed class SecsSession
     /// <summary>本次会话的落盘目录，effective-profile.json 就在那里。没连接时为 null。</summary>
     public string? SessionDirectory { get; private set; }
 
+    /// <summary>
+    /// 本进程最后一次开过的会话目录。断开后 <see cref="SessionDirectory"/> 会清空，
+    /// 这里留着，界面的「查看日志」在断开后还能定位到刚才那次的目录。
+    /// 只在内存里，重启后从头算。
+    /// </summary>
+    public string? LastSessionDirectory { get; private set; }
+
     public LinkPhase Phase
     {
         get
@@ -99,6 +106,7 @@ public sealed class SecsSession
         lock (_gate)
         {
             SessionDirectory = sessionDirectory;
+            LastSessionDirectory = sessionDirectory;
             Log = log;
             _inboundRequests.Clear();
         }

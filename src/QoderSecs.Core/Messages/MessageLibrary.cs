@@ -65,7 +65,11 @@ public sealed class MessageLibrary
         @"^S?\s*(?<stream>\d{1,3})\s*(?:F|,|\s)\s*(?<function>\d{1,3})$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private static bool TryParseSignature(string query, out int stream, out int function)
+    /// <summary>
+    /// 把「S6F11」「6F11」「6 11」「6,11」这类写法解析成 Stream 和 Function，范围 1–255。
+    /// 消息库搜索和通信记录筛选共用这一份，两边认的写法才不会漂。
+    /// </summary>
+    public static bool TryParseSignature(string query, out int stream, out int function)
     {
         stream = 0;
         function = 0;
@@ -79,6 +83,35 @@ public sealed class MessageLibrary
             && int.TryParse(match.Groups["function"].Value, out function)
             && stream is >= 1 and <= 255
             && function is >= 1 and <= 255;
+    }
+
+    private static readonly Regex StreamOnlyPattern = new(
+        @"^S?\s*(?<stream>\d{1,3})$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// 通信记录筛选认的写法：完整签名照 <see cref="TryParseSignature"/>，另外允许只给 Stream
+    /// （「S6」或单独的「6」），这时 function 为 null。F 单独写（「F11」）不认：
+    /// 只筛 Function 对找记录没意义，也容易和消息库那边的名字搜索混掉。
+    /// 消息库搜索不走这一支，那里单独一个数字仍然是按名字搜。
+    /// </summary>
+    public static bool TryParseSignatureOrStream(string query, out int stream, out int? function)
+    {
+        function = null;
+        var text = query.Trim();
+        if (TryParseSignature(text, out stream, out var parsedFunction))
+        {
+            function = parsedFunction;
+            return true;
+        }
+
+        var match = StreamOnlyPattern.Match(text);
+        if (!match.Success || !int.TryParse(match.Groups["stream"].Value, out stream))
+        {
+            return false;
+        }
+
+        return stream is >= 1 and <= 255;
     }
 
     public void Clear()

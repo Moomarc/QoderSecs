@@ -1,11 +1,13 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Xml;
 using System.Xml.Linq;
@@ -48,6 +50,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private Task? _connectInFlight;
     private LinkPhase _phase = LinkPhase.Offline;
     private CommunicationRecord? _selectedRecord;
+    private readonly ListCollectionView _recordsView;
+    private string _recordFilterText = string.Empty;
+    private bool _recordFilterHasError;
+    private int? _filterStream;
+    private int? _filterFunction;
+    private int _visibleRecordCount;
     private readonly SemaphoreSlim _saveGate = new(1, 1);
     private CancellationTokenSource? _saveDebounce;
     private ConnectionProfile _profile = ConnectionProfile.CreateDefault();
@@ -157,6 +165,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ConnectCommand = AsyncCommand(ToggleConnectionAsync, () => CanToggleConnection);
         SendCommand = AsyncCommand(SendMessageAsync, () => CanSend);
         CancelSendCommand = new RelayCommand(CancelPendingWait, () => _isSendWaiting);
+        OpenLogFolderCommand = new RelayCommand(OpenLogFolder, () => LogFolderPath is not null);
+        ApplyRecordFilterCommand = new RelayCommand(ApplyRecordFilter, () => RecordFilterText.Trim().Length > 0);
+        ClearRecordFilterCommand = new RelayCommand(
+            () => ClearRecordFilter(announce: true),
+            () => IsRecordFilterActive);
+        _recordsView = new ListCollectionView(Records);
+        RecordsView = _recordsView;
         _link.PhaseChanged += OnLinkPhaseChanged;
         _link.Transcript.RecordAdded += OnRecordAdded;
         _link.Transcript.RecordRemoved += OnRecordRemoved;
@@ -214,6 +229,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public AsyncRelayCommand SendCommand { get; }
 
     public RelayCommand CancelSendCommand { get; }
+
+    public RelayCommand OpenLogFolderCommand { get; }
+
+    public RelayCommand ApplyRecordFilterCommand { get; }
+
+    public RelayCommand ClearRecordFilterCommand { get; }
 
     public IReadOnlyList<ItemTypeOption> ItemTypeOptions { get; } = ItemTypeOption.All;
 
@@ -319,7 +340,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string StructureHint => SelectedMessage is null
         ? "选择或新建消息后编辑结构"
         : StructureRootItems.Count == 0
-            ? "无消息体；用「添加子项」添加根节点"
+            ? "无消息体；用「+子项」添加根节点"
             : string.Empty;
 
     /// <summary>
@@ -365,8 +386,62 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<CommunicationRecord> Records { get; } = [];
 
+    /// <summary>
+    /// 列表实际绑的是这一层视图，不是 <see cref="Records"/> 本身：筛选只换视图，
+    /// 记录照常进集合，取消筛选时被藏起来的那些原样回来。
+    /// </summary>
+    public ICollectionView RecordsView { get; }
+
+    /// <summary>筛选框里的字。回车才应用，光改字不动当前筛选。</summary>
+    public string RecordFilterText
+    {
+        get => _recordFilterText;
+        set
+        {
+            if (SetProperty(ref _recordFilterText, value))
+            {
+                // 一改字就把红框撤掉：红框只标记「刚才回车那一版写法不对」，
+                // 留着不放会让人以为新输入也还没生效。
+                RecordFilterHasError = false;
+                ApplyRecordFilterCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    /// <summary>筛选框刚被回车校验拒绝。视图据此描红并改提示条文案。</summary>
+    public bool RecordFilterHasError
+    {
+        get => _recordFilterHasError;
+        private set => SetProperty(ref _recordFilterHasError, value);
+    }
+
+    /// <summary>只给 Stream 的筛选（S6 / 6）时 Function 为 null，视图按「整个 Stream」过滤。</summary>
+    public bool IsRecordFilterActive => _filterStream is not null;
+
+    /// <summary>应用到列表上的那一条，按界面写法补回 S 前缀，例如 S6 或 S6F11。</summary>
+    public string ActiveRecordFilterText => _filterStream is { } stream
+        ? _filterFunction is { } function ? $"S{stream}F{function}" : $"S{stream}"
+        : string.Empty;
+
     /// <summary>通信记录面板空着时的提示语；有记录时是空串，XAML 靠它把提示隐藏掉。</summary>
-    public string RecordsHint => Records.Count == 0 ? "尚无通信记录" : string.Empty;
+    public string RecordsHint => Records.Count == 0
+        ? "尚无通信记录"
+        : IsRecordFilterActive && _visibleRecordCount == 0
+            ? $"没有 {ActiveRecordFilterText} 的记录"
+            : string.Empty;
+
+    /// <summary>
+    /// 本次连接的日志目录；断开后回落到本进程最后一次会话的目录。
+    /// 从没连过时为 null，「查看日志」据此变灰。
+    /// </summary>
+    public string? LogFolderPath => _link.SessionDirectory ?? _link.LastSessionDirectory;
+
+    /// <summary>按钮悬浮提示：说清楚打开的是当前会话还是上一次的目录。</summary>
+    public string LogFolderHint => LogFolderPath is not { } path
+        ? "还没有连接过，暂无日志目录"
+        : _link.SessionDirectory is not null
+            ? $"打开当前会话的日志目录：{path}"
+            : $"打开上次会话的日志目录：{path}";
 
     /// <summary>
     /// 面板标题。超出条数上限被挤掉过老记录就要在这里说一句——
@@ -938,7 +1013,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             // 存不下也要连：数据目录只读不该拦住用户测机台，参数照样抄进会话目录。
             await SaveProfileAsync(profile);
 
+            // 新连接从「不筛选」开始：否则重连后可能一条都看不见，像没收到消息。
+            ClearRecordFilter(announce: false);
             Records.Clear();
+            _visibleRecordCount = 0;
             OnPropertyChanged(nameof(RecordsHint));
             OnPropertyChanged(nameof(RecordsTitle));
 
@@ -1104,6 +1182,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnUiThread(() =>
         {
             Records.Add(record);
+            if (RecordMatchesFilter(record))
+            {
+                _visibleRecordCount++;
+            }
+
             OnPropertyChanged(nameof(RecordsHint));
         });
     }
@@ -1117,9 +1200,107 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnUiThread(() =>
         {
             Records.Remove(record);
+            if (RecordMatchesFilter(record))
+            {
+                _visibleRecordCount--;
+            }
+
             OnPropertyChanged(nameof(RecordsHint));
             OnPropertyChanged(nameof(RecordsTitle));
         });
+    }
+
+    /// <summary>没开筛选时任何一条都算「可见」，计数在两种状态下走同一套加减。</summary>
+    private bool RecordMatchesFilter(CommunicationRecord record) =>
+        _filterStream is not { } stream
+        || (record.Header.Stream == stream
+            && (_filterFunction is not { } function || record.Header.Function == function));
+
+    /// <summary>
+    /// 只换列表视图，不动 <see cref="Records"/>：筛选期间到达的消息照样进集合，
+    /// 取消筛选时全部回来，不会缺一段。
+    /// </summary>
+    private void ApplyRecordFilter()
+    {
+        var text = RecordFilterText.Trim();
+        if (!MessageLibrary.TryParseSignatureOrStream(text, out var stream, out var function))
+        {
+            RecordFilterHasError = true;
+            Fail("筛选写法不对，例如 S6 或 S6F11。");
+            return;
+        }
+
+        RecordFilterHasError = false;
+        _filterStream = stream;
+        _filterFunction = function;
+        RecordFilterText = function is { } f ? $"S{stream}F{f}" : $"S{stream}";
+        _recordsView.Filter = item => item is CommunicationRecord record && RecordMatchesFilter(record);
+        _recordsView.Refresh();
+        _visibleRecordCount = Records.Count(RecordMatchesFilter);
+        OnPropertyChanged(nameof(IsRecordFilterActive));
+        OnPropertyChanged(nameof(ActiveRecordFilterText));
+        OnPropertyChanged(nameof(RecordsHint));
+        ClearRecordFilterCommand.RaiseCanExecuteChanged();
+        StatusMessage = _visibleRecordCount == 0
+            ? $"筛选已开启：只看 {ActiveRecordFilterText}，当前没有匹配记录（共 {Records.Count} 条）。"
+            : $"筛选已开启：只看 {ActiveRecordFilterText}（共 {Records.Count} 条，显示 {_visibleRecordCount} 条）。";
+    }
+
+    /// <summary>
+    /// 取消筛选时把框里的字也清掉，否则框里还写着 S6F11、列表却已经全回来了，看着像没生效。
+    /// 新连接前也走这里，只是不报状态栏那句话。
+    /// </summary>
+    private void ClearRecordFilter(bool announce)
+    {
+        var wasActive = IsRecordFilterActive;
+        RecordFilterHasError = false;
+        _filterStream = null;
+        _filterFunction = null;
+        _recordsView.Filter = null;
+        _recordsView.Refresh();
+        RecordFilterText = string.Empty;
+        _visibleRecordCount = Records.Count;
+        if (wasActive)
+        {
+            OnPropertyChanged(nameof(IsRecordFilterActive));
+            OnPropertyChanged(nameof(ActiveRecordFilterText));
+            OnPropertyChanged(nameof(RecordsHint));
+        }
+
+        ClearRecordFilterCommand.RaiseCanExecuteChanged();
+        if (announce && wasActive)
+        {
+            StatusMessage = $"已取消筛选，恢复显示 {Records.Count} 条记录。";
+        }
+    }
+
+    /// <summary>
+    /// 打开当前或上一次会话的日志目录。目录被外部清掉时不弹窗，只在状态栏说清楚，
+    /// 免得一个 Explorer 失败把整窗挡住。
+    /// </summary>
+    private void OpenLogFolder()
+    {
+        if (LogFolderPath is not { } path)
+        {
+            Fail("还没有会话日志。先连接一次再查看。");
+            return;
+        }
+
+        if (!Directory.Exists(path))
+        {
+            Fail($"日志目录不存在：{path}。可能已被清理。");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+            StatusMessage = "已在资源管理器中打开日志目录。";
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            Fail($"打不开日志目录：{exception.Message}");
+        }
     }
 
     /// <summary>
@@ -1193,6 +1374,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(AreParametersEditable));
         ConnectCommand.RaiseCanExecuteChanged();
         SendCommand.RaiseCanExecuteChanged();
+        // 连接一开就有会话目录了，断开后还要留在上次那份上；
+        // 阶段和忙碌状态变的时候一并刷新按钮和提示。
+        OnPropertyChanged(nameof(LogFolderPath));
+        OnPropertyChanged(nameof(LogFolderHint));
+        OpenLogFolderCommand.RaiseCanExecuteChanged();
     }
 
     private async Task ImportLibraryAsync()
@@ -1647,7 +1833,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// 粘贴落在哪：选中的节点；结构页没选中就是这条消息的结构，那时收下的可能是根。
     /// 字典页没选中条目时不给落点——条目互不隶属，粘到「字典根」等于凭空多出一条，
-    /// 那件事该由「新增数据」或「存为条目」明着做，不由 Ctrl+V 顺手做。
+    /// 那件事该由「新增数据」或「存入字典」明着做，不由 Ctrl+V 顺手做。
     /// </summary>
     private XElement? PasteTarget() => SelectedNode?.Element
         ?? (EditorTab == DictionaryTabIndex ? null : SelectedMessage?.Structure);
@@ -2260,7 +2446,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         PasteNodeCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(HasAddChildTarget));
         OnPropertyChanged(nameof(HasAddSiblingTarget));
-        // 「存为条目」和条目那一侧的「删除」看的是同一个选中项，跟着树命令一起刷，不另找时机。
+        // 「存入字典」和条目那一侧的「删除」看的是同一个选中项，跟着树命令一起刷，不另找时机。
         RaiseEntryCommandCanExecute();
     }
 
@@ -2402,7 +2588,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>字典页没条目时的提示语，和结构页那条同一个用法。</summary>
     public string EntryHint => DataEntries.Count == 0
-        ? "无条目；点「新增数据」新建，或在结构页将节点存为条目"
+        ? "无条目；点「新增数据」新建，或在结构页将节点存入字典"
         : string.Empty;
 
     /// <summary>
@@ -2456,15 +2642,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException)
         {
-            Fail($"存为条目失败：{exception.Message}");
+            Fail($"存入字典失败：{exception.Message}");
             return;
         }
 
         RefreshDataEntries(entry.Index);
         RefreshEntryTree();
         StatusMessage = entry.Name.Length == 0
-            ? $"已把 {node.TypeLabel} 存为条目（没有名字）。"
-            : $"已把 {node.TypeLabel} 存为条目「{entry.Name}」。";
+            ? $"已把 {node.TypeLabel} 存入字典（没有名字）。"
+            : $"已把 {node.TypeLabel} 存入字典「{entry.Name}」。";
     }
 
     private void CommitEntryName()

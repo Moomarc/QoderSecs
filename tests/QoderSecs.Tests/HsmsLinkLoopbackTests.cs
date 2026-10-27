@@ -959,9 +959,9 @@ public sealed class HsmsLinkLoopbackTests
     private static MessageLibrary SampleLibrary() => MessageLibrary.Load(
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "sample-library.sxml")));
 
-    /// <summary>随程序发的常用命令库，S1F1、S1F13 这些都配好了自动回复。</summary>
+    /// <summary>随程序发的全量样本库，S1F1、S1F13 这些都配好了自动回复。</summary>
     private static MessageLibrary CommonCommands() => MessageLibrary.Load(
-        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "common-commands.sxml")));
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "rich-set.sxml")));
 
     /// <summary>上下图素材：S12F9 带 7482 字符地图、AutoReply 指着 S12F16，两条正文同一张图。</summary>
     private static MessageLibrary WaferMapLibrary() => MessageLibrary.Load(

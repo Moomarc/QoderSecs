@@ -164,6 +164,7 @@ public sealed class TranscriptCorrelatorTests
         Assert.HasCount(2, added);
         Assert.AreEqual(0x04, added[1].SystemBytes);
         Assert.AreEqual("00000004", added[1].SystemBytesText);
+        Assert.AreEqual("SystemBytes 00000004", added[1].SystemBytesTooltip);
     }
 
     [TestMethod]
@@ -390,6 +391,32 @@ public sealed class TranscriptCorrelatorTests
         Assert.AreEqual(33_000_000, delivered[0].SmlByteLength);
         Assert.AreEqual(8, delivered[1].SmlSequence);
         Assert.AreEqual(120, delivered[1].SmlByteLength);
+    }
+
+    /// <summary>
+    /// 对端回得快时，回复是在「发出」那条的 RecordAdded 通知还没走完时到的（本机两实例互测实测 1ms）。
+    /// 配对表必须在那之前登记好，否则回复会落到「无人等待的回复」，请求还会一直挂着等。
+    /// </summary>
+    [TestMethod]
+    public void SecondaryArrivingDuringTheRecordAddedNotificationStillPairs()
+    {
+        var correlator = new TranscriptCorrelator();
+        CommunicationRecord? reply = null;
+        correlator.RecordAdded += record =>
+        {
+            if (record.Direction == SecsDirection.Out)
+            {
+                reply = correlator.RecordInbound(
+                    Header(1, 2, false), 0x77, "S1F2", T0.AddMilliseconds(1));
+            }
+        };
+
+        var request = correlator.RecordOutbound(Header(1, 1, true), 0x77, "S1F1", T0);
+
+        Assert.IsNotNull(reply);
+        Assert.AreEqual(RecordStatus.PairedSecondary, reply!.Status);
+        Assert.AreEqual(RecordStatus.SecondaryReceived, request.Status);
+        Assert.AreEqual(1, request.ElapsedMilliseconds);
     }
 
     private static SecsHeader Header(int stream, int function, bool replyExpected, string? name = null) =>

@@ -6,26 +6,30 @@ using QoderSecs.Core.Messages;
 
 namespace QoderSecs.App.ViewModels;
 
-/// <summary>右键菜单和工具栏「＋子项 / ＋同级」共用的类型选项表，顺序即菜单顺序。</summary>
+/// <summary>
+/// 右键菜单和工具栏「+子项 / +同级」共用的类型选项表，顺序即菜单顺序。
+/// 只给元素代号（L / A / U4 …）：SECS-II 工程师看代号就够，带上中文会让
+/// 15 格排不进 3 行，窗口压到下限时还得滚动。
+/// </summary>
 public sealed record ItemTypeOption(SecsItemType Type, string Header)
 {
     public static IReadOnlyList<ItemTypeOption> All { get; } =
     [
-        new(SecsItemType.List, "L 列表"),
-        new(SecsItemType.A, "A 文本"),
-        new(SecsItemType.B, "B 二进制"),
-        new(SecsItemType.Boolean, "Boolean 布尔"),
-        new(SecsItemType.J, "J JIS 文本"),
-        new(SecsItemType.I1, "I1 有符号整数"),
-        new(SecsItemType.I2, "I2 有符号整数"),
-        new(SecsItemType.I4, "I4 有符号整数"),
-        new(SecsItemType.I8, "I8 有符号整数"),
-        new(SecsItemType.U1, "U1 无符号整数"),
-        new(SecsItemType.U2, "U2 无符号整数"),
-        new(SecsItemType.U4, "U4 无符号整数"),
-        new(SecsItemType.U8, "U8 无符号整数"),
-        new(SecsItemType.F4, "F4 浮点"),
-        new(SecsItemType.F8, "F8 浮点")
+        new(SecsItemType.List, "L"),
+        new(SecsItemType.A, "A"),
+        new(SecsItemType.B, "B"),
+        new(SecsItemType.Boolean, "Boolean"),
+        new(SecsItemType.J, "J"),
+        new(SecsItemType.I1, "I1"),
+        new(SecsItemType.I2, "I2"),
+        new(SecsItemType.I4, "I4"),
+        new(SecsItemType.I8, "I8"),
+        new(SecsItemType.U1, "U1"),
+        new(SecsItemType.U2, "U2"),
+        new(SecsItemType.U4, "U4"),
+        new(SecsItemType.U8, "U8"),
+        new(SecsItemType.F4, "F4"),
+        new(SecsItemType.F8, "F8")
     ];
 }
 
@@ -162,7 +166,7 @@ public sealed class StructureNodeViewModel : ObservableObject
 
     /// <summary>
     /// 已经在字典里的节点不给「存为条目」：那一条本来就在字典里，再存一次是给自己复制一份，
-    /// 菜单里留着只会让人以为还要按这个才算保存。要另一条同级条目用「添加同级」。
+    /// 菜单里留着只会让人以为还要按这个才算保存。要另一条同级条目用「+同级」。
     /// </summary>
     public Visibility SaveAsEntryVisibility =>
         SecsSections.Of(Element) == SecsSection.Dictionary ? Visibility.Collapsed : Visibility.Visible;

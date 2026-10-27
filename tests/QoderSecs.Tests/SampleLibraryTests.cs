@@ -178,7 +178,7 @@ public sealed class SampleLibraryTests
     }
 
     private static string ReadSample() =>
-        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "common-commands.sxml"));
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "rich-set.sxml"));
 
     private static MessageLibrary Sample() => MessageLibrary.Load(ReadSample());
 }

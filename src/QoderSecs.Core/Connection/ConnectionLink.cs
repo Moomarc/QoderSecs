@@ -38,6 +38,12 @@ public sealed class ConnectionLink : IAsyncDisposable
 
     public TranscriptLog? Log => _session.Log;
 
+    /// <summary>本次连接的日志目录；断开后为 null。</summary>
+    public string? SessionDirectory => _session.SessionDirectory;
+
+    /// <summary>本进程最后一次开过的会话目录；断开后仍保留，界面用它定位日志。</summary>
+    public string? LastSessionDirectory => _session.LastSessionDirectory;
+
     public LinkPhase Phase => _session.Phase;
 
     public ConnectionProfile? Profile { get; private set; }

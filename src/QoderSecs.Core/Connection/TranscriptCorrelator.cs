@@ -55,21 +55,27 @@ public sealed class TranscriptCorrelator
         var status = header.ReplyExpected && !header.IsSecondary
             ? RecordStatus.AwaitingSecondary
             : RecordStatus.Sent;
-        var record = Add(new CommunicationRecord(SecsDirection.Out, systemBytes, header, timestamp, sml, status)
+        var record = new CommunicationRecord(SecsDirection.Out, systemBytes, header, timestamp, sml, status)
         {
             SmlSequence = smlSequence,
             SmlByteLength = smlByteLength
-        });
+        };
 
-        lock (_gate)
+        // 待回复登记和记录进列表在同一把锁里做完，而且早于 RecordAdded 通知：
+        // 对端回得快时（本机两实例互测是 1ms 内），回复在另一个线程上就可能落进通知这段窗口，
+        // 晚一步登记会把配对回复报成「无人等待的回复」，请求本身还会一直挂着等。
+        Add(record, status == RecordStatus.AwaitingSecondary
+            ? () => _outstandingRequests[systemBytes] = record
+            : null);
+
+        if (status != RecordStatus.AwaitingSecondary && header.IsSecondary)
         {
-            if (status == RecordStatus.AwaitingSecondary)
+            lock (_gate)
             {
-                _outstandingRequests[systemBytes] = record;
-            }
-            else if (header.IsSecondary && _awaitingLocalReply.Remove(systemBytes, out var request))
-            {
-                request.Status = RecordStatus.Answered;
+                if (_awaitingLocalReply.Remove(systemBytes, out var request))
+                {
+                    request.Status = RecordStatus.Answered;
+                }
             }
         }
 
@@ -238,12 +244,13 @@ public sealed class TranscriptCorrelator
         }
     }
 
-    private CommunicationRecord Add(CommunicationRecord record)
+    private CommunicationRecord Add(CommunicationRecord record, Action? register = null)
     {
         List<CommunicationRecord> dropped = [];
         lock (_gate)
         {
             _records.Add(record);
+            register?.Invoke();
             TrimLocked(dropped);
         }
 

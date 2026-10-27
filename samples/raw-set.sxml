@@ -1,0 +1,63 @@
+<SXML>
+    <DataDictionary>
+    </DataDictionary>
+    <MessageDictionary>
+        <Message Name="AreYouThere" Description="在线查询，无正文">
+            <Stream>1</Stream>
+            <Function>1</Function>
+            <WBit>1</WBit>
+            <AutoReply>OnlineData</AutoReply>
+            <Structure />
+        </Message>
+        <Message Name="OnlineData" Description="回 S1F1：机型与软件版本，默认值可直接发">
+            <Stream>1</Stream>
+            <Function>2</Function>
+            <Structure>
+                <L>
+                    <A Name="MDLN">
+                        <Value>QODERSECS</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <A Name="SOFTREV">
+                        <Value>1.0.0</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="EstablishComms" Description="建立通信，无正文">
+            <Stream>1</Stream>
+            <Function>13</Function>
+            <WBit>1</WBit>
+            <AutoReply>EstablishCommsAck</AutoReply>
+            <Structure />
+        </Message>
+        <Message Name="EstablishCommsAck" Description="回 S1F13：COMMACK=0 接受">
+            <Stream>1</Stream>
+            <Function>14</Function>
+            <Structure>
+                <L>
+                    <B Name="COMMACK">
+                        <Value>00</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <L>
+                        <A Name="MDLN">
+                            <Value>QODERSECS</Value>
+                            <Maps Type="4096">
+                            </Maps>
+                        </A>
+                        <A Name="SOFTREV">
+                            <Value>1.0.0</Value>
+                            <Maps Type="4096">
+                            </Maps>
+                        </A>
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+    </MessageDictionary>
+</SXML>

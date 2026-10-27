@@ -4,9 +4,9 @@ using QoderSecs.Core.Profiles;
 namespace QoderSecs.App;
 
 /// <summary>
-/// 样本消息库内嵌在程序里，启动时数据目录里缺了就解出来一份（路径在
-/// <see cref="AppDataPaths.SampleFilePath"/>）。解出来之后它就是普通文件——
-/// 用户改它、删它、换成自己的，程序都不再过问。
+/// 两份样本消息库内嵌在程序里，启动时数据目录里缺了哪份就解哪份（路径在
+/// <see cref="AppDataPaths.SampleFilePath"/> 和 <see cref="AppDataPaths.RawSampleFilePath"/>）。
+/// 解出来之后它就是普通文件——用户改它、删它、换成自己的，程序都不再过问。
 ///
 /// 这么做只为了一件事：只拿到一个 exe 的人也有东西能导入，不用先去找人要 .sxml。
 /// 程序仍然不内置任何回复规则：文件解出来不等于加载，自动回复也仍然默认不开。
@@ -23,7 +23,13 @@ internal static class SampleLibrary
     {
         ArgumentNullException.ThrowIfNull(paths);
 
-        return ExtractOne(AppDataPaths.SampleFileName, paths.SampleFilePath);
+        var notices = new[]
+        {
+            ExtractOne(AppDataPaths.RichSampleFileName, paths.SampleFilePath),
+            ExtractOne(AppDataPaths.RawSampleFileName, paths.RawSampleFilePath)
+        }.Where(notice => notice is not null).ToArray();
+
+        return notices.Length == 0 ? null : string.Join(" ", notices);
     }
 
     private static string? ExtractOne(string fileName, string targetPath)

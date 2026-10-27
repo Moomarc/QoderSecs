@@ -11,7 +11,7 @@ namespace QoderSecs.App;
 /// <summary>
 /// 工具栏上的类型下拉：点一下展开，点外面或者按 Esc 才收。
 /// 不用 MenuItem 的子菜单，是因为那种子菜单的开关归 Menu 管，鼠标划到别处就会自己收起，
-/// 外面改不动；这里换成自己控制的 Popup。类型格仍是 3 列 × 5 行，尺寸和右键菜单那套对齐。
+/// 外面改不动；这里换成自己控制的 Popup。类型格是 5 列 × 3 行，尺寸和右键菜单那套对齐。
 /// 键盘焦点一直留在那只按钮上，格子里的高亮由 IsActive 画：弹出层是独立 HWND，
 /// 焦点一进去，方向键和回车就交给它自己的窗口，主窗这边什么也收不到。
 /// </summary>
@@ -49,6 +49,9 @@ public partial class TypePicker : UserControl
         nameof(Command),
         typeof(ICommand),
         typeof(TypePicker));
+
+    /// <summary>类型格的列数。要和 TypePicker.xaml 里 WrapPanel 的宽度、单元格宽度对上。</summary>
+    private const int ColumnCount = 5;
 
     private int _activeIndex = -1;
 
@@ -138,7 +141,7 @@ public partial class TypePicker : UserControl
 
     /// <summary>
     /// 键盘都在这一侧收：焦点从没离开按钮，所以弹出层里收不到键。
-    /// 收起时只认 Esc，展开后 Esc 收、方向键在 3 列 × 5 行的格子里走、Enter / Space 落项。
+    /// 收起时只认 Esc，展开后 Esc 收、方向键在 5 列 × 3 行的格子里走、Enter / Space 落项。
     /// </summary>
     private void RootPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -195,13 +198,13 @@ public partial class TypePicker : UserControl
             return;
         }
 
-        var column = _activeIndex % 3;
+        var column = _activeIndex % ColumnCount;
         var next = key switch
         {
             Key.Left => column > 0 ? _activeIndex - 1 : _activeIndex,
-            Key.Right => column < 2 && _activeIndex + 1 < count ? _activeIndex + 1 : _activeIndex,
-            Key.Up => _activeIndex - 3 >= 0 ? _activeIndex - 3 : _activeIndex,
-            _ => _activeIndex + 3 < count ? _activeIndex + 3 : _activeIndex
+            Key.Right => column < ColumnCount - 1 && _activeIndex + 1 < count ? _activeIndex + 1 : _activeIndex,
+            Key.Up => _activeIndex - ColumnCount >= 0 ? _activeIndex - ColumnCount : _activeIndex,
+            _ => _activeIndex + ColumnCount < count ? _activeIndex + ColumnCount : _activeIndex
         };
 
         SetActive(next);
