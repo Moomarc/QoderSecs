@@ -12,7 +12,7 @@ namespace QoderSecs.App;
 /// <summary>
 /// 工具栏上的类型下拉：点一下展开，点外面或者按 Esc 才收。
 /// 不用 MenuItem 的子菜单，是因为那种子菜单的开关归 Menu 管，鼠标划到别处就会自己收起，
-/// 外面改不动；这里换成自己控制的 Popup。类型格按组排四行，尺寸和右键菜单那套对齐。
+/// 外面改不动；这里换成自己控制的 Popup。类型格固定 5 列排 3 行，尺寸和右键菜单那套对齐。
 /// 键盘焦点一直留在那只按钮上，格子里的高亮由 IsActive 画：弹出层是独立 HWND，
 /// 焦点一进去，方向键和回车就交给它自己的窗口，主窗这边什么也收不到。
 /// </summary>
@@ -54,7 +54,7 @@ public partial class TypePicker : UserControl
     /// <summary>按当前顺序排好的类型，下标和 TypePanel 的子项一一对应。</summary>
     private readonly List<ItemTypeOption> _options = [];
 
-    /// <summary>每一行在 _options 里的下标；上下移动要按组换行，不能拿总数做算术。</summary>
+    /// <summary>每一行在 _options 里的下标；上下移动按固定列数换行。</summary>
     private readonly List<List<int>> _rows = [];
 
     private int _activeIndex = -1;
@@ -132,19 +132,17 @@ public partial class TypePicker : UserControl
         BuildRows();
     }
 
-    /// <summary>相邻同组切成一行，给上下方向键用；行内左右移动不跨组。</summary>
+    /// <summary>固定每行 5 格切成行，给上下方向键用。</summary>
     private void BuildRows()
     {
-        ItemTypeGroup? current = null;
-        for (var index = 0; index < _options.Count; index++)
+        for (var start = 0; start < _options.Count; start += TypeMenuPanel.Columns)
         {
-            if (_rows.Count == 0 || _options[index].Group != current)
+            _rows.Add([]);
+            var end = Math.Min(start + TypeMenuPanel.Columns, _options.Count);
+            for (var index = start; index < end; index++)
             {
-                _rows.Add([]);
-                current = _options[index].Group;
+                _rows[^1].Add(index);
             }
-
-            _rows[^1].Add(index);
         }
     }
 
@@ -246,8 +244,8 @@ public partial class TypePicker : UserControl
     }
 
     /// <summary>
-    /// 换行时列数会变（第一行 5 格、第二三行 4 格、最后一行 2 格），
-    /// 落点取目标行里最接近原列的那一格，而不是落空或跳回开头。
+    /// 换行时列数固定是 5，最后一行可能不满；落点取目标行里最接近原列的那一格，
+    /// 而不是落空或跳回开头。
     /// </summary>
     private static int NearestInRow(List<int> row, int column) =>
         row[Math.Min(column, row.Count - 1)];

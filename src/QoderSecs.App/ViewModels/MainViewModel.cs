@@ -796,7 +796,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public string LibraryHeader
     {
         // 只报条数：左栏被右侧「文件 + 新消息」挤得只剩一条窄轨。
-        // 窗口拖到最窄（860 DIP）时标题只有约 64 DIP，「消息库 29 条」和带「·」的写法
+        // 窗口拖到最窄（860 DIP）时标题只有约 64 DIP，「消息库 40 条」和带「·」的写法
         // 都会被裁成「消息库 …」；这个写法实测 55 DIP，两种宽度下都能完整显示。
         get => $"消息库 {_library.Messages.Count}";
     }

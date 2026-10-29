@@ -54,6 +54,25 @@ public sealed class SampleLibraryTests
 
         AssertAckBody(library, 1, 18, "ONLACK");
         AssertAckBody(library, 2, 32, "TIACK");
+        AssertAckBody(library, 2, 34, "DRACK");
+        AssertAckBody(library, 2, 36, "LRACK");
+        AssertAckBody(library, 2, 38, "ERACK");
+        AssertAckBody(library, 7, 4, "PPACK");
+        AssertAckBody(library, 7, 18, "PPACK");
+        AssertAckBody(library, 10, 4, "ACKC10");
+        AssertAckBody(library, 12, 10, "ACK");
+    }
+
+    /// <summary>带 W 位的请求都要配 AutoReply，否则联调时对面只能等到 T3。</summary>
+    [TestMethod]
+    public void EveryWBitRequestHasAnAutoReply()
+    {
+        foreach (var entry in Sample().Messages.Where(entry => entry.WBit))
+        {
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(entry.AutoReply),
+                $"{entry.Name} 带 W 位却没有 AutoReply。");
+        }
     }
 
     [TestMethod]
@@ -144,11 +163,13 @@ public sealed class SampleLibraryTests
         CollectionAssert.AreEqual(
             new[]
             {
-                "S10F3", "S1F1", "S1F11", "S1F13", "S1F14", "S1F15", "S1F16", "S1F17",
-                "S1F18", "S1F2", "S1F3", "S1F4",
-                "S2F31", "S2F32", "S2F33", "S2F35", "S2F37", "S2F41", "S2F42",
-                "S5F1", "S5F2", "S6F11", "S6F12", "S7F17", "S7F19", "S7F3", "S7F5",
-                "S12F9", "S12F16",
+                "S10F3", "S10F4", "S1F1", "S1F11", "S1F12", "S1F13", "S1F14", "S1F15",
+                "S1F16", "S1F17", "S1F18", "S1F2", "S1F3", "S1F4",
+                "S2F31", "S2F32", "S2F33", "S2F34", "S2F35", "S2F36", "S2F37", "S2F38",
+                "S2F41", "S2F42",
+                "S5F1", "S5F2", "S6F11", "S6F12",
+                "S7F17", "S7F18", "S7F19", "S7F20", "S7F3", "S7F4", "S7F5", "S7F6",
+                "S12F10", "S12F15", "S12F16", "S12F9",
             }.OrderBy(signature => signature, StringComparer.Ordinal).ToList(),
             actual);
     }

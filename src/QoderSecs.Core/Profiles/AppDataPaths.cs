@@ -16,8 +16,8 @@ public sealed class AppDataPaths
 
     /// <summary>
     /// 内嵌在程序里、启动时解到数据目录第一层的两份样本库。
-    /// rich-set 是 GEM 常用命令的全量骨架：结构留着、数值一律空，自动回复只配到同名的标准应答；
-    /// raw-set 只留 S1F1/2、S1F13/14 四条，变量带默认值，导入就能走完一轮自动回复。
+    /// rich-set 是 GEM 常用命令的全量骨架：结构留着、数值一律空，带 W 的请求都配了同名标准应答；
+    /// raw-set 只有最常见的五对（S1F1/2、S1F13/14、S2F41/42、S5F1/2、S6F11/12），变量带默认值。
     /// 这两个名字同时是 exe 里内嵌资源的后缀，改一处要改两处（见 QoderSecs.App.csproj）。
     /// </summary>
     public const string RichSampleFileName = "rich-set.sxml";

@@ -2,14 +2,14 @@
     <DataDictionary>
     </DataDictionary>
     <MessageDictionary>
-        <Message Name="AreYouThere" Description="在线查询，无正文">
+        <Message Name="AreYouThere">
             <Stream>1</Stream>
             <Function>1</Function>
             <WBit>1</WBit>
             <AutoReply>OnlineData</AutoReply>
             <Structure />
         </Message>
-        <Message Name="OnlineData" Description="回 S1F1：机型与软件版本，默认值可直接发">
+        <Message Name="OnlineData">
             <Stream>1</Stream>
             <Function>2</Function>
             <Structure>
@@ -20,21 +20,21 @@
                         </Maps>
                     </A>
                     <A Name="SOFTREV">
-                        <Value>1.0.0</Value>
+                        <Value>1.0</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
                 </L>
             </Structure>
         </Message>
-        <Message Name="EstablishComms" Description="建立通信，无正文">
+        <Message Name="EstablishComms">
             <Stream>1</Stream>
             <Function>13</Function>
             <WBit>1</WBit>
             <AutoReply>EstablishCommsAck</AutoReply>
             <Structure />
         </Message>
-        <Message Name="EstablishCommsAck" Description="回 S1F13：COMMACK=0 接受">
+        <Message Name="EstablishCommsAck">
             <Stream>1</Stream>
             <Function>14</Function>
             <Structure>
@@ -51,12 +51,122 @@
                             </Maps>
                         </A>
                         <A Name="SOFTREV">
-                            <Value>1.0.0</Value>
+                            <Value>1.0</Value>
                             <Maps Type="4096">
                             </Maps>
                         </A>
                     </L>
                 </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommand">
+            <Stream>2</Stream>
+            <Function>41</Function>
+            <WBit>1</WBit>
+            <AutoReply>HostCommandAck</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="RCMD">
+                        <Value>START</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandAck">
+            <Stream>2</Stream>
+            <Function>42</Function>
+            <Structure>
+                <L>
+                    <B Name="HCACK">
+                        <Value>00</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="AlarmReport">
+            <Stream>5</Stream>
+            <Function>1</Function>
+            <WBit>1</WBit>
+            <AutoReply>AlarmReportAck</AutoReply>
+            <Structure>
+                <L>
+                    <B Name="ALCD">
+                        <Value>81</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <U4 Name="ALID">
+                        <Value>1</Value>
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
+                    <A Name="ALTX">
+                        <Value>ALARM</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="AlarmReportAck">
+            <Stream>5</Stream>
+            <Function>2</Function>
+            <Structure>
+                <B Name="ACK">
+                    <Value>00</Value>
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="EventReport">
+            <Stream>6</Stream>
+            <Function>11</Function>
+            <WBit>1</WBit>
+            <AutoReply>EventReportAck</AutoReply>
+            <Structure>
+                <L>
+                    <U4 Name="DATAID">
+                        <Value>0</Value>
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
+                    <U4 Name="CEID">
+                        <Value>1</Value>
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
+                    <L Name="ReportList">
+                        <L>
+                            <U4 Name="RPTID">
+                                <Value>1</Value>
+                                <Maps Type="64">
+                                </Maps>
+                            </U4>
+                            <L Name="Report">
+                            </L>
+                        </L>
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="EventReportAck">
+            <Stream>6</Stream>
+            <Function>12</Function>
+            <Structure>
+                <B Name="ACK">
+                    <Value>00</Value>
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
             </Structure>
         </Message>
     </MessageDictionary>

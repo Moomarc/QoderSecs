@@ -111,15 +111,27 @@ public sealed class WaferMapTests
             XNode.DeepEquals(Normalized(parsed!.Structure), Normalized(library.Messages[0].Structure!)));
     }
 
-    /// <summary>改名、自动回复指向的目标也得撑得住这张图，不能一到 Secondary 就发不出去。</summary>
+    /// <summary>自动回复按 E5 配对：F9 回 F10 的 ACK，F15 回 F16 的图，且图要能发得出去。</summary>
     [TestMethod]
-    public void TheConfiguredReplyCarriesTheSameMap()
+    public void TheConfiguredRepliesFollowTheE5Pairs()
     {
         var library = Library();
-        var target = AutoReplyResolver.FindTarget(library, 12, 9);
 
-        Assert.AreEqual("WaferMapAck", target?.Name);
-        Assert.IsTrue(SmlConverter.TryToMessage(target!, replyExpected: false, out var reply, out var error), error);
+        var ack = AutoReplyResolver.FindTarget(library, 12, 9);
+        Assert.AreEqual("WaferMapAck", ack?.Name);
+        Assert.AreEqual(10, ack!.Function);
+        Assert.IsTrue(SmlConverter.TryToMessage(ack, replyExpected: false, out var ackMessage, out var error), error);
+
+        using (ackMessage)
+        {
+            Assert.IsFalse(ackMessage!.ReplyExpected);
+            Assert.AreEqual(SecsFormat.Binary, ackMessage.SecsItem!.Format);
+        }
+
+        var map = AutoReplyResolver.FindTarget(library, 12, 15);
+        Assert.AreEqual("WaferMapData", map?.Name);
+        Assert.AreEqual(16, map!.Function);
+        Assert.IsTrue(SmlConverter.TryToMessage(map, replyExpected: false, out var reply, out error), error);
 
         using (reply)
         {

@@ -280,12 +280,12 @@ public sealed class HsmsLinkLoopbackTests
     }
 
     /// <summary>
-    /// 上下图第 6 条，本端当 Equipment：Host 发来带 7482 字符地图的 S12F9W，按库里的 AutoReply
-    /// 回一张同样的图出去。连发 10 轮，每一轮都要回得来、正文一个字不能少，
-    /// 跑完连接还得是 Online——大图不许把链路带崩，也不许把发送闸门卡住（第 4 条那个坑）。
+    /// 上下图第 6 条，本端当 Equipment：Host 发来带 7482 字符地图的 S12F9W，按 E5 回 S12F10 的 ACK；
+    /// 再发 S12F15W 才回一张同样的图。两种都连发 10 轮，跑完连接还得是 Online——
+    /// 大图不许把链路带崩，也不许把发送闸门卡住（第 4 条那个坑）。
     /// </summary>
     [TestMethod]
-    public async Task AWaferMapComesInAndGoesBackOutWhole()
+    public async Task WaferMapRequestsGoBothWaysWhole()
     {
         await using var equipment = new HsmsLink { LibraryProvider = WaferMapLibrary };
         var records = Watch(equipment);
@@ -295,57 +295,78 @@ public sealed class HsmsLinkLoopbackTests
 
         var library = WaferMapLibrary();
         var map = WaferMapBody(library);
+        var send = library.Messages.Single(message => message.Signature == "S12F9");
+        var request = library.Messages.Single(message => message.Signature == "S12F15");
         var inbound = new List<CommunicationRecord>();
         var outbound = new List<CommunicationRecord>();
 
         for (var round = 0; round < 10; round++)
         {
-            Assert.IsTrue(
-                SmlConverter.TryToMessage(library.Messages[0], replyExpected: true, out var request, out var error),
-                error);
+            Assert.IsTrue(SmlConverter.TryToMessage(send, replyExpected: true, out var mapMessage, out var error), error);
 
-            using (request)
+            using (mapMessage)
             {
-                using var reply = await peer.SendAsync(request);
+                using var ack = await peer.SendAsync(mapMessage);
 
-                Assert.IsFalse(reply.ReplyExpected, "回出去的是 Secondary，不能带 W。");
-                Assert.AreEqual((byte)12, reply.S);
-                Assert.AreEqual((byte)16, reply.F);
-                Assert.AreEqual(map, reply.SecsItem!.Items[3].GetString(), "地图正文少了或改了。");
+                Assert.IsFalse(ack.ReplyExpected, "回出去的是 Secondary，不能带 W。");
+                Assert.AreEqual((byte)12, ack.S);
+                Assert.AreEqual((byte)10, ack.F);
+                Assert.AreEqual(SecsFormat.Binary, ack.SecsItem!.Format, "S12F10 是 ACK，不是回图。");
             }
 
+            Assert.IsTrue(SmlConverter.TryToMessage(request, replyExpected: true, out var dataMessage, out error), error);
+
+            using (dataMessage)
+            {
+                using var data = await peer.SendAsync(dataMessage);
+
+                Assert.IsFalse(data.ReplyExpected, "回出去的是 Secondary，不能带 W。");
+                Assert.AreEqual((byte)12, data.S);
+                Assert.AreEqual((byte)16, data.F);
+                Assert.AreEqual(map, data.SecsItem!.Items[3].GetString(), "地图正文少了或改了。");
+            }
+
+            inbound.Add(await TakeAsync(records));
+            outbound.Add(await TakeAsync(records));
             inbound.Add(await TakeAsync(records));
             outbound.Add(await TakeAsync(records));
         }
 
         // 记录状态由 Secs4Net 的回调线程写，回复到手不等于状态已经落定，所以先等再断言
         // （本文件其它状态断言也是这个口径）。等不到就是真断了，断言会把每条状态打出来。
-        await WaitFor("十条入站都记成已自动回复", () => inbound.All(record => record.Status == RecordStatus.Answered));
-        await WaitFor("十条出站都记成已发送", () => outbound.All(record => record.Status == RecordStatus.Sent));
+        await WaitFor("二十条入站都记成已自动回复", () => inbound.All(record => record.Status == RecordStatus.Answered));
+        await WaitFor("二十条出站都记成已发送", () => outbound.All(record => record.Status == RecordStatus.Sent));
 
         CollectionAssert.AreEqual(
-            Enumerable.Repeat("S12F9W", inbound.Count).ToList(),
+            Enumerable.Range(0, inbound.Count)
+                .Select(index => index % 2 == 0 ? "S12F9W" : "S12F15W")
+                .ToList(),
             inbound.Select(record => record.Signature).ToList());
         Assert.IsTrue(inbound.All(record => record.Status == RecordStatus.Answered), $"入站状态不对：{Describe(inbound)}");
         CollectionAssert.AreEqual(
-            Enumerable.Repeat("S12F16 WaferMapAck", outbound.Count).ToList(),
+            Enumerable.Range(0, outbound.Count)
+                .Select(index => index % 2 == 0 ? "S12F10 WaferMapAck" : "S12F16 WaferMapData")
+                .ToList(),
             outbound.Select(record => record.MessageText).ToList());
         Assert.IsTrue(outbound.All(record => record.Status == RecordStatus.Sent), $"出站状态不对：{Describe(outbound)}");
         CollectionAssert.AreEqual(
             inbound.Select(record => record.SystemBytes).ToList(),
             outbound.Select(record => record.SystemBytes).ToList(),
-            "每一张回的图都得挂在它自己那一条请求上。");
-        Assert.IsTrue(outbound.All(record => record.Sml!.Contains(map, StringComparison.Ordinal)));
+            "每条回复都得挂在它自己那一条请求上。");
+        Assert.IsTrue(
+            outbound.Where(record => record.Signature == "S12F16")
+                .All(record => record.Sml!.Contains(map, StringComparison.Ordinal)),
+            "回出去的图必须一字不差。");
         await WaitFor("本端还在线", () => equipment.Phase == LinkPhase.Online);
         Assert.AreEqual(LinkPhase.Online, equipment.Phase);
     }
 
     /// <summary>
-    /// 反过来，本端当 Host：把整张图发出去，对端按库里的配置回一张同样的图回来。
+    /// 反过来，本端当 Host：S12F9 只换来 F10 的 ACK，S12F15 才换来同一张图。
     /// 7.6 KB 在 16 KB 内联上限之内，所以记录里就该带着完整正文，不用去 sml.log 捞。
     /// </summary>
     [TestMethod]
-    public async Task AHostSendsTheWaferMapAndGetsTheSameOneBack()
+    public async Task AHostGetsTheWaferMapOnlyFromTheRequest()
     {
         var port = ReservePort();
         await using var equipment = new HsmsLink { LibraryProvider = WaferMapLibrary };
@@ -356,14 +377,23 @@ public sealed class HsmsLinkLoopbackTests
 
         var library = WaferMapLibrary();
         var map = WaferMapBody(library);
+        var send = library.Messages.Single(message => message.Signature == "S12F9");
+        var request = library.Messages.Single(message => message.Signature == "S12F15");
 
         for (var round = 0; round < 10; round++)
         {
-            Assert.IsTrue(SmlConverter.TryToMessage(library.Messages[0], out var request, out var error), error);
+            Assert.IsTrue(SmlConverter.TryToMessage(send, out var mapMessage, out var error), error);
 
-            using (request)
+            using (mapMessage)
             {
-                StringAssert.Contains(await host.SendAsync(request), "S12F16");
+                StringAssert.Contains(await host.SendAsync(mapMessage), "S12F10");
+            }
+
+            Assert.IsTrue(SmlConverter.TryToMessage(request, out var dataMessage, out error), error);
+
+            using (dataMessage)
+            {
+                StringAssert.Contains(await host.SendAsync(dataMessage), "S12F16");
             }
         }
 
@@ -371,10 +401,10 @@ public sealed class HsmsLinkLoopbackTests
         // 所以先等再断言（本文件其它状态断言也是这个口径）。等不到才是真出问题，
         // 断言会把每条记录的状态打出来。
         await WaitFor(
-            "十条收发记录都登记完",
+            "二十条收发记录都登记完",
             () =>
-                host.Transcript.Records.Count(record => record.Direction == SecsDirection.Out) == 10 &&
-                host.Transcript.Records.Count(record => record.Direction == SecsDirection.In) == 10,
+                host.Transcript.Records.Count(record => record.Direction == SecsDirection.Out) == 20 &&
+                host.Transcript.Records.Count(record => record.Direction == SecsDirection.In) == 20,
             () => $"out={host.Transcript.Records.Count(record => record.Direction == SecsDirection.Out)} " +
                 $"in={host.Transcript.Records.Count(record => record.Direction == SecsDirection.In)}");
 
@@ -382,11 +412,11 @@ public sealed class HsmsLinkLoopbackTests
         var received = host.Transcript.Records.Where(record => record.Direction == SecsDirection.In).ToList();
 
         await WaitFor(
-            "十条出站都收到回复",
+            "二十条出站都收到回复",
             () => sent.All(record => record.Status == RecordStatus.SecondaryReceived),
             () => Describe(sent));
         await WaitFor(
-            "十条入站都配上对",
+            "二十条入站都配上对",
             () => received.All(record => record.Status == RecordStatus.PairedSecondary),
             () => Describe(received));
         await WaitFor(
@@ -394,7 +424,8 @@ public sealed class HsmsLinkLoopbackTests
             () => host.Phase == LinkPhase.Online && equipment.Phase == LinkPhase.Online,
             () => $"host={host.Phase} equipment={equipment.Phase}");
 
-        Assert.HasCount(10, sent);
+        Assert.HasCount(20, sent);
+        Assert.HasCount(20, received);
         Assert.IsTrue(
             sent.All(record => record.Status == RecordStatus.SecondaryReceived),
             $"出站状态不对：{Describe(sent)}");
@@ -404,8 +435,13 @@ public sealed class HsmsLinkLoopbackTests
         CollectionAssert.AreEqual(
             sent.Select(record => record.SystemBytes).ToList(),
             received.Select(record => record.SystemBytes).ToList());
-        Assert.IsTrue(received.All(record => record.Sml!.Contains(map, StringComparison.Ordinal)),
-            "收到的那张图必须和发出去的一字不差。");
+        var maps = received.Where(record => record.Signature == "S12F16").ToList();
+        Assert.HasCount(10, maps);
+        Assert.IsTrue(maps.All(record => record.Sml!.Contains(map, StringComparison.Ordinal)),
+            "收到的那张图必须和库里的一字不差。");
+        Assert.IsTrue(
+            received.Where(record => record.Signature == "S12F10").All(record => !record.Sml!.Contains(map)),
+            "S12F9 的回复是 ACK，不该带着图。");
         Assert.AreEqual(LinkPhase.Online, host.Phase);
         Assert.AreEqual(LinkPhase.Online, equipment.Phase);
     }
@@ -963,7 +999,7 @@ public sealed class HsmsLinkLoopbackTests
     private static MessageLibrary CommonCommands() => MessageLibrary.Load(
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "rich-set.sxml")));
 
-    /// <summary>上下图素材：S12F9 带 7482 字符地图、AutoReply 指着 S12F16，两条正文同一张图。</summary>
+    /// <summary>上下图素材：S12F9 带 7482 字符地图、按 E5 回 S12F10；S12F15 请求、回 S12F16 同一张图。</summary>
     private static MessageLibrary WaferMapLibrary() => MessageLibrary.Load(
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "TestData", "wafer-map.sxml")));
 

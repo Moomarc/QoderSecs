@@ -7,44 +7,33 @@ using QoderSecs.Core.Messages;
 namespace QoderSecs.App.ViewModels;
 
 /// <summary>
-/// 类型选项在哪一组。菜单按组分行、组间画线：只写代号的排法不变，
-/// 但 I 系列、U 系列、F 系列各自成块，不用逐格读代号也能看出边界。
-/// </summary>
-public enum ItemTypeGroup
-{
-    Basic,
-    Signed,
-    Unsigned,
-    Float
-}
-
-/// <summary>
-/// 右键菜单和工具栏「+子项 / +同级」共用的类型选项表，顺序即菜单顺序。
+/// 右键菜单和工具栏「+子项 / +同级」共用的类型选项表，顺序即菜单顺序：
+/// 15 个代号固定 5 列排 3 行，组别靠色块区分。
 /// 只给元素代号（L / A / U4 …）：SECS-II 工程师看代号就够，带上中文会让
-/// 15 格排不开；分组靠行距、分隔线和色块，不靠文字说明。
+/// 15 格排不开；Boolean 缩成 BOOL，和其余两字符代号对齐。
 /// </summary>
-public sealed record ItemTypeOption(SecsItemType Type, string Header, ItemTypeGroup Group)
+public sealed record ItemTypeOption(SecsItemType Type, string Header)
 {
     /// <summary>和结构树的类型色块同一份颜色，两处对同一类型不会认成两种颜色。</summary>
     public SolidColorBrush Accent => TypePalette.Of(Type);
 
     public static IReadOnlyList<ItemTypeOption> All { get; } =
     [
-        new(SecsItemType.List, "L", ItemTypeGroup.Basic),
-        new(SecsItemType.A, "A", ItemTypeGroup.Basic),
-        new(SecsItemType.J, "J", ItemTypeGroup.Basic),
-        new(SecsItemType.B, "B", ItemTypeGroup.Basic),
-        new(SecsItemType.Boolean, "Boolean", ItemTypeGroup.Basic),
-        new(SecsItemType.I1, "I1", ItemTypeGroup.Signed),
-        new(SecsItemType.I2, "I2", ItemTypeGroup.Signed),
-        new(SecsItemType.I4, "I4", ItemTypeGroup.Signed),
-        new(SecsItemType.I8, "I8", ItemTypeGroup.Signed),
-        new(SecsItemType.U1, "U1", ItemTypeGroup.Unsigned),
-        new(SecsItemType.U2, "U2", ItemTypeGroup.Unsigned),
-        new(SecsItemType.U4, "U4", ItemTypeGroup.Unsigned),
-        new(SecsItemType.U8, "U8", ItemTypeGroup.Unsigned),
-        new(SecsItemType.F4, "F4", ItemTypeGroup.Float),
-        new(SecsItemType.F8, "F8", ItemTypeGroup.Float)
+        new(SecsItemType.List, "L"),
+        new(SecsItemType.A, "A"),
+        new(SecsItemType.J, "J"),
+        new(SecsItemType.B, "B"),
+        new(SecsItemType.Boolean, "BOOL"),
+        new(SecsItemType.I1, "I1"),
+        new(SecsItemType.I2, "I2"),
+        new(SecsItemType.I4, "I4"),
+        new(SecsItemType.I8, "I8"),
+        new(SecsItemType.F4, "F4"),
+        new(SecsItemType.U1, "U1"),
+        new(SecsItemType.U2, "U2"),
+        new(SecsItemType.U4, "U4"),
+        new(SecsItemType.U8, "U8"),
+        new(SecsItemType.F8, "F8")
     ];
 }
 

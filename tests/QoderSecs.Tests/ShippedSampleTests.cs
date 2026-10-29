@@ -11,7 +11,8 @@ namespace QoderSecs.Tests;
 /// 真因是缺 <c>&lt;DataDictionary&gt;</c> 那一段，单变量对照件的实测结论记在 MessageLibrary 里。
 ///
 /// rich-set 是骨架，数值一律空着（「留结构不填数据」的口径由 SampleLibraryTests 盯）；
-/// raw-set 只留 S1F1/2、S1F13/14，变量带默认值，导入就能走完一轮自动回复。
+/// raw-set 只有最常见的五对（S1F1/2、S1F13/14、S2F41/42、S5F1/2、S6F11/12），
+/// 变量带默认值，导入就能直接发。
 /// S12 上下图那套带正文的素材留在 TestData/wafer-map.sxml，由 WaferMapTests 和回环测试盯，
 /// 不再随 exe 发出去。
 /// </summary>
@@ -100,17 +101,24 @@ public sealed class ShippedSampleTests
     }
 
     [TestMethod]
-    public void TheRawSampleIsTheMinimalFourMessageSet()
+    public void TheRawSampleIsTheAgreedFivePairs()
     {
         var raw = Sample(AppDataPaths.RawSampleFileName);
 
         CollectionAssert.AreEquivalent(
-            new[] { "S1F1", "S1F2", "S1F13", "S1F14" },
+            new[]
+            {
+                "S1F1", "S1F2", "S1F13", "S1F14",
+                "S2F41", "S2F42", "S5F1", "S5F2", "S6F11", "S6F12",
+            },
             raw.Library.Messages.Select(entry => entry.Signature).ToList(),
-            "raw-set 只该有这四条。");
+            "raw-set 只该有这十条。");
 
         Assert.AreEqual("OnlineData", AutoReplyResolver.FindTarget(raw.Library, 1, 1)?.Name);
         Assert.AreEqual("EstablishCommsAck", AutoReplyResolver.FindTarget(raw.Library, 1, 13)?.Name);
+        Assert.AreEqual("HostCommandAck", AutoReplyResolver.FindTarget(raw.Library, 2, 41)?.Name);
+        Assert.AreEqual("AlarmReportAck", AutoReplyResolver.FindTarget(raw.Library, 5, 1)?.Name);
+        Assert.AreEqual("EventReportAck", AutoReplyResolver.FindTarget(raw.Library, 6, 11)?.Name);
     }
 
     /// <summary>raw-set 和 rich-set 的唯一区别就在这儿：变量带着能直接发出去的默认值。</summary>
@@ -120,8 +128,18 @@ public sealed class ShippedSampleTests
         var raw = Sample(AppDataPaths.RawSampleFileName);
 
         AssertValue(raw.Library, 1, 2, "MDLN", "QODERSECS");
-        AssertValue(raw.Library, 1, 2, "SOFTREV", "1.0.0");
+        AssertValue(raw.Library, 1, 2, "SOFTREV", "1.0");
         AssertValue(raw.Library, 1, 14, "COMMACK", "00");
+        AssertValue(raw.Library, 2, 41, "RCMD", "START");
+        AssertValue(raw.Library, 2, 42, "HCACK", "00");
+        AssertValue(raw.Library, 5, 1, "ALCD", "81");
+        AssertValue(raw.Library, 5, 1, "ALID", "1");
+        AssertValue(raw.Library, 5, 1, "ALTX", "ALARM");
+        AssertValue(raw.Library, 5, 2, "ACK", "00");
+        AssertValue(raw.Library, 6, 11, "DATAID", "0");
+        AssertValue(raw.Library, 6, 11, "CEID", "1");
+        AssertValue(raw.Library, 6, 11, "RPTID", "1");
+        AssertValue(raw.Library, 6, 12, "ACK", "00");
     }
 
     private static void AssertValue(

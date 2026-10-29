@@ -2,7 +2,7 @@
     <DataDictionary>
     </DataDictionary>
     <MessageDictionary>
-        <Message Name="WaferMap" Description="设备上报上下图，正文带整张图">
+        <Message Name="WaferMap">
             <Stream>12</Stream>
             <Function>9</Function>
             <WBit>1</WBit>
@@ -27,7 +27,35 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="WaferMapAck" Description="Host 侧回的上下图，正文同一张图">
+        <Message Name="WaferMapAck">
+            <Stream>12</Stream>
+            <Function>10</Function>
+            <Structure>
+                <B Name="ACK">
+                    <Value>00</Value>
+                    <Maps Type="1024" />
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="WaferMapRequest">
+            <Stream>12</Stream>
+            <Function>15</Function>
+            <WBit>1</WBit>
+            <AutoReply>WaferMapData</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="LOT ID">
+                        <Value>MASKEDLOT1</Value>
+                        <Maps Type="4096" />
+                    </A>
+                    <B Name="WAFER NO">
+                        <Value>02</Value>
+                        <Maps Type="1024" />
+                    </B>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="WaferMapData">
             <Stream>12</Stream>
             <Function>16</Function>
             <Structure>

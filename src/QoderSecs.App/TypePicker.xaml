@@ -8,8 +8,8 @@
     <UserControl.Resources>
         <!-- 弹层里的一格类型。尺寸和右键菜单那套 TypeSubmenuItemStyle 对齐（76 宽、28 高），
              另起一份模板只是为了不受 Menu 开关行为的约束：这里要点外面才收。
-             内容不再是一行文字，而是 App.xaml 里那份彩色代号块，格子居中：
-             每格一个色块，加上 TypeMenuPanel 的组间分隔线，选项边界不用逐字读。 -->
+             内容不再是一行文字，而是 App.xaml 里那份彩色代号块，格子居中；
+             15 格排成 3 行 5 列，组别靠色块区分。 -->
         <Style x:Key="PickerItemStyle" TargetType="Button">
             <Setter Property="Width" Value="76" />
             <Setter Property="Height" Value="28" />
@@ -77,10 +77,8 @@
                                       Opacity="0.14"
                                       ShadowDepth="3" />
                 </Border.Effect>
-                <!-- 按组排四行（基础类型 5 格、有符号 4 格、无符号 4 格、浮点 2 格），
-                     组间画分隔线；和右键菜单那份是同一个面板。 -->
-                <local:TypeMenuPanel x:Name="TypePanel"
-                                     SeparatorBrush="{DynamicResource BorderBrush}" />
+                <!-- 15 个类型固定 5 列排 3 行；和右键菜单那份是同一个面板。 -->
+                <local:TypeMenuPanel x:Name="TypePanel" />
             </Border>
         </Popup>
     </Grid>

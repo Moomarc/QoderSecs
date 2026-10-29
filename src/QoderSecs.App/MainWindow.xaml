@@ -269,10 +269,10 @@
             </Setter>
         </Style>
 
-        <!-- 类型子菜单：只写元素代号，15 个类型按组排四行，组间由面板画分隔线。
+        <!-- 类型子菜单：只写元素代号，15 个类型固定 5 列排 3 行，组别靠色块区分。
              一格 76×28 保证五列等宽；弹层宽 390（380 + 左右内边距 4 和边框）。 -->
         <ItemsPanelTemplate x:Key="TypeMenuPanelTemplate">
-            <app:TypeMenuPanel SeparatorBrush="{DynamicResource BorderBrush}" />
+            <app:TypeMenuPanel />
         </ItemsPanelTemplate>
 
         <!-- 顶栏那颗开着参数面板的开关按钮：按下态用浅强调底色，和主按钮区分开。 -->
@@ -690,7 +690,7 @@
              往前找——那会落到系统主题样式上（深色主题下菜单字是白的，落在白底上就看不见了）。 -->
         <Style TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}" />
 
-        <!-- 类型选项网格：15 个类型按组排四行，单列那一长串会把弹层拉到屏幕外。
+        <!-- 类型选项网格：15 个类型固定 5 列排 3 行，单列那一长串会把弹层拉到屏幕外。
              一格 76×28，内容为 App.xaml 里那份彩色代号块并居中；上下各留 1 的间距，
              行与行之间空 2px，悬停底色不会连成一片。 -->
         <Style x:Key="TypeSubmenuItemStyle" TargetType="MenuItem" BasedOn="{StaticResource MenuRowStyle}">

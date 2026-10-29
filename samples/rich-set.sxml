@@ -2,14 +2,14 @@
     <DataDictionary>
     </DataDictionary>
     <MessageDictionary>
-        <Message Name="AreYouThere" Description="在线查询，无正文">
+        <Message Name="AreYouThere">
             <Stream>1</Stream>
             <Function>1</Function>
             <WBit>1</WBit>
             <AutoReply>OnlineData</AutoReply>
             <Structure />
         </Message>
-        <Message Name="OnlineData" Description="回 S1F1：机型与软件版本">
+        <Message Name="OnlineData">
             <Stream>1</Stream>
             <Function>2</Function>
             <Structure>
@@ -27,7 +27,7 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="StatusRequest" Description="按 SVID 查询状态变量">
+        <Message Name="StatusRequest">
             <Stream>1</Stream>
             <Function>3</Function>
             <WBit>1</WBit>
@@ -42,31 +42,63 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="StatusData" Description="按请求顺序返回 SV 值">
+        <Message Name="StatusData">
             <Stream>1</Stream>
             <Function>4</Function>
             <Structure>
                 <L>
+                    <A Name="SV">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
                 </L>
             </Structure>
         </Message>
-        <Message Name="StatusVariableNamelist" Description="查询 SV 名称表，应答 S1F12">
+        <Message Name="StatusVariableNamelist">
             <Stream>1</Stream>
             <Function>11</Function>
             <WBit>1</WBit>
+            <AutoReply>StatusVariableNamelistReply</AutoReply>
+            <Structure />
+        </Message>
+        <Message Name="StatusVariableNamelistReply">
+            <Stream>1</Stream>
+            <Function>12</Function>
             <Structure>
                 <L>
+                    <L Name="SVIDList">
+                        <L>
+                            <U4 Name="SVID">
+                                <Value />
+                                <Maps Type="64">
+                                </Maps>
+                            </U4>
+                            <A Name="SVNAME">
+                                <Value />
+                                <Maps Type="4096">
+                                </Maps>
+                            </A>
+                        </L>
+                    </L>
+                    <L Name="SVList">
+                        <A Name="SV">
+                            <Value />
+                            <Maps Type="4096">
+                            </Maps>
+                        </A>
+                    </L>
                 </L>
             </Structure>
         </Message>
-        <Message Name="EstablishComms" Description="建立通信，无正文">
+        <Message Name="EstablishComms">
             <Stream>1</Stream>
             <Function>13</Function>
             <WBit>1</WBit>
             <AutoReply>EstablishCommsAck</AutoReply>
             <Structure />
         </Message>
-        <Message Name="EstablishCommsAck" Description="COMMACK=0 接受">
+        <Message Name="EstablishCommsAck">
             <Stream>1</Stream>
             <Function>14</Function>
             <Structure>
@@ -91,14 +123,14 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="RequestOffline" Description="请求离线，无正文">
+        <Message Name="RequestOffline">
             <Stream>1</Stream>
             <Function>15</Function>
             <WBit>1</WBit>
             <AutoReply>RequestOfflineAck</AutoReply>
             <Structure />
         </Message>
-        <Message Name="RequestOfflineAck" Description="OFLACK=0 接受">
+        <Message Name="RequestOfflineAck">
             <Stream>1</Stream>
             <Function>16</Function>
             <Structure>
@@ -109,14 +141,14 @@
                 </B>
             </Structure>
         </Message>
-        <Message Name="RequestOnline" Description="请求上线，无正文">
+        <Message Name="RequestOnline">
             <Stream>1</Stream>
             <Function>17</Function>
             <WBit>1</WBit>
             <AutoReply>RequestOnlineAck</AutoReply>
             <Structure />
         </Message>
-        <Message Name="RequestOnlineAck" Description="ONLACK=0 接受，1 拒绝，2 已在线">
+        <Message Name="RequestOnlineAck">
             <Stream>1</Stream>
             <Function>18</Function>
             <Structure>
@@ -127,7 +159,7 @@
                 </B>
             </Structure>
         </Message>
-        <Message Name="DateTimeSet" Description="设置时间，TIME 为 12 位">
+        <Message Name="DateTimeSet">
             <Stream>2</Stream>
             <Function>31</Function>
             <WBit>1</WBit>
@@ -140,7 +172,7 @@
                 </A>
             </Structure>
         </Message>
-        <Message Name="DateTimeSetAck" Description="TIACK=0 成功，1 失败">
+        <Message Name="DateTimeSetAck">
             <Stream>2</Stream>
             <Function>32</Function>
             <Structure>
@@ -151,10 +183,11 @@
                 </B>
             </Structure>
         </Message>
-        <Message Name="DefineReport" Description="定义报告：RPTID 与 VID 列表">
+        <Message Name="DefineReport">
             <Stream>2</Stream>
             <Function>33</Function>
             <WBit>1</WBit>
+            <AutoReply>DefineReportAck</AutoReply>
             <Structure>
                 <L>
                     <U4 Name="DATAID">
@@ -181,10 +214,22 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="LinkEventReport" Description="报告挂接到 CEID">
+        <Message Name="DefineReportAck">
+            <Stream>2</Stream>
+            <Function>34</Function>
+            <Structure>
+                <B Name="DRACK">
+                    <Value />
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="LinkEventReport">
             <Stream>2</Stream>
             <Function>35</Function>
             <WBit>1</WBit>
+            <AutoReply>LinkEventReportAck</AutoReply>
             <Structure>
                 <L>
                     <U4 Name="DATAID">
@@ -211,10 +256,22 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="EnableDisableEvents" Description="CEED 为真开启报告；CEID 列表为空表示全部">
+        <Message Name="LinkEventReportAck">
+            <Stream>2</Stream>
+            <Function>36</Function>
+            <Structure>
+                <B Name="LRACK">
+                    <Value />
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="EnableDisableEvents">
             <Stream>2</Stream>
             <Function>37</Function>
             <WBit>1</WBit>
+            <AutoReply>EnableDisableEventsAck</AutoReply>
             <Structure>
                 <L>
                     <B Name="CEED">
@@ -232,7 +289,18 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="HostCommand" Description="远程命令 RCMD；参数表可空">
+        <Message Name="EnableDisableEventsAck">
+            <Stream>2</Stream>
+            <Function>38</Function>
+            <Structure>
+                <B Name="ERACK">
+                    <Value />
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="HostCommand">
             <Stream>2</Stream>
             <Function>41</Function>
             <WBit>1</WBit>
@@ -245,11 +313,23 @@
                         </Maps>
                     </A>
                     <L Name="CPList">
+                        <L>
+                            <A Name="CPNAME">
+                                <Value />
+                                <Maps Type="4096">
+                                </Maps>
+                            </A>
+                            <A Name="CPVAL">
+                                <Value />
+                                <Maps Type="4096">
+                                </Maps>
+                            </A>
+                        </L>
                     </L>
                 </L>
             </Structure>
         </Message>
-        <Message Name="HostCommandAck" Description="HCACK=0 可执行；逐参数回 CPACK">
+        <Message Name="HostCommandAck">
             <Stream>2</Stream>
             <Function>42</Function>
             <Structure>
@@ -276,7 +356,7 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="AlarmReport" Description="ALCD 最高位为 1 表示告警发生">
+        <Message Name="AlarmReport">
             <Stream>5</Stream>
             <Function>1</Function>
             <WBit>1</WBit>
@@ -301,7 +381,7 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="AlarmReportAck" Description="告警应答">
+        <Message Name="AlarmReportAck">
             <Stream>5</Stream>
             <Function>2</Function>
             <Structure>
@@ -312,7 +392,7 @@
                 </B>
             </Structure>
         </Message>
-        <Message Name="EventReport" Description="CEID 与报告数据">
+        <Message Name="EventReport">
             <Stream>6</Stream>
             <Function>11</Function>
             <WBit>1</WBit>
@@ -343,7 +423,7 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="EventReportAck" Description="事件应答">
+        <Message Name="EventReportAck">
             <Stream>6</Stream>
             <Function>12</Function>
             <Structure>
@@ -354,10 +434,11 @@
                 </B>
             </Structure>
         </Message>
-        <Message Name="ProcessProgramSend" Description="下发配方：PPID 与 PPBODY">
+        <Message Name="ProcessProgramSend">
             <Stream>7</Stream>
             <Function>3</Function>
             <WBit>1</WBit>
+            <AutoReply>ProcessProgramAck</AutoReply>
             <Structure>
                 <L>
                     <A Name="PPID">
@@ -373,10 +454,22 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="ProcessProgramRequest" Description="读取配方：PPID">
+        <Message Name="ProcessProgramAck">
+            <Stream>7</Stream>
+            <Function>4</Function>
+            <Structure>
+                <B Name="PPACK">
+                    <Value />
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="ProcessProgramRequest">
             <Stream>7</Stream>
             <Function>5</Function>
             <WBit>1</WBit>
+            <AutoReply>ProcessProgramData</AutoReply>
             <Structure>
                 <A Name="PPID">
                     <Value />
@@ -385,10 +478,29 @@
                 </A>
             </Structure>
         </Message>
-        <Message Name="DeleteProcessProgram" Description="删除配方；PPID 列表为空表示全部">
+        <Message Name="ProcessProgramData">
+            <Stream>7</Stream>
+            <Function>6</Function>
+            <Structure>
+                <L>
+                    <A Name="PPID">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <A Name="PPBODY">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="DeleteProcessProgram">
             <Stream>7</Stream>
             <Function>17</Function>
             <WBit>1</WBit>
+            <AutoReply>DeleteProcessProgramAck</AutoReply>
             <Structure>
                 <L>
                     <A Name="PPID">
@@ -399,16 +511,42 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="CurrentEPPDRequest" Description="查询配方清单，无正文；应答 S7F20">
+        <Message Name="DeleteProcessProgramAck">
+            <Stream>7</Stream>
+            <Function>18</Function>
+            <Structure>
+                <B Name="PPACK">
+                    <Value />
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="CurrentEPPDRequest">
             <Stream>7</Stream>
             <Function>19</Function>
             <WBit>1</WBit>
+            <AutoReply>CurrentEPPDList</AutoReply>
             <Structure />
         </Message>
-        <Message Name="TerminalDisplaySingle" Description="屏幕显示：TID 与 TEXT">
+        <Message Name="CurrentEPPDList">
+            <Stream>7</Stream>
+            <Function>20</Function>
+            <Structure>
+                <L>
+                    <A Name="PPID">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="TerminalDisplaySingle">
             <Stream>10</Stream>
             <Function>3</Function>
             <WBit>1</WBit>
+            <AutoReply>TerminalDisplaySingleAck</AutoReply>
             <Structure>
                 <L>
                     <B Name="TID">
@@ -424,10 +562,22 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="WaferMap" Description="上传晶圆图">
+        <Message Name="TerminalDisplaySingleAck">
+            <Stream>10</Stream>
+            <Function>4</Function>
+            <Structure>
+                <B Name="ACKC10">
+                    <Value />
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="WaferMap">
             <Stream>12</Stream>
             <Function>9</Function>
             <WBit>1</WBit>
+            <AutoReply>WaferMapAck</AutoReply>
             <Structure>
                 <L>
                     <A Name="LOTID">
@@ -451,7 +601,38 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="WaferMapAck" Description="晶圆图应答，结构同 S12F9">
+        <Message Name="WaferMapAck">
+            <Stream>12</Stream>
+            <Function>10</Function>
+            <Structure>
+                <B Name="ACK">
+                    <Value />
+                    <Maps Type="1024">
+                    </Maps>
+                </B>
+            </Structure>
+        </Message>
+        <Message Name="WaferMapRequest">
+            <Stream>12</Stream>
+            <Function>15</Function>
+            <WBit>1</WBit>
+            <AutoReply>WaferMapData</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="LOTID">
+                        <Value />
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <B Name="WAFERID">
+                        <Value />
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="WaferMapData">
             <Stream>12</Stream>
             <Function>16</Function>
             <Structure>

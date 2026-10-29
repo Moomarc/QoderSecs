@@ -5,7 +5,7 @@
     <Application.Resources>
         <!-- 类型选项的图形标签：工具栏下拉和右键「+子项 / +同级」共用这一份。
              色块和结构树同源（TypePalette），同一个 U4 在两处不会认成两种颜色。
-             只画代号，不放中文说明；组与组的边界交给 TypeMenuPanel 的分隔线。 -->
+             只画代号，不放中文说明；15 格排 3 行 5 列，组别靠色块区分。 -->
         <DataTemplate x:Key="TypeOptionContentTemplate">
             <Border Height="18"
                     MinWidth="18"
