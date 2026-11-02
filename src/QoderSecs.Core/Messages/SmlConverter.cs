@@ -279,7 +279,7 @@ public static class SmlConverter
                 item = Item.B(Convert.FromHexString(node.NormalizedBinary));
                 return true;
             case SecsItemType.Boolean:
-                item = Item.Boolean(ParseEach(values, bool.Parse));
+                item = Item.Boolean(ParseEach(values, ParseBoolean));
                 return true;
             case SecsItemType.I1:
                 item = Item.I1(ParseEach(values, text => sbyte.Parse(text, culture)));
@@ -331,4 +331,10 @@ public static class SmlConverter
 
         return parsed;
     }
+
+    /// <summary>Boolean 的一项：0/1 和 True/False 都收，判据和 StructureNode 的校验同源。</summary>
+    private static bool ParseBoolean(string value) =>
+        StructureNode.TryReadBooleanToken(value, out var parsed)
+            ? parsed
+            : throw new FormatException($"「{value}」不是合法的 Boolean 值。");
 }

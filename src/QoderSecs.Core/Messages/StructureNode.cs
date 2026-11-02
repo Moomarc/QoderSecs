@@ -232,6 +232,38 @@ public sealed class StructureNode
     public static string NormalizeBinaryText(string? value) =>
         ConvertNegativeBytes(ExpandBinaryPrefixes(value));
 
+    /// <summary>
+    /// 收框或粘 SML 时把 Boolean 文本写成 SecsExpress 存的那种：单独成项的 0/1 换成 False/True，
+    /// true/false 补成首字母大写，空白分隔照留。认不出的项原样留着，交给校验报红。
+    /// </summary>
+    public static string NormalizeBooleanText(string? value) => string.IsNullOrEmpty(value)
+        ? value ?? string.Empty
+        : BooleanToken.Replace(value, static match =>
+            TryReadBooleanToken(match.Groups["value"].Value, out var parsed) ? parsed ? "True" : "False" : match.Value);
+
+    private static readonly Regex BooleanToken = new(
+        @"(?<!\S)(?<value>0|1|true|false)(?!\S)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// 一项 Boolean 文本读成布尔值。0 和 1 也算——机台那边导出的 SML 常拿 0/1 当布尔写，
+    /// 粘进来不该先报红。校验和发送都走这一条，两边不会判出两种结果。
+    /// </summary>
+    public static bool TryReadBooleanToken(string? value, out bool result)
+    {
+        switch (value)
+        {
+            case "0":
+                result = false;
+                return true;
+            case "1":
+                result = true;
+                return true;
+            default:
+                return bool.TryParse(value, out result);
+        }
+    }
+
     private static readonly Regex BinaryPrefix = new(
         @"(?<![^\s])0[xX](?=[0-9A-Fa-f])",
         RegexOptions.Compiled);
@@ -379,6 +411,6 @@ public sealed class StructureNode
 
     private static string? ValidateBoolean(string? value)
     {
-        return bool.TryParse(value, out _) ? null : "Boolean 的值必须是 True 或 False。";
+        return TryReadBooleanToken(value, out _) ? null : "Boolean 的值必须是 True 或 False（也可以写 0 或 1）。";
     }
 }

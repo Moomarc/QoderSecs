@@ -6,7 +6,7 @@
         Title="QoderSecs"
         Width="1360"
         Height="860"
-        MinWidth="880"
+        MinWidth="1040"
         MinHeight="680"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
@@ -15,9 +15,11 @@
         FontSize="13"
         PreviewKeyDown="WindowPreviewKeyDown"
         PreviewMouseDown="WindowPreviewMouseDown">
-    <!-- MinWidth 880 的来由：三栏下限 230 + 300 + 300、两条分隔条 10、主区左右
+    <!-- MinWidth 1040 的来由：三栏下限 230 + 460 + 300、两条分隔条 10、主区左右
          外边距 20，再加窗口左右那圈不可见的 12px 拉伸边框（150% 下约 8 DIP），
-         合起来是 876，取 880 留一点余量。写 860 时右栏会被窗口右缘切掉一条。 -->
+         合起来是 1028，取 1040 留一点余量。
+         中栏下限从 300 提到 460，是为了消息头那一行（自动回复 200 + 描述 + 发送 90）
+         在最窄时也排得下，不再让描述单独占一行；880 是合并前的下限，别改回去。 -->
     <Window.Resources>
         <!-- ============================================================
              设计 Token
@@ -1398,7 +1400,9 @@
                                   VerticalAlignment="Center"
                                   AutomationProperties.Name="节点值"
                                   ItemsSource="{Binding BooleanOptions}"
-                                  SelectedItem="{Binding EditValue}">
+                                  PreviewTextInput="BooleanComboTextInput"
+                                  SelectedItem="{Binding EditValue}"
+                                  ToolTip="下拉选，或直接按 0 / 1">
                             <ComboBox.Style>
                                 <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
                                     <Setter Property="Visibility" Value="Collapsed" />
@@ -1736,15 +1740,19 @@
             <Grid.ColumnDefinitions>
                 <!-- 三栏下限之和加上两条分隔条、主区外边距和窗口边框，才是窗口 MinWidth
                      的真正下界（见 Window 上的注释）；想让窗口更窄必须先降这里。
-                     中栏下限 300 时内容宽 273：名称框 112、S/F/W 组 158、自动回复 232、
-                     描述 167 加发送 90，都还在，不会换行。
+                     中栏下限 460 时内容宽 433：名称行是 名称 + S/F/W 三格；
+                     自动回复 200 + 描述 127（实测框 119.3，控件比列窄约 8）+ 发送 90 一行排满；
+                     元素属性栏再少一层外边距和内边距，内容只有 413，实测色块 + 名称 150 +
+                     两个标签占 254，留给描述 159——所以描述框只能封顶 180 跟着栏子缩，
+                     写死 180 会多出 20.7 压到栏边外面（1040/1200/1360 三档都裁）。
+                     带 W 的消息在途时「取消等待」多占 98，描述列只剩 29、框约 21，不裁切。
                      左栏下限 230 时内容宽 227：右边「文件 + ＋新消息」占 135，
                      标题是 DockPanel 的填充项，至少还能留下 60 多。
-                     份数按 1130 DIP 宽的窗口校过：左 2.2 份刚好放下「消息库 29」，
-                     中 3 份 335 够放各输入框，剩下的都给右栏那张通信记录表格。 -->
+                     份数在 1130 DIP 以上的窗口里按 2.2 : 3 : 4.6 分；中栏被 460 兜住，
+                     再窄就开始挤左栏和右栏，所以调份数之前先看中栏是不是已经贴到下限。 -->
                 <ColumnDefinition Width="2.2*" MinWidth="230" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="3*" MinWidth="300" />
+                <ColumnDefinition Width="3*" MinWidth="460" />
                 <ColumnDefinition Width="5" />
                 <!-- 右栏比中栏多给 1.6 份：通信记录是五列表格，中栏只有几个输入框。
                      按 4 份分时表格在 1360 DIP 的默认窗口里也会横向滚动，最后一列被挡掉。 -->
@@ -1931,6 +1939,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
                         <TextBlock Style="{StaticResource SectionTitleStyle}" Text="消息编辑" />
@@ -1939,11 +1948,12 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <!-- 名称/S/F/W 一行，自动回复单独一行，描述再一行。
-                             自动回复搁在名称右边时，中栏按 3* 分配只剩 80 来像素，
-                             下拉框里的「（不自动回复）」会被硬截掉后半截。 -->
+                        <!-- 名称/S/F/W 一行，自动回复+描述+发送一行，消息头从三行收成两行。
+                             自动回复单独占一行是中栏下限还只有 300 时的写法：那时名称右边
+                             只剩 80 来像素，下拉框里的「（不自动回复）」会被截掉后半截。
+                             现在中栏下限 460（内容 433），自动回复给 200，发送 90 靠右，
+                             描述吃剩下的约 127；描述是次要字段，这个宽度够写完一句话。 -->
                         <Grid IsEnabled="{Binding HasSelectedMessage}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -1982,55 +1992,64 @@
                                       IsChecked="{Binding MessageWBit}"
                                       ToolTip="要求对方回复（W-Bit）" />
                         </Grid>
-                        <StackPanel Grid.Row="1"
-                                    Width="240"
-                                    Margin="0,10,0,0"
-                                    HorizontalAlignment="Left"
-                                    IsEnabled="{Binding HasSelectedMessage}">
-                            <TextBlock Style="{StaticResource FieldLabelStyle}" Text="{Binding AutoReplyFieldLabel}" />
-                            <ComboBox AutomationProperties.AutomationId="MessageAutoReply"
-                                      AutomationProperties.Name="{Binding AutoReplyFieldLabel}"
-                                      DisplayMemberPath="Display"
-                                      ItemsSource="{Binding AutoReplyCandidates}"
-                                      SelectedItem="{Binding MessageAutoReply}"
-                                      ToolTip="收到后自动回复的消息；按名称精确匹配，单选">
-                                <ComboBox.ItemContainerStyle>
-                                    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
-                                        <!-- 不加这个，下拉项的 UIA 名字就是 AutoReplyOption 的 ToString()，
-                                             读屏软件念一串字段名，自动化也断言不到「SxF · 名字」那段文案。
-                                             和左栏消息行同一个做法。 -->
-                                        <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
-                                    </Style>
-                                </ComboBox.ItemContainerStyle>
-                            </ComboBox>
-                        </StackPanel>
-                        <DockPanel Grid.Row="2" Margin="0,10,0,0">
-                            <!-- 发送放在描述行右侧：这样上面那行字段能排齐，按钮也不会压住任何输入框。 -->
-                            <Button x:Name="SendButton"
-                                    Width="90"
-                                    Margin="8,0,0,0"
-                                    VerticalAlignment="Bottom"
-                                    DockPanel.Dock="Right"
-                                    Command="{Binding SendCommand}"
-                                    Content="发送" />
-                            <!-- 带 W 的消息在途时发送按键必然变灰（一次只发一条），
-                                 没有这个按钮的话等待只能靠 T3 到点，观感就是程序卡死。 -->
-                            <Button Width="90"
-                                    Margin="0,0,0,0"
-                                    VerticalAlignment="Bottom"
-                                    DockPanel.Dock="Right"
-                                    Visibility="{Binding CancelSendVisibility}"
-                                    Command="{Binding CancelSendCommand}"
-                                    Content="取消等待" />
-                            <StackPanel IsEnabled="{Binding HasSelectedMessage}">
-                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="描述" />
+                        <!-- 这一行的灰化条件各管各的：两个输入块跟着「有没有选中消息」走，
+                             右边两个按钮不挂这条——取消等待自己的条件是「有没有等待可取消」，
+                             整行一起灰会出现「消息在途、取消选中这条消息就再也点不动取消」。 -->
+                        <Grid Grid.Row="1" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0"
+                                        Width="200"
+                                        IsEnabled="{Binding HasSelectedMessage}">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="{Binding AutoReplyFieldLabel}" />
+                                <ComboBox AutomationProperties.AutomationId="MessageAutoReply"
+                                          AutomationProperties.Name="{Binding AutoReplyFieldLabel}"
+                                          DisplayMemberPath="Display"
+                                          ItemsSource="{Binding AutoReplyCandidates}"
+                                          SelectedItem="{Binding MessageAutoReply}"
+                                          ToolTip="收到后自动回复的消息；按名称精确匹配，单选">
+                                    <ComboBox.ItemContainerStyle>
+                                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                            <!-- 不加这个，下拉项的 UIA 名字就是 AutoReplyOption 的 ToString()，
+                                                 读屏软件念一串字段名，自动化也断言不到「SxF · 名字」那段文案。
+                                                 和左栏消息行同一个做法。 -->
+                                            <Setter Property="AutomationProperties.Name" Value="{Binding Display}" />
+                                        </Style>
+                                    </ComboBox.ItemContainerStyle>
+                                </ComboBox>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        MinWidth="0"
+                                        IsEnabled="{Binding HasSelectedMessage}">
+                                <TextBlock Style="{StaticResource FieldLabelStyle}" Text="消息描述" />
                                 <TextBox AutomationProperties.AutomationId="MessageDescription"
                                          AutomationProperties.Name="消息描述"
                                          KeyDown="CommitOnEnter"
                                          ToolTip="用途说明；显示在左栏悬停"
                                          Text="{Binding MessageDescription, UpdateSourceTrigger=LostFocus}" />
                             </StackPanel>
-                        </DockPanel>
+                            <!-- 带 W 的消息在途时发送按键必然变灰（一次只发一条），
+                                 没有这个按钮的话等待只能靠 T3 到点，观感就是程序卡死。 -->
+                            <Button Grid.Column="2"
+                                    Width="90"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Bottom"
+                                    Visibility="{Binding CancelSendVisibility}"
+                                    Command="{Binding CancelSendCommand}"
+                                    Content="取消等待" />
+                            <Button x:Name="SendButton"
+                                    Grid.Column="3"
+                                    Width="90"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Bottom"
+                                    Command="{Binding SendCommand}"
+                                    Content="发送" />
+                        </Grid>
                     </Grid>
                     <TabControl Grid.Row="2"
                                 Margin="12,0,12,0"
@@ -2040,7 +2059,6 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <StackPanel Margin="0,0,0,6" Orientation="Horizontal">
                                     <app:TypePicker Text="+子项"
@@ -2097,233 +2115,6 @@
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
-                                <Border Grid.Row="2"
-                                        Padding="10,8"
-                                        Background="{StaticResource SubtleSurfaceBrush}"
-                                        BorderBrush="{StaticResource DividerBrush}"
-                                        BorderThickness="0,1,0,0">
-                                    <Grid DataContext="{Binding SelectedNode}">
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
-                                        </Grid.RowDefinitions>
-                                        <TextBlock VerticalAlignment="Center"
-                                                   Foreground="{StaticResource MutedBrush}"
-                                                   Text="选中节点后在此改名称和值">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <!-- 名称和值分两行：中栏在 1130 DIP 窗口下只有约 335 DIP，
-                                             名称 150 + 值 240 再加两个标签并排放不下，值框会被整个挤出可视区。
-                                             分行后每行只放一组标签+输入框，窗口再窄也裁不到值。 -->
-                                        <Grid>
-                                            <Grid.Style>
-                                                <Style TargetType="Grid">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Grid.Style>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Row="0"
-                                                    Margin="0,0,8,0"
-                                                    Style="{StaticResource TypeBadgeBorderStyle}">
-                                                <TextBlock Style="{StaticResource TypeBadgeTextStyle}" />
-                                            </Border>
-                                            <TextBlock Grid.Row="0"
-                                                       Grid.Column="1"
-                                                       Margin="0,0,6,0"
-                                                       VerticalAlignment="Center"
-                                                       Style="{StaticResource FieldLabelStyle}"
-                                                       Text="名称" />
-                                            <TextBox Grid.Row="0"
-                                                     Grid.Column="2"
-                                                     Width="150"
-                                                     HorizontalAlignment="Left"
-                                                     VerticalAlignment="Center"
-                                                     AutomationProperties.Name="节点名称"
-                                                     Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
-                                                     ToolTip="可空，例如 PPID / COMMACK" />
-                                            <TextBlock Grid.Row="1"
-                                                       Grid.Column="1"
-                                                       Margin="0,8,6,0"
-                                                       VerticalAlignment="Center"
-                                                       Style="{StaticResource FieldLabelStyle}"
-                                                       Text="值" />
-                                            <Grid Grid.Row="1"
-                                                  Grid.Column="2"
-                                                  Margin="0,8,0,0">
-                                            <TextBox MinWidth="120"
-                                                     HorizontalAlignment="Stretch"
-                                                     VerticalAlignment="Center"
-                                                     AcceptsReturn="{Binding IsMultiLineValue}"
-                                                     AllowDrop="True"
-                                                     AutomationProperties.AutomationId="SelectedNodeValue"
-                                                     AutomationProperties.Name="节点值"
-                                                     DataObject.Pasting="ValueBoxPasting"
-                                                     HorizontalScrollBarVisibility="Auto"
-                                                     KeyDown="StructureValueKeyDown"
-                                                     LostFocus="StructureValueLostFocus"
-                                                     PreviewDragOver="ValueBoxPreviewDragOver"
-                                                     PreviewDrop="ValueBoxPreviewDrop"
-                                                     Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
-                                                     TextWrapping="NoWrap"
-                                                     ToolTip="{Binding ValueEditorTip}"
-                                                     VerticalScrollBarVisibility="Auto">
-                                                <TextBox.Style>
-                                                    <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-                                                        <!-- 高度必须固定：Auto 行 + 自动换行遇到几十兆正文，
-                                                             量一次就把整个中间栏撑满。 -->
-                                                        <Setter Property="Height" Value="32" />
-                                                        <Setter Property="Padding" Value="9,5" />
-                                                        <Setter Property="VerticalContentAlignment" Value="Center" />
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding ShowsValueEditor}" Value="True">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding IsMultiLineValue}" Value="True">
-                                                                <Setter Property="Height" Value="64" />
-                                                                <Setter Property="VerticalContentAlignment" Value="Top" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                                                <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBox.Style>
-                                            </TextBox>
-                                            <ComboBox Width="90"
-                                                      Margin="0"
-                                                      HorizontalAlignment="Left"
-                                                      VerticalAlignment="Center"
-                                                      AutomationProperties.Name="节点值"
-                                                      ItemsSource="{Binding BooleanOptions}"
-                                                      SelectedItem="{Binding EditValue}">
-                                                <ComboBox.Style>
-                                                    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
-                                                        <Setter Property="VerticalContentAlignment" Value="Center" />
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding ShowsBooleanEditor}" Value="True">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </ComboBox.Style>
-                                            </ComboBox>
-                                            <TextBlock Margin="10,0,0,0"
-                                                       HorizontalAlignment="Left"
-                                                       VerticalAlignment="Center"
-                                                       Foreground="{StaticResource MutedBrush}"
-                                                       Text="{Binding ValueNote}"
-                                                       TextTrimming="CharacterEllipsis">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding ShowsValueNote}" Value="True">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                            </Grid>
-                                            <!-- 描述只在这一行编辑，宽度固定不跟着窗口拉：
-                                                 描述可能很长，但它不参与发送，没必要占满整条属性栏。 -->
-                                            <TextBlock Grid.Row="2"
-                                                       Grid.Column="1"
-                                                       Margin="0,8,6,0"
-                                                       VerticalAlignment="Center"
-                                                       Style="{StaticResource FieldLabelStyle}"
-                                                       Text="描述" />
-                                            <TextBox Grid.Row="2"
-                                                     Grid.Column="2"
-                                                     Width="180"
-                                                     Margin="0,8,0,0"
-                                                     HorizontalAlignment="Left"
-                                                     VerticalAlignment="Center"
-                                                     AutomationProperties.AutomationId="SelectedNodeDescription"
-                                                     AutomationProperties.Name="元素描述"
-                                                     KeyDown="CommitOnEnter"
-                                                     Text="{Binding EditDescription, UpdateSourceTrigger=LostFocus}"
-                                                     ToolTip="可选；悬停元素时显示" />
-                                        </Grid>
-                                        <!-- 大值不进输入框：只报大小，正文从剪贴板整段替换。 -->
-                                        <Grid Grid.Row="1"
-                                              Margin="0,6,0,0"
-                                              AllowDrop="True"
-                                              Background="Transparent"
-                                              PreviewDragOver="ValueBoxPreviewDragOver"
-                                              PreviewDrop="ValueBoxPreviewDrop">
-                                            <Grid.Style>
-                                                <Style TargetType="Grid">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding ShowsLargeValuePanel}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Grid.Style>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center"
-                                                       AutomationProperties.AutomationId="LargeValueSummary"
-                                                       Foreground="{StaticResource WarningBrush}"
-                                                       Text="{Binding LargeValueSummary}"
-                                                       TextWrapping="Wrap"
-                                                       ToolTip="大值不进输入框；从剪贴板替换，或拖入此区域" />
-                                            <Button Grid.Column="1"
-                                                    Margin="8,0,0,0"
-                                                    Padding="10,4"
-                                                    VerticalAlignment="Center"
-                                                    AutomationProperties.AutomationId="ReplaceLargeValue"
-                                                    Click="ReplaceLargeValueFromClipboard"
-                                                    Content="用剪贴板替换…"
-                                                    ToolTip="整段替换当前值；B 类型自动去掉 0x" />
-                                        </Grid>
-                                        <TextBlock Grid.Row="2"
-                                                   Margin="0,4,0,0"
-                                                   Foreground="{StaticResource DangerBrush}"
-                                                   Text="{Binding ValidationError}"
-                                                   TextWrapping="Wrap">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsInvalid}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </Grid>
-                                </Border>
                             </Grid>
                         </TabItem>
                         <TabItem Header="SML">
@@ -2391,7 +2182,6 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <StackPanel Grid.Row="0" Margin="0,0,0,6" Orientation="Horizontal">
                                     <app:TypePicker Text="新增数据"
@@ -2431,28 +2221,260 @@
                                     <TextBlock Style="{StaticResource EmptyHintStyle}"
                                                Text="{Binding EntryHint}" />
                                 </Grid>
-                                <StackPanel Grid.Row="2">
-                                    <TextBlock Style="{StaticResource FieldLabelStyle}" Text="条目名称" />
-                                    <TextBox Margin="0"
-                                             AutomationProperties.Name="条目名称"
-                                             KeyDown="CommitOnEnter"
-                                             IsEnabled="{Binding HasSelectedDataEntry}"
-                                             ToolTip="改名不影响已复制内容；元素名可空、可重名"
-                                             Text="{Binding DataEntryName, UpdateSourceTrigger=LostFocus}" />
-                                    <TextBlock Margin="10,8,0,4"
-                                               Style="{StaticResource FieldLabelStyle}"
-                                               Text="元素描述" />
-                                    <TextBox Margin="0"
-                                             AutomationProperties.AutomationId="EntryNodeDescription"
-                                             AutomationProperties.Name="元素描述"
-                                             KeyDown="CommitOnEnter"
-                                             IsEnabled="{Binding HasSelectedNode}"
-                                             Text="{Binding SelectedNode.EditDescription, UpdateSourceTrigger=LostFocus}"
-                                             ToolTip="可选；悬停元素时显示" />
-                                </StackPanel>
                             </Grid>
                         </TabItem>
                     </TabControl>
+                    <!-- 属性栏挪到页签外面：结构页和数据字典页共用这一条，内容跟着 SelectedNode 走，
+                         两棵树里任何一层选中都能在名称／值／描述三处改。原先数据字典页底下那条栏
+                         （条目名称 + 元素描述）删掉了：条目名称写的就是顶层元素那个 Name 属性，
+                         两个框迟早对不上，选中顶层行改「名称」或树上就地改都够。
+                         SML 页没有树也没有选中节点，整条收起。 -->
+                    <Border Grid.Row="3"
+                            Margin="12,8,12,0"
+                            Padding="10,8"
+                            Background="{StaticResource SubtleSurfaceBrush}"
+                            BorderBrush="{StaticResource DividerBrush}"
+                            BorderThickness="0,1,0,0">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowsPropertyBar}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <Grid DataContext="{Binding SelectedNode}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock VerticalAlignment="Center"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Text="选中节点后在此改名称、值和描述">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <!-- 名称和描述并一行，值自己一行。描述框在 * 列里，只能给上限
+                                 不能给死宽：中栏贴下限 460 时这条栏内容实测 413，
+                                 左边色块 + 名称 150 + 两个标签要吃掉 254，描述只剩 159，
+                                 写死 Width 180 就多出的 20.7 盖到栏边外面。
+                                 MaxWidth 180 + Stretch = 宽窗口封顶 180，窄窗口跟着列缩，
+                                 任何尺寸都不越界（和消息头那个描述框同一个做法）。
+                                 值不能并进来：它要伸缩，还要给 Boolean 下拉、大值摘要
+                                 和校验错误行让位，名称 150 + 值 240 那种排法在最窄处会把值框整个挤出去。 -->
+                            <Grid>
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0"
+                                        Margin="0,0,8,0"
+                                        Style="{StaticResource TypeBadgeBorderStyle}">
+                                    <TextBlock Style="{StaticResource TypeBadgeTextStyle}" />
+                                </Border>
+                                <TextBlock Grid.Row="0"
+                                           Grid.Column="1"
+                                           Margin="0,0,6,0"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource FieldLabelStyle}"
+                                           Text="名称" />
+                                <TextBox Grid.Row="0"
+                                         Grid.Column="2"
+                                         Width="150"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"
+                                         AutomationProperties.AutomationId="SelectedNodeName"
+                                         AutomationProperties.Name="节点名称"
+                                         KeyDown="CommitOnEnter"
+                                         LostFocus="StructureNameLostFocus"
+                                         Text="{Binding EditName, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="可空，例如 PPID / COMMACK；首尾空格存不进去" />
+                                <TextBlock Grid.Row="1"
+                                           Grid.Column="1"
+                                           Margin="0,8,6,0"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource FieldLabelStyle}"
+                                           Text="值" />
+                                <Grid Grid.Row="1"
+                                      Grid.Column="2"
+                                      Grid.ColumnSpan="3"
+                                      Margin="0,8,0,0">
+                                <TextBox MinWidth="120"
+                                         HorizontalAlignment="Stretch"
+                                         VerticalAlignment="Center"
+                                         AcceptsReturn="{Binding IsMultiLineValue}"
+                                         AllowDrop="True"
+                                         AutomationProperties.AutomationId="SelectedNodeValue"
+                                         AutomationProperties.Name="节点值"
+                                         DataObject.Pasting="ValueBoxPasting"
+                                         HorizontalScrollBarVisibility="Auto"
+                                         KeyDown="StructureValueKeyDown"
+                                         LostFocus="StructureValueLostFocus"
+                                         PreviewDragOver="ValueBoxPreviewDragOver"
+                                         PreviewDrop="ValueBoxPreviewDrop"
+                                         Text="{Binding EditValue, UpdateSourceTrigger=PropertyChanged}"
+                                         TextWrapping="NoWrap"
+                                         ToolTip="{Binding ValueEditorTip}"
+                                         VerticalScrollBarVisibility="Auto">
+                                    <TextBox.Style>
+                                        <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                            <!-- 高度必须固定：Auto 行 + 自动换行遇到几十兆正文，
+                                                 量一次就把整个中间栏撑满。 -->
+                                            <Setter Property="Height" Value="32" />
+                                            <Setter Property="Padding" Value="9,5" />
+                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowsValueEditor}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsTallValueEditor}" Value="True">
+                                                    <Setter Property="Height" Value="64" />
+                                                    <Setter Property="VerticalContentAlignment" Value="Top" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="{StaticResource DangerBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBox.Style>
+                                </TextBox>
+                                <ComboBox Width="90"
+                                          Margin="0"
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Center"
+                                          AutomationProperties.Name="节点值"
+                                          ItemsSource="{Binding BooleanOptions}"
+                                          PreviewTextInput="BooleanComboTextInput"
+                                          SelectedItem="{Binding EditValue}"
+                                          ToolTip="下拉选，或直接按 0 / 1；0=False，1=True">
+                                    <ComboBox.Style>
+                                        <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowsBooleanEditor}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ComboBox.Style>
+                                </ComboBox>
+                                <TextBlock Margin="10,0,0,0"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           Text="{Binding ValueNote}"
+                                           TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ShowsValueNote}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                </Grid>
+                                <TextBlock Grid.Row="0"
+                                           Grid.Column="3"
+                                           Margin="10,0,6,0"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource FieldLabelStyle}"
+                                           Text="结构描述" />
+                                <TextBox Grid.Row="0"
+                                         Grid.Column="4"
+                                         MaxWidth="180"
+                                         HorizontalAlignment="Stretch"
+                                         VerticalAlignment="Center"
+                                         AutomationProperties.AutomationId="SelectedNodeDescription"
+                                         AutomationProperties.Name="结构描述"
+                                         KeyDown="CommitOnEnter"
+                                         Text="{Binding EditDescription, UpdateSourceTrigger=LostFocus}"
+                                         ToolTip="可选；悬停元素时显示" />
+                            </Grid>
+                            <!-- 大值不进输入框：只报大小，正文从剪贴板整段替换。 -->
+                            <Grid Grid.Row="1"
+                                  Margin="0,6,0,0"
+                                  AllowDrop="True"
+                                  Background="Transparent"
+                                  PreviewDragOver="ValueBoxPreviewDragOver"
+                                  PreviewDrop="ValueBoxPreviewDrop">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ShowsLargeValuePanel}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center"
+                                           AutomationProperties.AutomationId="LargeValueSummary"
+                                           Foreground="{StaticResource WarningBrush}"
+                                           Text="{Binding LargeValueSummary}"
+                                           TextWrapping="Wrap"
+                                           ToolTip="大值不进输入框；从剪贴板替换，或拖入此区域" />
+                                <Button Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        Padding="10,4"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="ReplaceLargeValue"
+                                        Click="ReplaceLargeValueFromClipboard"
+                                        Content="用剪贴板替换…"
+                                        ToolTip="整段替换当前值；B 类型自动去掉 0x" />
+                            </Grid>
+                            <TextBlock Grid.Row="2"
+                                       Margin="0,4,0,0"
+                                       Foreground="{StaticResource DangerBrush}"
+                                       Text="{Binding ValidationError}"
+                                       TextWrapping="Wrap">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsInvalid}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 

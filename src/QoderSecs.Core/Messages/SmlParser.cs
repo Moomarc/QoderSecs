@@ -305,11 +305,13 @@ public static class SmlParser
         /// <summary>
         /// 值怎么落成一段文本：B 拼十六进制，A/J 只准一段，数值和 Boolean 把多个值用空格连起来
         /// 存进同一个 &lt;Value&gt;（跟 SecsExpress 的存法一致，数组不发明第二种 XML 形状）。
+        /// Boolean 顺手把 0/1 和大小写统一成 True/False，粘进来的写法不用再去改一遍。
         /// </summary>
         private static string ReadValueText(SecsItemType type, List<Token> values, string elementName) => type switch
         {
             SecsItemType.B => ReadBinary(values),
             SecsItemType.A or SecsItemType.J => ReadPlainText(values, elementName),
+            SecsItemType.Boolean => StructureNode.NormalizeBooleanText(string.Join(' ', values.Select(value => value.Value))),
             _ => string.Join(' ', values.Select(value => value.Value))
         };
 

@@ -484,6 +484,16 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>属性栏名称框失焦：去掉首尾空格并在状态栏说明存成了什么。回车靠移焦点走同一条。</summary>
+    private void StructureNameLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: StructureNodeViewModel node }
+            && DataContext is MainViewModel viewModel)
+        {
+            viewModel.CommitNodeName(node);
+        }
+    }
+
     /// <summary>单行值框按回车就收框；A / J 的换行框要留给换行，不能抢。</summary>
     private void StructureValueKeyDown(object sender, KeyEventArgs e)
     {
@@ -498,6 +508,18 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Boolean 的下拉框不接受手输，但按 0 和 1 该有用：这里直接换成 False / True。
+    /// 别的键不拦，留着下拉自己的逐项检索。
+    /// </summary>
+    private void BooleanComboTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (sender is ComboBox { DataContext: StructureNodeViewModel node } && node.TryApplyBooleanKey(e.Text))
+        {
+            e.Handled = true;
+        }
     }
 
     // ---------- 大值：不进输入框，整段替换 ----------

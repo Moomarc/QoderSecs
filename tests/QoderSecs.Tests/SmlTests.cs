@@ -412,6 +412,34 @@ public sealed class SmlTests
         Assert.HasCount(3, new StructureNode(list.Element("U4")!).Items);
     }
 
+    /// <summary>
+    /// 机台那边导出的 SML 常拿 0/1 写布尔。粘进来要落成 SecsExpress 那种 True/False，
+    /// 不用人再进界面改一遍，也不会先报红。
+    /// </summary>
+    [TestMethod]
+    public void TryParse_NormalizesBooleanZeroAndOne()
+    {
+        var parsed = Parse("S1F1 W\n<L\n  <Boolean [3] 0 1 1>\n  <Boolean [1] TRUE>\n>.");
+
+        var list = parsed.Structure.Element("L")!;
+        Assert.AreEqual("False True True", list.Elements("Boolean").ElementAt(0).Element("Value")!.Value);
+        Assert.AreEqual("True", list.Elements("Boolean").ElementAt(1).Element("Value")!.Value);
+    }
+
+    /// <summary>库里存着 0/1 的写法也要发得出去：转 SecsItem 时按 False/True 算，和校验同源。</summary>
+    [TestMethod]
+    public void BooleanZeroOne_IsAcceptedByValidationAndBuiltForSending()
+    {
+        var entry = Entry("<Structure><Boolean><Value>0 1</Value></Boolean></Structure>");
+
+        Assert.IsTrue(SmlConverter.TryValidate(entry, out var validateError), validateError);
+        Assert.IsTrue(SmlConverter.TryToMessage(entry, replyExpected: false, out var message, out var error), error);
+        using (message)
+        {
+            StringAssert.Contains(SmlConverter.ToSml(message!), "<Boolean [2] False True>");
+        }
+    }
+
     /// <summary>A 后面那个数字是字节数，不是元素个数，所以给它两个值仍然要拒。</summary>
     [TestMethod]
     public void TryParse_RejectsMoreThanOneValueForATextItem()

@@ -188,7 +188,14 @@ public sealed class StructureNodeViewModel : ObservableObject
     /// </summary>
     public bool IsBoolean => Node.ItemType == SecsItemType.Boolean && !Node.ValueText.Contains(' ');
 
+    /// <summary>A / J 的回车留给换行，不给收框。框几行高看值里有没有换行，见 <see cref="IsTallValueEditor"/>。</summary>
     public bool IsMultiLineValue => Node.ItemType is SecsItemType.A or SecsItemType.J;
+
+    /// <summary>
+    /// 值里真有换行才给两行高。之前按类型判，A 哪怕只装「R01」也占两行，白吃掉一截中间栏；
+    /// 敲回车时值立刻带上换行，这一条跟着变，框就在按下回车那一下长出来。
+    /// </summary>
+    public bool IsTallValueEditor => IsMultiLineValue && EditValue.Contains('\n');
 
     public bool ShowsValueEditor => Node.IsValueEditable && !IsBoolean && !Node.IsLargeValue;
 
@@ -213,6 +220,7 @@ public sealed class StructureNodeViewModel : ObservableObject
         {
             SecsItemType.A or SecsItemType.J => "文本，可换行。",
             SecsItemType.B => "十六进制字节，空格分隔；0x 前缀自动去掉，负数按二补码转换。",
+            SecsItemType.Boolean => "True / False，也可以直接打 0 或 1；多个值用空格分隔。",
             _ when Node.CanHoldArray => "多值以空格分隔，如 0 0 1。",
             _ => null
         });
@@ -271,27 +279,71 @@ public sealed class StructureNodeViewModel : ObservableObject
     }
 
     /// <summary>
-    /// 收框或失焦时把 B 值里的 0x 前缀和负数换掉。不能放在 EditValue 的 setter 里逐字转换：
-    /// 刚敲下 '-' 的时候后面的数字还没输入，值就已经被改写，-45 永远打不进来；
-    /// 0x 也会在刚敲完 0 的那一下被拆开。
+    /// 收框或失焦时改一次值。不能放进 EditValue 的 setter 里逐字转换：
+    /// B 敲 '-' 的时候后面的数字还没输入，值就已经被改写，-45 永远打不进来；0x 也会在刚敲完 0
+    /// 的那一下被拆开。Boolean 同理——刚打完 1 想接着打「1 0」的第二项，逐字转会把这一项先变成 True。
     /// </summary>
     public void CommitValue()
     {
-        if (Node.ItemType != SecsItemType.B || Node.IsLargeValue)
+        if (Node.IsLargeValue)
         {
             return;
         }
 
-        var converted = StructureNode.NormalizeBinaryText(EditValue);
+        var converted = NormalizeValue(EditValue);
         if (converted != EditValue)
         {
             EditValue = converted;
         }
     }
 
+    /// <summary>按类型收一次值：B 去 0x、负数换二补码；Boolean 把 0/1 和小写换成 True/False。别的类型原样返回。</summary>
+    private string NormalizeValue(string value) => Node.ItemType switch
+    {
+        SecsItemType.B => StructureNode.NormalizeBinaryText(value),
+        SecsItemType.Boolean => StructureNode.NormalizeBooleanText(value),
+        _ => value,
+    };
+
+    /// <summary>
+    /// Boolean 的下拉框不能打字（界面样式只做非可编辑那一种），所以在这里接住 0 和 1：
+    /// 按一下就换值，省得每次去下拉里挑。别的按键交回下拉自己的逐项检索。
+    /// </summary>
+    public bool TryApplyBooleanKey(string? text)
+    {
+        if (!ShowsBooleanEditor || text is not ("0" or "1"))
+        {
+            return false;
+        }
+
+        EditValue = text == "0" ? "False" : "True";
+        return true;
+    }
+
+    /// <summary>
+    /// 收框或失焦时去掉名字首尾的空格。不能放进 EditName 的 setter 逐字 trim：
+    /// 刚敲下的那个空格是下一个词的开头，逐字 trim 会把「A B」打成「AB」。
+    /// 返回 trim 之后的名字，没去成任何东西时返回 null，调用方据此决定要不要说一句话。
+    /// </summary>
+    public string? CommitName()
+    {
+        var stored = Node.Name ?? string.Empty;
+        var trimmed = stored.Trim();
+        if (trimmed.Length == stored.Length)
+        {
+            return null;
+        }
+
+        StructureEditor.SetName(Element, trimmed);
+        RefreshSnapshot();
+        Owner.OnStructureEdited(this);
+        return trimmed;
+    }
+
     /// <summary>
     /// 整段替换值。给大值用：正文不经过输入框绑定，直接写进 XML，
-    /// 免得 WPF 先把它塞进 TextBox 再排版。B 的 0x 前缀在这里就去掉，导出的 SXML 保持原格式。
+    /// 免得 WPF 先把它塞进 TextBox 再排版。B 的 0x 前缀、Boolean 的 0/1 在这里就去掉，
+    /// 导出的 SXML 保持 SecsExpress 那种写法。
     /// </summary>
     public bool ReplaceValueText(string text)
     {
@@ -300,9 +352,7 @@ public sealed class StructureNodeViewModel : ObservableObject
             return false;
         }
 
-        var stored = Node.ItemType == SecsItemType.B
-            ? StructureNode.NormalizeBinaryText(text)
-            : text;
+        var stored = NormalizeValue(text);
         if (!StructureEditor.SetValue(Element, stored))
         {
             return false;
@@ -333,6 +383,8 @@ public sealed class StructureNodeViewModel : ObservableObject
         OnPropertyChanged(nameof(EditName));
         OnPropertyChanged(nameof(EditValue));
         OnPropertyChanged(nameof(IsBoolean));
+        OnPropertyChanged(nameof(IsMultiLineValue));
+        OnPropertyChanged(nameof(IsTallValueEditor));
         OnPropertyChanged(nameof(ShowsValueEditor));
         OnPropertyChanged(nameof(ShowsBooleanEditor));
         OnPropertyChanged(nameof(ShowsValueNote));

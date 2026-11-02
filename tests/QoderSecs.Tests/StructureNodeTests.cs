@@ -201,11 +201,30 @@ public sealed class StructureNodeTests
     }
 
     [TestMethod]
-    public void Boolean_AcceptsTrueAndFalseOnly()
+    public void Boolean_AcceptsTrueFalseAndZeroOne()
     {
         Assert.IsNull(Node("<Boolean><Value>True</Value></Boolean>").ValidationError);
         Assert.IsNull(Node("<Boolean><Value>false</Value></Boolean>").ValidationError);
-        StringAssert.Contains(Node("<Boolean><Value>1</Value></Boolean>").ValidationError!, "Boolean");
+        Assert.IsNull(Node("<Boolean><Value>0</Value></Boolean>").ValidationError);
+        Assert.IsNull(Node("<Boolean><Value>0 1 1</Value></Boolean>").ValidationError);
+        StringAssert.Contains(Node("<Boolean><Value>yes</Value></Boolean>").ValidationError!, "Boolean");
+    }
+
+    /// <summary>
+    /// 0/1 和小写都统一成 SecsExpress 存的那种 True/False。空白分隔照留（这是给用户看的文本），
+    /// 整项才算：10 不是布尔，认不出的原样留着交给校验报红。
+    /// </summary>
+    [TestMethod]
+    public void NormalizeBooleanText_WritesTheSecsExpressSpelling()
+    {
+        Assert.AreEqual("False", StructureNode.NormalizeBooleanText("0"));
+        Assert.AreEqual("True", StructureNode.NormalizeBooleanText("1"));
+        Assert.AreEqual("True", StructureNode.NormalizeBooleanText("TRUE"));
+        Assert.AreEqual("False True False", StructureNode.NormalizeBooleanText("0 true FALSE"));
+        Assert.AreEqual(" False  True ", StructureNode.NormalizeBooleanText(" 0  1 "));
+        Assert.AreEqual("10", StructureNode.NormalizeBooleanText("10"));
+        Assert.AreEqual("yes", StructureNode.NormalizeBooleanText("yes"));
+        Assert.AreEqual(string.Empty, StructureNode.NormalizeBooleanText(null));
     }
 
     /// <summary>数组照 SecsExpress 的写法来：单个 &lt;Value&gt;、值之间空格分隔，可以编辑也能发送。</summary>
@@ -222,7 +241,7 @@ public sealed class StructureNodeTests
 
         StringAssert.Contains(Node("<I1><Value>0 300</Value></I1>").ValidationError!, "第 2 个值");
         StringAssert.Contains(Node("<I1><Value>300 0</Value></I1>").ValidationError!, "第 1 个值");
-        StringAssert.Contains(Node("<Boolean><Value>True 1</Value></Boolean>").ValidationError!, "第 2 个值");
+        StringAssert.Contains(Node("<Boolean><Value>True yes</Value></Boolean>").ValidationError!, "第 2 个值");
     }
 
     /// <summary>真碰上多个 &lt;Value&gt; 也拼成一段文本，不让它变成界面里没有的第二种形状。</summary>

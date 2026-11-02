@@ -249,6 +249,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>数据字典那个页签的序号。页签顺序变了改这里，界面上不另找一遍。</summary>
     public const int DictionaryTabIndex = 2;
 
+    /// <summary>SML 那个页签的序号。那一页没有树，属性栏在它上面不显示。</summary>
+    public const int SmlTabIndex = 1;
+
     /// <summary>
     /// 消息编辑区当前停在哪个页签（0 结构、1 SML、2 数据字典）。
     /// 命令落在哪棵树上问它，不问「上一次点的是哪一行」——
@@ -266,9 +269,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             OnPropertyChanged(nameof(SelectedNode));
             OnPropertyChanged(nameof(HasSelectedNode));
+            OnPropertyChanged(nameof(ShowsPropertyBar));
             RaiseTreeCommandCanExecute();
         }
     }
+
+    /// <summary>
+    /// 名称／值／描述那条属性栏显示不显示。它现在挂在页签外面，结构页和数据字典页共用，
+    /// 内容跟着 SelectedNode 走；SML 页没有树、没有选中节点，就整条收起。
+    /// </summary>
+    public bool ShowsPropertyBar => EditorTab != SmlTabIndex;
 
     /// <summary>
     /// 当前这棵树的选中节点。两棵树各自记一份，读的时候按页签取，
@@ -2126,9 +2136,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         // B 类的负数到这一下才转十六进制：逐字输入时转换会把刚敲的 '-' 当成完整值。
         editing.CommitValue();
+        CommitNodeName(editing);
         editing.IsEditing = false;
         _editingNode = null;
         return true;
+    }
+
+    /// <summary>
+    /// 名称框失焦：把首尾空格去掉，顺带说明存成了什么。字典条目改名原来走带 trim 和状态栏
+    /// 反馈的那条路，属性栏共用之后容易变成「改了但不知道存成什么」，这里补回来。
+    /// </summary>
+    internal void CommitNodeName(StructureNodeViewModel node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        if (node.CommitName() is { } trimmed)
+        {
+            StatusMessage = trimmed.Length == 0
+                ? "名字只剩空格，已清空。"
+                : $"已去掉名字首尾的空格，存为「{trimmed}」。";
+        }
     }
 
     /// <summary>
@@ -2509,8 +2536,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     // ---------- 数据字典条目：单独存起来的 data 和 list ----------
 
     private DataEntry? _selectedDataEntry;
-    private string _dataEntryName = string.Empty;
-    private bool _loadingDataEntry;
     private bool _refreshingEntries;
 
     public ObservableCollection<DataEntry> DataEntries { get; } = [];
@@ -2534,27 +2559,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             if (SetProperty(ref _selectedDataEntry, value))
             {
-                OnPropertyChanged(nameof(HasSelectedDataEntry));
-                SyncDataEntryEditor();
                 RaiseEntryCommandCanExecute();
-            }
-        }
-    }
-
-    public bool HasSelectedDataEntry => SelectedDataEntry is not null;
-
-    /// <summary>
-    /// 选中条目的名字，就地改。留空是把 Name 属性去掉——数据元素的名字可空也可重（用户给的
-    /// SecsExpress 实测，树里字典里同一档）。只有拿旧快照改名这类 Core 拒的情况才把框里的字改回去。
-    /// </summary>
-    public string DataEntryName
-    {
-        get => _dataEntryName;
-        set
-        {
-            if (SetProperty(ref _dataEntryName, value) && !_loadingDataEntry)
-            {
-                CommitEntryName();
             }
         }
     }
@@ -2639,7 +2644,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         : string.Empty;
 
     /// <summary>
-    /// 名字框和「删除条目」要的是条目本身，可人可能选在条目里面的某一节上，
+    /// 条目那一侧的命令要认的是条目本身，可人可能选在条目里面的某一节上，
     /// 所以顺着父链走到顶层那一节点，再按元素身份认回它是哪一条条目。
     /// </summary>
     private void SyncSelectedEntryFromTree()
@@ -2653,20 +2658,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SelectedDataEntry = root is null
             ? null
             : DataEntries.FirstOrDefault(entry => ReferenceEquals(entry.Element, root.Element));
-    }
-
-    /// <summary>把名字框填成选中条目那一个，带 guard，免得同步反过来又触发一次改名。</summary>
-    private void SyncDataEntryEditor()
-    {
-        _loadingDataEntry = true;
-        try
-        {
-            DataEntryName = SelectedDataEntry?.Name ?? string.Empty;
-        }
-        finally
-        {
-            _loadingDataEntry = false;
-        }
     }
 
     /// <summary>
@@ -2698,39 +2689,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         StatusMessage = entry.Name.Length == 0
             ? $"已把 {node.TypeLabel} 存入字典（没有名字）。"
             : $"已把 {node.TypeLabel} 存入字典「{entry.Name}」。";
-    }
-
-    private void CommitEntryName()
-    {
-        var entry = SelectedDataEntry;
-        if (entry is null)
-        {
-            return;
-        }
-
-        var previous = entry.Name;
-        var name = DataEntryName.Trim();
-        if (name == previous)
-        {
-            // 只多敲了空格：把输入框显示回真正存下来的名字。
-            OnPropertyChanged(nameof(DataEntryName));
-            return;
-        }
-
-        try
-        {
-            var updated = _library.RenameEntry(entry, name);
-            RefreshDataEntries(updated.Index);
-            RefreshEntryTree();
-            StatusMessage = updated.Name.Length == 0
-                ? $"已把条目「{previous}」的名字清空。"
-                : $"已把条目改成「{updated.Name}」。";
-        }
-        catch (ArgumentException exception)
-        {
-            Fail($"改名失败：{exception.Message}");
-            SyncDataEntryEditor();
-        }
     }
 
     /// <summary>
