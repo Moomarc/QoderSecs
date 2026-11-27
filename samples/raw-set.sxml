@@ -32,7 +32,10 @@
             <Function>13</Function>
             <WBit>1</WBit>
             <AutoReply>EstablishCommsAck</AutoReply>
-            <Structure />
+            <Structure>
+                <L>
+                </L>
+            </Structure>
         </Message>
         <Message Name="EstablishCommsAck">
             <Stream>1</Stream>
@@ -45,25 +48,15 @@
                         </Maps>
                     </B>
                     <L>
-                        <A Name="MDLN">
-                            <Value>QODERSECS</Value>
-                            <Maps Type="4096">
-                            </Maps>
-                        </A>
-                        <A Name="SOFTREV">
-                            <Value>1.0</Value>
-                            <Maps Type="4096">
-                            </Maps>
-                        </A>
                     </L>
                 </L>
             </Structure>
         </Message>
-        <Message Name="HostCommand">
+        <Message Name="HostCommandStart">
             <Stream>2</Stream>
             <Function>41</Function>
             <WBit>1</WBit>
-            <AutoReply>HostCommandAck</AutoReply>
+            <AutoReply>HostCommandStartAck</AutoReply>
             <Structure>
                 <L>
                     <A Name="RCMD">
@@ -76,7 +69,7 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="HostCommandAck">
+        <Message Name="HostCommandStartAck">
             <Stream>2</Stream>
             <Function>42</Function>
             <Structure>
@@ -87,6 +80,94 @@
                         </Maps>
                     </B>
                     <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandStop">
+            <Stream>2</Stream>
+            <Function>41</Function>
+            <WBit>1</WBit>
+            <AutoReply>HostCommandStopAck</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="RCMD">
+                        <Value>STOP</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandStopAck">
+            <Stream>2</Stream>
+            <Function>42</Function>
+            <Structure>
+                <L>
+                    <B Name="HCACK">
+                        <Value>00</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandPPSelect">
+            <Stream>2</Stream>
+            <Function>41</Function>
+            <WBit>1</WBit>
+            <AutoReply>HostCommandPPSelectAck</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="RCMD">
+                        <Value>PP_SELECT</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <L Name="CPList">
+                        <L>
+                            <A Name="CPNAME">
+                                <Value>PPID</Value>
+                                <Maps Type="4096">
+                                </Maps>
+                            </A>
+                            <A Name="CPVAL">
+                                <Value>RECIPE01</Value>
+                                <Maps Type="4096">
+                                </Maps>
+                            </A>
+                        </L>
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandPPSelectAck">
+            <Stream>2</Stream>
+            <Function>42</Function>
+            <Structure>
+                <L>
+                    <B Name="HCACK">
+                        <Value>00</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <L Name="CPList">
+                        <L>
+                            <A Name="CPNAME">
+                                <Value>PPID</Value>
+                                <Maps Type="4096">
+                                </Maps>
+                            </A>
+                            <B Name="CPACK">
+                                <Value>00</Value>
+                                <Maps Type="1024">
+                                </Maps>
+                            </B>
+                        </L>
                     </L>
                 </L>
             </Structure>
@@ -120,7 +201,7 @@
             <Stream>5</Stream>
             <Function>2</Function>
             <Structure>
-                <B Name="ACK">
+                <B Name="ACKC5">
                     <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
@@ -152,6 +233,11 @@
                                 </Maps>
                             </U4>
                             <L Name="Report">
+                                <U4 Name="V">
+                                    <Value>0</Value>
+                                    <Maps Type="64">
+                                    </Maps>
+                                </U4>
                             </L>
                         </L>
                     </L>
@@ -162,7 +248,7 @@
             <Stream>6</Stream>
             <Function>12</Function>
             <Structure>
-                <B Name="ACK">
+                <B Name="ACKC6">
                     <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>

@@ -43,5 +43,11 @@ public enum RecordStatus
     LinkClosed,
 
     /// <summary>发出去了但本端不再等它的回复（点了「取消等待」）。回复稍后真到了仍按迟到配对。</summary>
-    WaitAbandoned
+    WaitAbandoned,
+
+    /// <summary>
+    /// 回复上了线路，但协议层因 DeviceId 不符把它丢弃、没交给等待中的发送。
+    /// 本端已跟随对端，重发这一条就能落定。
+    /// </summary>
+    ReplyDiscarded
 }

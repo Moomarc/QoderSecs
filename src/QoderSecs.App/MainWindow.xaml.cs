@@ -305,8 +305,21 @@ public partial class MainWindow : Window
     /// </summary>
     private void WindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (DataContext is not MainViewModel viewModel
-            || !e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        // Esc 关连接参数弹层。它是 StaysOpen 的 Popup，WPF 不会自己收，
+        // 原先只有再点一次「连接参数」这一条关闭路径。
+        if (e.Key == Key.Escape && viewModel.IsConfigPanelOpen)
+        {
+            viewModel.IsConfigPanelOpen = false;
+            e.Handled = true;
+            return;
+        }
+
+        if (!e.KeyboardDevice.Modifiers.HasFlag(ModifierKeys.Control))
         {
             return;
         }
@@ -374,7 +387,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var item = tree.ItemContainerGenerator.ContainerFromItem(tree.SelectedItem) as TreeViewItem;
+        var item = FindSelectedContainer(tree);
         if (item?.ContextMenu is { } menu)
         {
             // 菜单是资源里的共享实例，不先指定 PlacementTarget 它既不知道弹在哪，
@@ -385,6 +398,35 @@ public partial class MainWindow : Window
             menu.IsOpen = true;
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// 找选中那一行的容器。TreeView.ItemContainerGenerator 只认顶层项，
+    /// 选中深层节点时 ContainerFromItem 返回 null，Insert 就没反应——
+    /// 而结构树的叶子全在第二层往下，等于这个键在常用的地方都不管用。
+    /// 所以逐层往下找，展开着的分支才有容器，没展开的本来也选不中。
+    /// </summary>
+    private static TreeViewItem? FindSelectedContainer(ItemsControl parent)
+    {
+        foreach (var child in parent.Items)
+        {
+            if (parent.ItemContainerGenerator.ContainerFromItem(child) is not TreeViewItem container)
+            {
+                continue;
+            }
+
+            if (container.IsSelected)
+            {
+                return container;
+            }
+
+            if (FindSelectedContainer(container) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -565,7 +607,7 @@ public partial class MainWindow : Window
         }
 
         e.CancelCommand();
-        node.ReplaceValueText(text);
+        ReplaceWholeValue(node, text, "粘贴");
     }
 
     /// <summary>大文本拖到值框或大值摘要区时显示可放；小文本交给 TextBox 自己插到光标处。</summary>
@@ -607,7 +649,19 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
-        node.ReplaceValueText(text);
+        ReplaceWholeValue(node, text, "拖放");
+    }
+
+    /// <summary>
+    /// 粘贴、拖放、按钮三条路共用这一个整段替换入口，状态栏也在这里一起写。
+    /// 各写一份就会有的报有的不报——按钮那条原先就不报，替换完了状态栏还停在上一次导入。
+    /// </summary>
+    private void ReplaceWholeValue(StructureNodeViewModel node, string text, string source)
+    {
+        if (node.ReplaceValueText(text) && DataContext is MainViewModel viewModel)
+        {
+            viewModel.ShowValueReplaced(node.TypeLabel, source, text.Length);
+        }
     }
 
     private void ReplaceLargeValueFromClipboard(object sender, RoutedEventArgs e)
@@ -639,7 +693,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        node.ReplaceValueText(text);
+        ReplaceWholeValue(node, text, "剪贴板");
     }
 
     // ---------- 结构树拖动：搬过去，或者留一份、放下去的是副本 ----------

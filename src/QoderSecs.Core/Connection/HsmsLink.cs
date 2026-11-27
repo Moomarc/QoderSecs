@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Reflection;
 using Microsoft.Extensions.Options;
 using QoderSecs.Core.Messages;
 using QoderSecs.Core.Profiles;
@@ -49,6 +51,17 @@ public sealed class HsmsLink : IAsyncDisposable, ISecsTransportLink
     private SecsMessage? _inFlightMessage;
     private int? _inFlightSystemBytes;
 
+    /// <summary>回复被协议层丢弃的那条请求的 SystemBytes，发送收尾时据此换措辞。</summary>
+    private int? _discardedReplySystemBytes;
+
+    // Secs4Net 3.1.0 拒收 DeviceId 不符的入站消息、回 S9F1，且不把那条回复交给等待中的发送；
+    // DeviceId 是只读属性，跟随对端只能改它的 backing field。版本一变这里就是 null。
+    private static readonly FieldInfo? PeerDeviceIdField = typeof(SecsGem).GetField(
+        "<DeviceId>k__BackingField",
+        BindingFlags.Instance | BindingFlags.NonPublic);
+
+    private bool _followFailureLogged;
+
     public TranscriptCorrelator Transcript => _session.Transcript;
 
     /// <summary>当前消息库。界面载入新文件时会整份换掉实例，所以每次要回复时现取。</summary>
@@ -80,6 +93,9 @@ public sealed class HsmsLink : IAsyncDisposable, ISecsTransportLink
         add => _session.PhaseChanged += value;
         remove => _session.PhaseChanged -= value;
     }
+
+    /// <summary>线路上实际在用的 DeviceId，跟随对端后才有值；<see cref="Profile"/> 里填的那个不变。</summary>
+    public int? EffectiveDeviceId => _session.EffectiveDeviceId;
 
     public bool CanConnect
     {
@@ -309,9 +325,12 @@ public sealed class HsmsLink : IAsyncDisposable, ISecsTransportLink
             catch (Exception exception) when (exception is SecsException or OperationCanceledException or ObjectDisposedException)
             {
                 int? systemBytes;
+                int? discarded;
                 lock (_gate)
                 {
                     systemBytes = _inFlightSystemBytes;
+                    discarded = _discardedReplySystemBytes;
+                    _discardedReplySystemBytes = null;
                 }
 
                 if (exception.Message.Contains("T3", StringComparison.OrdinalIgnoreCase) && systemBytes is { } timedOut)
@@ -326,6 +345,14 @@ public sealed class HsmsLink : IAsyncDisposable, ISecsTransportLink
                 {
                     if (systemBytes is { } abandoned)
                     {
+                        if (discarded == abandoned)
+                        {
+                            Log?.EnqueueDetail(
+                                $"回复被丢弃 {header.Signature} sys={abandoned:X8}：" +
+                                "对端 DeviceId 不符，协议层没把回复交给这次发送；已跟随对端，重发这一条即可");
+                            return $"{header.Signature} 的回复被协议层丢弃（DeviceId 不符），已跟随对端，请重发。";
+                        }
+
                         return AbandonWaitText(header, abandoned, linkCancellation);
                     }
 
@@ -530,15 +557,92 @@ public sealed class HsmsLink : IAsyncDisposable, ISecsTransportLink
     {
         _session.Record(direction, systemBytes, message);
 
-        if (direction == SecsDirection.Out)
+        if (direction != SecsDirection.Out)
         {
-            lock (_gate)
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (ReferenceEquals(message, _inFlightMessage))
             {
-                if (ReferenceEquals(message, _inFlightMessage))
-                {
-                    _inFlightSystemBytes = systemBytes;
-                }
+                _inFlightSystemBytes = systemBytes;
             }
+        }
+
+        if (FollowPeerDeviceId(message) is { } rejected)
+        {
+            AbandonDiscardedReply(rejected);
+        }
+    }
+
+    /// <summary>
+    /// HSMS 下 DeviceId 不寻址，机台各填各的，所以本端跟随对端而不是拒收。
+    /// 对端的值只能从 Secs4Net 自动回出的那条 S9F1 正文里读：正文就是被拒消息的 10 字节报文头。
+    /// 返回被拒那条的 SystemBytes——本端正在等它的话，那个等待已经没救了，见 <see cref="AbandonDiscardedReply"/>。
+    /// </summary>
+    private int? FollowPeerDeviceId(SecsMessage message)
+    {
+        if (message is not { S: 9, F: 1, SecsItem.Format: SecsFormat.Binary }
+            || message.SecsItem.GetMemory<byte>() is not { Length: >= 10 } header)
+        {
+            return null;
+        }
+
+        var peerDeviceId = (ushort)(((header.Span[0] & 0x7F) << 8) | header.Span[1]);
+        var rejectedSystemBytes = BinaryPrimitives.ReadInt32BigEndian(header.Span.Slice(6, 4));
+
+        lock (_gate)
+        {
+            if (_gem is null)
+            {
+                return null;
+            }
+
+            // 回复带的就是请求的 SystemBytes，所以被拒的那条和本端在途那条对得上时，
+            // 说明丢的是自己的回复。对不上就是拒了别人的报文，只跟随，不动本端的等待。
+            int? discarded = _inFlightSystemBytes == rejectedSystemBytes ? rejectedSystemBytes : null;
+
+            if (peerDeviceId == _gem.DeviceId)
+            {
+                return discarded;
+            }
+
+            if (PeerDeviceIdField is null)
+            {
+                if (!_followFailureLogged)
+                {
+                    _followFailureLogged = true;
+                    Log?.EnqueueDetail(
+                        $"对端 DeviceId={peerDeviceId}，本端 {_gem.DeviceId}；当前 Secs4Net 版本不支持自动跟随，" +
+                        "请把连接参数里的 DeviceId 改成对端的值。");
+                }
+
+                return discarded;
+            }
+
+            var configured = _gem.DeviceId;
+            PeerDeviceIdField.SetValue(_gem, peerDeviceId);
+            Log?.EnqueueDetail(
+                $"对端 DeviceId={peerDeviceId}，本端原为 {configured}，已跟随对端；后续收发都用 {peerDeviceId}。");
+            _session.ReportDeviceIdFollowed(peerDeviceId);
+            return discarded;
+        }
+    }
+
+    /// <summary>
+    /// DeviceId 不符时 Secs4Net 把收到的回复丢掉、不交给等待中的发送，那条请求再等也不会有结果。
+    /// 让它挂满 T3（最大能配 86400 秒）看起来就是卡死，所以这里立刻叫停并说明原因。
+    /// 不自动重发：重发与否是用户的决定。
+    /// </summary>
+    private void AbandonDiscardedReply(int systemBytes)
+    {
+        Transcript.MarkReplyDiscarded(systemBytes);
+
+        lock (_gate)
+        {
+            _discardedReplySystemBytes = systemBytes;
+            _pendingSend?.Cancel();
         }
     }
 

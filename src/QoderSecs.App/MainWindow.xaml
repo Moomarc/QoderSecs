@@ -384,6 +384,15 @@
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
+                <!-- 单行框钉死一行高。NoWrap 拦不住 WPF 给超长正文分行：18 万字符的值
+                     实测排出 19 行、正文里一个换行符都没有，框就长到 342 DIP，
+                     树行比整棵树的视口还高，把可见区挤到只剩 63 DIP。
+                     上限取 MinHeight 那个值，正常单行框一点不受影响。
+                     纵向滚动留 Hidden（不是 Disabled）：不画滚动条，光标仍能滚进可见区。 -->
+                <Trigger Property="AcceptsReturn" Value="False">
+                    <Setter Property="MaxHeight" Value="32" />
+                    <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
+                </Trigger>
                 <!-- 多行框的文字从顶端开始写。VerticalContentAlignment 也管文字画在
                      框里的哪一截，只把 ScrollViewer 拉满会让整段停在垂直中间。 -->
                 <Trigger Property="AcceptsReturn" Value="True">
@@ -1299,8 +1308,9 @@
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
-                <!-- 只有正在编辑的那一行拉满宽度，值框才吃得到 * 列；
-                     显示态不拉，长值预览照旧把行撑宽，行为不变。 -->
+                <!-- 只有正在编辑的那一行拉满宽度，值框才吃得到 * 列。两棵树的横向滚动都关着，
+                     行宽因此有上限：开着时行模板在无限宽下测量，* 会退化成按内容给宽，
+                     十几万字符的值框能把整屏撑破（NoWrap 只管不换行，不管宽度）。 -->
                 <DataTrigger Binding="{Binding IsEditing}" Value="True">
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                 </DataTrigger>
@@ -1613,6 +1623,16 @@
                                              Text="{Binding T3Seconds}" />
                                 </StackPanel>
                             </WrapPanel>
+
+                            <!-- 跟随对端后才有这一行。参数框里始终是用户填的值，实际在用的值在这里说，
+                                 两个数都看得到。连接中参数是锁着的，所以这一行不跟着 IsEnabled 走。 -->
+                            <TextBlock AutomationProperties.AutomationId="DeviceIdFollowNote"
+                                       Margin="10,6,0,0"
+                                       FontSize="12"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding DeviceIdFollowNote}"
+                                       Visibility="{Binding DeviceIdFollowNoteVisibility}" />
 
                             <!-- HSMS 那一套：网络四元组加 T5–T8 和 Linktest。 -->
                             <WrapPanel Margin="0,8,0,0"
@@ -2102,7 +2122,8 @@
                                           DragLeave="NodeTreeDragLeave"
                                           Drop="NodeTreeDrop"
                                           MouseDoubleClick="NodeTreeMouseDoubleClick"
-                                          PreviewKeyDown="NodeTreePreviewKeyDown">
+                                          PreviewKeyDown="NodeTreePreviewKeyDown"
+                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                 </TreeView>
                                 <TextBlock Grid.Row="1" Text="{Binding StructureHint}">
                                     <TextBlock.Style>
@@ -2217,7 +2238,8 @@
                                               DragLeave="NodeTreeDragLeave"
                                               Drop="NodeTreeDrop"
                                               MouseDoubleClick="NodeTreeMouseDoubleClick"
-                                              PreviewKeyDown="NodeTreePreviewKeyDown" />
+                                              PreviewKeyDown="NodeTreePreviewKeyDown"
+                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
                                     <TextBlock Style="{StaticResource EmptyHintStyle}"
                                                Text="{Binding EntryHint}" />
                                 </Grid>
@@ -2628,10 +2650,10 @@
                                       VirtualizingPanel.VirtualizationMode="Recycling">
                                 <ListView.ItemContainerStyle>
                                     <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
-                                        <!-- SystemBytes 不再占列，值留在行提示里；消息名过长时
-                                             格子自己的 ToolTip 优先，不受这里影响。 -->
+                                        <!-- SystemBytes 不再占列，值留在行提示里；状态列留空的那几种
+                                             全词也在这里。消息名过长时格子自己的 ToolTip 优先。 -->
                                         <Setter Property="ToolTip"
-                                                Value="{Binding SystemBytesTooltip}" />
+                                                Value="{Binding RowTooltip}" />
                                     </Style>
                                 </ListView.ItemContainerStyle>
                                 <ListView.View>
@@ -2648,34 +2670,30 @@
                                                 </DataTemplate>
                                             </GridViewColumn.CellTemplate>
                                         </GridViewColumn>
-                                        <!-- 方向列 48：6px 点和 6px 间距之后还要放得下两个 12 号汉字；
-                                             44 时「出」的右半边会被裁掉。 -->
-                                        <GridViewColumn Header="方向" Width="48">
+                                        <!-- 方向列 40：只放一个箭头，右＝发出、左＝收到。
+                                             宽度下限由表头定，不是由箭头定：表头左右各 6 内边距，
+                                             「方向」两个 12 号字要 24，32 宽会把「向」的右竖裁掉。
+                                             颜色照旧分两个方向，扫一眼就能分左右。 -->
+                                        <GridViewColumn Header="方向" Width="40">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <Ellipse Width="6"
-                                                                 Height="6"
-                                                                 Margin="0,0,6,0"
-                                                                 VerticalAlignment="Center">
-                                                            <Ellipse.Style>
-                                                                <Style TargetType="Ellipse">
-                                                                    <!-- 收到绿、发出蓝：左栏这三点颜色比字更早被看见，
-                                                                         扫一眼就能分出两个方向。 -->
-                                                                    <Setter Property="Fill" Value="{StaticResource SuccessBrush}" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding Direction}"
-                                                                                     Value="{x:Static conn:SecsDirection.Out}">
-                                                                            <Setter Property="Fill" Value="{StaticResource PrimaryBrush}" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Ellipse.Style>
-                                                        </Ellipse>
-                                                        <TextBlock FontSize="12"
-                                                                   Foreground="{StaticResource MutedBrush}"
-                                                                   Text="{Binding DirectionText}" />
-                                                    </StackPanel>
+                                                    <TextBlock HorizontalAlignment="Center"
+                                                               FontFamily="{StaticResource MonoFontFamily}"
+                                                               FontSize="14"
+                                                               Text="{Binding DirectionGlyph}"
+                                                               ToolTip="{Binding DirectionText}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{StaticResource SuccessBrush}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Direction}"
+                                                                                 Value="{x:Static conn:SecsDirection.Out}">
+                                                                        <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
                                                 </DataTemplate>
                                             </GridViewColumn.CellTemplate>
                                         </GridViewColumn>
@@ -2707,11 +2725,11 @@
                                             </GridViewColumn.CellTemplate>
                                         </GridViewColumn>
                                         <!-- 状态列 112：最长的是「无人等待的回复」7 个字，
-                                             100 时最后一个字会被裁掉。 -->
+                                             100 时最后一个字会被裁掉。常规态留空，全词在行提示里。 -->
                                         <GridViewColumn Header="状态" Width="112">
                                             <GridViewColumn.CellTemplate>
                                                 <DataTemplate>
-                                                    <TextBlock FontSize="12" Text="{Binding StatusText}">
+                                                    <TextBlock FontSize="12" Text="{Binding StatusColumnText}">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
                                                                 <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />

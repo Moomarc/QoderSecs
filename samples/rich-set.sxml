@@ -15,12 +15,12 @@
             <Structure>
                 <L>
                     <A Name="MDLN">
-                        <Value />
+                        <Value>QODERSECS</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
                     <A Name="SOFTREV">
-                        <Value />
+                        <Value>1.0</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
@@ -35,7 +35,7 @@
             <Structure>
                 <L>
                     <U4 Name="SVID">
-                        <Value />
+                        <Value>1</Value>
                         <Maps Type="64">
                         </Maps>
                     </U4>
@@ -48,7 +48,7 @@
             <Structure>
                 <L>
                     <A Name="SV">
-                        <Value />
+                        <Value>0</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
@@ -60,29 +60,28 @@
             <Function>11</Function>
             <WBit>1</WBit>
             <AutoReply>StatusVariableNamelistReply</AutoReply>
-            <Structure />
+            <Structure>
+                <L>
+                </L>
+            </Structure>
         </Message>
         <Message Name="StatusVariableNamelistReply">
             <Stream>1</Stream>
             <Function>12</Function>
             <Structure>
                 <L>
-                    <L Name="SVIDList">
-                        <L>
-                            <U4 Name="SVID">
-                                <Value />
-                                <Maps Type="64">
-                                </Maps>
-                            </U4>
-                            <A Name="SVNAME">
-                                <Value />
-                                <Maps Type="4096">
-                                </Maps>
-                            </A>
-                        </L>
-                    </L>
-                    <L Name="SVList">
-                        <A Name="SV">
+                    <L>
+                        <U4 Name="SVID">
+                            <Value>1</Value>
+                            <Maps Type="64">
+                            </Maps>
+                        </U4>
+                        <A Name="SVNAME">
+                            <Value>EquipmentState</Value>
+                            <Maps Type="4096">
+                            </Maps>
+                        </A>
+                        <A Name="UNITS">
                             <Value />
                             <Maps Type="4096">
                             </Maps>
@@ -96,7 +95,10 @@
             <Function>13</Function>
             <WBit>1</WBit>
             <AutoReply>EstablishCommsAck</AutoReply>
-            <Structure />
+            <Structure>
+                <L>
+                </L>
+            </Structure>
         </Message>
         <Message Name="EstablishCommsAck">
             <Stream>1</Stream>
@@ -104,59 +106,13 @@
             <Structure>
                 <L>
                     <B Name="COMMACK">
-                        <Value />
+                        <Value>00</Value>
                         <Maps Type="1024">
                         </Maps>
                     </B>
                     <L>
-                        <A Name="MDLN">
-                            <Value />
-                            <Maps Type="4096">
-                            </Maps>
-                        </A>
-                        <A Name="SOFTREV">
-                            <Value />
-                            <Maps Type="4096">
-                            </Maps>
-                        </A>
                     </L>
                 </L>
-            </Structure>
-        </Message>
-        <Message Name="RequestOffline">
-            <Stream>1</Stream>
-            <Function>15</Function>
-            <WBit>1</WBit>
-            <AutoReply>RequestOfflineAck</AutoReply>
-            <Structure />
-        </Message>
-        <Message Name="RequestOfflineAck">
-            <Stream>1</Stream>
-            <Function>16</Function>
-            <Structure>
-                <B Name="OFLACK">
-                    <Value />
-                    <Maps Type="1024">
-                    </Maps>
-                </B>
-            </Structure>
-        </Message>
-        <Message Name="RequestOnline">
-            <Stream>1</Stream>
-            <Function>17</Function>
-            <WBit>1</WBit>
-            <AutoReply>RequestOnlineAck</AutoReply>
-            <Structure />
-        </Message>
-        <Message Name="RequestOnlineAck">
-            <Stream>1</Stream>
-            <Function>18</Function>
-            <Structure>
-                <B Name="ONLACK">
-                    <Value />
-                    <Maps Type="1024">
-                    </Maps>
-                </B>
             </Structure>
         </Message>
         <Message Name="DateTimeSet">
@@ -166,7 +122,7 @@
             <AutoReply>DateTimeSetAck</AutoReply>
             <Structure>
                 <A Name="TIME">
-                    <Value />
+                    <Value>260101120000</Value>
                     <Maps Type="4096">
                     </Maps>
                 </A>
@@ -177,7 +133,7 @@
             <Function>32</Function>
             <Structure>
                 <B Name="TIACK">
-                    <Value />
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
@@ -191,20 +147,20 @@
             <Structure>
                 <L>
                     <U4 Name="DATAID">
-                        <Value />
+                        <Value>0</Value>
                         <Maps Type="64">
                         </Maps>
                     </U4>
                     <L Name="RPTIDList">
                         <L>
                             <U4 Name="RPTID">
-                                <Value />
+                                <Value>1</Value>
                                 <Maps Type="64">
                                 </Maps>
                             </U4>
                             <L Name="VIDList">
                                 <U4 Name="VID">
-                                    <Value />
+                                    <Value>1 2</Value>
                                     <Maps Type="64">
                                     </Maps>
                                 </U4>
@@ -219,7 +175,7 @@
             <Function>34</Function>
             <Structure>
                 <B Name="DRACK">
-                    <Value />
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
@@ -233,20 +189,20 @@
             <Structure>
                 <L>
                     <U4 Name="DATAID">
-                        <Value />
+                        <Value>0</Value>
                         <Maps Type="64">
                         </Maps>
                     </U4>
                     <L Name="CEIDList">
                         <L>
                             <U4 Name="CEID">
-                                <Value />
+                                <Value>1</Value>
                                 <Maps Type="64">
                                 </Maps>
                             </U4>
                             <L Name="RPTIDList">
                                 <U4 Name="RPTID">
-                                    <Value />
+                                    <Value>1</Value>
                                     <Maps Type="64">
                                     </Maps>
                                 </U4>
@@ -261,7 +217,7 @@
             <Function>36</Function>
             <Structure>
                 <B Name="LRACK">
-                    <Value />
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
@@ -274,14 +230,14 @@
             <AutoReply>EnableDisableEventsAck</AutoReply>
             <Structure>
                 <L>
-                    <B Name="CEED">
-                        <Value />
-                        <Maps Type="1024">
+                    <Boolean Name="CEED">
+                        <Value>True</Value>
+                        <Maps Type="2048">
                         </Maps>
-                    </B>
+                    </Boolean>
                     <L Name="CEIDList">
                         <U4 Name="CEID">
-                            <Value />
+                            <Value>1</Value>
                             <Maps Type="64">
                             </Maps>
                         </U4>
@@ -294,33 +250,97 @@
             <Function>38</Function>
             <Structure>
                 <B Name="ERACK">
-                    <Value />
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
             </Structure>
         </Message>
-        <Message Name="HostCommand">
+        <Message Name="HostCommandStart">
             <Stream>2</Stream>
             <Function>41</Function>
             <WBit>1</WBit>
-            <AutoReply>HostCommandAck</AutoReply>
+            <AutoReply>HostCommandStartAck</AutoReply>
             <Structure>
                 <L>
                     <A Name="RCMD">
-                        <Value />
+                        <Value>START</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandStartAck">
+            <Stream>2</Stream>
+            <Function>42</Function>
+            <Structure>
+                <L>
+                    <B Name="HCACK">
+                        <Value>00</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandStop">
+            <Stream>2</Stream>
+            <Function>41</Function>
+            <WBit>1</WBit>
+            <AutoReply>HostCommandStopAck</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="RCMD">
+                        <Value>STOP</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandStopAck">
+            <Stream>2</Stream>
+            <Function>42</Function>
+            <Structure>
+                <L>
+                    <B Name="HCACK">
+                        <Value>00</Value>
+                        <Maps Type="1024">
+                        </Maps>
+                    </B>
+                    <L Name="CPList">
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="HostCommandPPSelect">
+            <Stream>2</Stream>
+            <Function>41</Function>
+            <WBit>1</WBit>
+            <AutoReply>HostCommandPPSelectAck</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="RCMD">
+                        <Value>PP_SELECT</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
                     <L Name="CPList">
                         <L>
                             <A Name="CPNAME">
-                                <Value />
+                                <Value>PPID</Value>
                                 <Maps Type="4096">
                                 </Maps>
                             </A>
                             <A Name="CPVAL">
-                                <Value />
+                                <Value>RECIPE01</Value>
                                 <Maps Type="4096">
                                 </Maps>
                             </A>
@@ -329,25 +349,25 @@
                 </L>
             </Structure>
         </Message>
-        <Message Name="HostCommandAck">
+        <Message Name="HostCommandPPSelectAck">
             <Stream>2</Stream>
             <Function>42</Function>
             <Structure>
                 <L>
                     <B Name="HCACK">
-                        <Value />
+                        <Value>00</Value>
                         <Maps Type="1024">
                         </Maps>
                     </B>
                     <L Name="CPList">
                         <L>
                             <A Name="CPNAME">
-                                <Value />
+                                <Value>PPID</Value>
                                 <Maps Type="4096">
                                 </Maps>
                             </A>
                             <B Name="CPACK">
-                                <Value />
+                                <Value>00</Value>
                                 <Maps Type="1024">
                                 </Maps>
                             </B>
@@ -364,17 +384,17 @@
             <Structure>
                 <L>
                     <B Name="ALCD">
-                        <Value />
+                        <Value>81</Value>
                         <Maps Type="1024">
                         </Maps>
                     </B>
                     <U4 Name="ALID">
-                        <Value />
+                        <Value>1</Value>
                         <Maps Type="64">
                         </Maps>
                     </U4>
                     <A Name="ALTX">
-                        <Value />
+                        <Value>ALARM</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
@@ -385,8 +405,8 @@
             <Stream>5</Stream>
             <Function>2</Function>
             <Structure>
-                <B Name="ACK">
-                    <Value />
+                <B Name="ACKC5">
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
@@ -400,23 +420,28 @@
             <Structure>
                 <L>
                     <U4 Name="DATAID">
-                        <Value />
+                        <Value>0</Value>
                         <Maps Type="64">
                         </Maps>
                     </U4>
                     <U4 Name="CEID">
-                        <Value />
+                        <Value>1</Value>
                         <Maps Type="64">
                         </Maps>
                     </U4>
                     <L Name="ReportList">
                         <L>
                             <U4 Name="RPTID">
-                                <Value />
+                                <Value>1</Value>
                                 <Maps Type="64">
                                 </Maps>
                             </U4>
                             <L Name="Report">
+                                <U4 Name="V">
+                                    <Value>0</Value>
+                                    <Maps Type="64">
+                                    </Maps>
+                                </U4>
                             </L>
                         </L>
                     </L>
@@ -427,8 +452,8 @@
             <Stream>6</Stream>
             <Function>12</Function>
             <Structure>
-                <B Name="ACK">
-                    <Value />
+                <B Name="ACKC6">
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
@@ -442,15 +467,15 @@
             <Structure>
                 <L>
                     <A Name="PPID">
-                        <Value />
+                        <Value>RECIPE01</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
-                    <A Name="PPBODY">
-                        <Value />
-                        <Maps Type="4096">
+                    <B Name="PPBODY">
+                        <Value>00 01 02 03</Value>
+                        <Maps Type="1024">
                         </Maps>
-                    </A>
+                    </B>
                 </L>
             </Structure>
         </Message>
@@ -458,8 +483,8 @@
             <Stream>7</Stream>
             <Function>4</Function>
             <Structure>
-                <B Name="PPACK">
-                    <Value />
+                <B Name="ACKC7">
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
@@ -472,7 +497,7 @@
             <AutoReply>ProcessProgramData</AutoReply>
             <Structure>
                 <A Name="PPID">
-                    <Value />
+                    <Value>RECIPE01</Value>
                     <Maps Type="4096">
                     </Maps>
                 </A>
@@ -484,15 +509,15 @@
             <Structure>
                 <L>
                     <A Name="PPID">
-                        <Value />
+                        <Value>RECIPE01</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
-                    <A Name="PPBODY">
-                        <Value />
-                        <Maps Type="4096">
+                    <B Name="PPBODY">
+                        <Value>00 01 02 03</Value>
+                        <Maps Type="1024">
                         </Maps>
-                    </A>
+                    </B>
                 </L>
             </Structure>
         </Message>
@@ -504,7 +529,7 @@
             <Structure>
                 <L>
                     <A Name="PPID">
-                        <Value />
+                        <Value>RECIPE01</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
@@ -515,8 +540,8 @@
             <Stream>7</Stream>
             <Function>18</Function>
             <Structure>
-                <B Name="PPACK">
-                    <Value />
+                <B Name="ACKC7">
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
@@ -535,7 +560,7 @@
             <Structure>
                 <L>
                     <A Name="PPID">
-                        <Value />
+                        <Value>RECIPE01</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
@@ -550,12 +575,12 @@
             <Structure>
                 <L>
                     <B Name="TID">
-                        <Value />
+                        <Value>00</Value>
                         <Maps Type="1024">
                         </Maps>
                     </B>
                     <A Name="TEXT">
-                        <Value />
+                        <Value>QODERSECS</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
@@ -567,94 +592,172 @@
             <Function>4</Function>
             <Structure>
                 <B Name="ACKC10">
-                    <Value />
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
             </Structure>
         </Message>
-        <Message Name="WaferMap">
+        <Message Name="MapTransmitInquire">
             <Stream>12</Stream>
-            <Function>9</Function>
+            <Function>5</Function>
             <WBit>1</WBit>
-            <AutoReply>WaferMapAck</AutoReply>
+            <AutoReply>MapTransmitGrant</AutoReply>
             <Structure>
                 <L>
-                    <A Name="LOTID">
-                        <Value />
+                    <A Name="MID">
+                        <Value>WAFER01</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
-                    <B Name="WAFERID">
-                        <Value />
+                    <B Name="IDTYP">
+                        <Value>00</Value>
                         <Maps Type="1024">
                         </Maps>
                     </B>
-                    <I2 Name="MAP_XY">
-                        <Value />
-                    </I2>
-                    <A Name="WAFER_MAP">
-                        <Value />
-                        <Maps Type="4096">
+                    <B Name="MAPFT">
+                        <Value>01</Value>
+                        <Maps Type="1024">
                         </Maps>
-                    </A>
+                    </B>
+                    <U4 Name="MLCL">
+                        <Value>1024</Value>
+                        <Maps Type="64">
+                        </Maps>
+                    </U4>
                 </L>
             </Structure>
         </Message>
-        <Message Name="WaferMapAck">
+        <Message Name="MapTransmitGrant">
             <Stream>12</Stream>
-            <Function>10</Function>
+            <Function>6</Function>
             <Structure>
-                <B Name="ACK">
-                    <Value />
+                <B Name="GRNT1">
+                    <Value>00</Value>
                     <Maps Type="1024">
                     </Maps>
                 </B>
             </Structure>
         </Message>
-        <Message Name="WaferMapRequest">
+        <Message Name="MapDataRequest">
             <Stream>12</Stream>
             <Function>15</Function>
             <WBit>1</WBit>
-            <AutoReply>WaferMapData</AutoReply>
+            <AutoReply>MapData</AutoReply>
             <Structure>
                 <L>
-                    <A Name="LOTID">
-                        <Value />
+                    <A Name="MID">
+                        <Value>WAFER01</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
-                    <B Name="WAFERID">
-                        <Value />
+                    <B Name="IDTYP">
+                        <Value>00</Value>
                         <Maps Type="1024">
                         </Maps>
                     </B>
                 </L>
             </Structure>
         </Message>
-        <Message Name="WaferMapData">
+        <Message Name="MapData">
             <Stream>12</Stream>
             <Function>16</Function>
             <Structure>
                 <L>
-                    <A Name="LOTID">
-                        <Value />
+                    <A Name="MID">
+                        <Value>WAFER01</Value>
                         <Maps Type="4096">
                         </Maps>
                     </A>
-                    <B Name="WAFERID">
-                        <Value />
+                    <B Name="IDTYP">
+                        <Value>00</Value>
                         <Maps Type="1024">
                         </Maps>
                     </B>
-                    <I2 Name="MAP_XY">
-                        <Value />
+                    <I2 Name="STRP">
+                        <Value>0 0</Value>
                     </I2>
-                    <A Name="WAFER_MAP">
+                    <U1 Name="BINLT">
+                        <Value>0 0 0 0</Value>
+                        <Maps Type="16">
+                        </Maps>
+                    </U1>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="GetAttrRequest">
+            <Stream>14</Stream>
+            <Function>1</Function>
+            <WBit>1</WBit>
+            <AutoReply>GetAttrData</AutoReply>
+            <Structure>
+                <L>
+                    <A Name="OBJSPEC">
                         <Value />
                         <Maps Type="4096">
                         </Maps>
                     </A>
+                    <A Name="OBJTYPE">
+                        <Value>StripMap</Value>
+                        <Maps Type="4096">
+                        </Maps>
+                    </A>
+                    <L Name="OBJIDList">
+                        <A Name="OBJID">
+                            <Value>STRIP01</Value>
+                            <Maps Type="4096">
+                            </Maps>
+                        </A>
+                    </L>
+                    <L Name="FilterList">
+                    </L>
+                    <L Name="ATTRIDList">
+                        <A Name="ATTRID">
+                            <Value>MapData</Value>
+                            <Maps Type="4096">
+                            </Maps>
+                        </A>
+                    </L>
+                </L>
+            </Structure>
+        </Message>
+        <Message Name="GetAttrData">
+            <Stream>14</Stream>
+            <Function>2</Function>
+            <Structure>
+                <L>
+                    <L Name="ObjectList">
+                        <L>
+                            <A Name="OBJID">
+                                <Value>STRIP01</Value>
+                                <Maps Type="4096">
+                                </Maps>
+                            </A>
+                            <L Name="AttrList">
+                                <L>
+                                    <A Name="ATTRID">
+                                        <Value>MapData</Value>
+                                        <Maps Type="4096">
+                                        </Maps>
+                                    </A>
+                                    <A Name="ATTRDATA">
+                                        <Value>&lt;MapData xmlns="urn:semi-org:xsd.E142-1.V0105.SubstrateMap"&gt;&lt;/MapData&gt;</Value>
+                                        <Maps Type="4096">
+                                        </Maps>
+                                    </A>
+                                </L>
+                            </L>
+                        </L>
+                    </L>
+                    <L>
+                        <U1 Name="OBJACK">
+                            <Value>0</Value>
+                            <Maps Type="16">
+                            </Maps>
+                        </U1>
+                        <L Name="ErrorList">
+                        </L>
+                    </L>
                 </L>
             </Structure>
         </Message>

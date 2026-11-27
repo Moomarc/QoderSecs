@@ -54,6 +54,15 @@ public sealed class ConnectionLink : IAsyncDisposable
         remove => _session.PhaseChanged -= value;
     }
 
+    /// <summary>线路上实际在用的 DeviceId，跟随对端后才有值；配置里填的那个不变。</summary>
+    public int? EffectiveDeviceId => _session.EffectiveDeviceId;
+
+    public event EventHandler<int>? DeviceIdFollowed
+    {
+        add => _session.DeviceIdFollowed += value;
+        remove => _session.DeviceIdFollowed -= value;
+    }
+
     public bool CanConnect
     {
         get

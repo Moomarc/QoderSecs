@@ -162,6 +162,27 @@ public sealed class TranscriptCorrelator
     public void MarkWaitAbandoned(int systemBytes, DateTimeOffset timestamp) =>
         StopWaiting(systemBytes, timestamp, RecordStatus.WaitAbandoned);
 
+    /// <summary>
+    /// 回复上了线路却被协议层丢弃（DeviceId 不符时 Secs4Net 不把它交给等待中的发送）。
+    /// 配对已经发生过，待等表里早就没有这条了，所以不能走 StopWaiting，直接改那条发出记录。
+    /// 一次会话最多碰上一回，反向扫一遍就够，不为它另建索引。
+    /// </summary>
+    public void MarkReplyDiscarded(int systemBytes)
+    {
+        lock (_gate)
+        {
+            for (var i = _records.Count - 1; i >= 0; i--)
+            {
+                if (_records[i] is { Direction: SecsDirection.Out } record
+                    && record.SystemBytes == systemBytes)
+                {
+                    record.Status = RecordStatus.ReplyDiscarded;
+                    return;
+                }
+            }
+        }
+    }
+
     private void StopWaiting(int systemBytes, DateTimeOffset timestamp, RecordStatus status)
     {
         lock (_gate)

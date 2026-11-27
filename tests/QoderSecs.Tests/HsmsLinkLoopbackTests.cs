@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
@@ -208,9 +210,10 @@ public sealed class HsmsLinkLoopbackTests
         Assert.IsFalse(onlineData.ReplyExpected);
         var onlineSml = SmlConverter.ToSml(onlineData);
         StringAssert.Contains(onlineSml, "'S1F2'");
-        // 样例库只留结构、不填数据，正文里两个 A 是空的（变量名是 SXML 层的东西，上线不带走），
-        // 所以这里认的是根列表的项数——证明带正文的 Secondary 真的回出来了。
+        // 样本库的默认值是填好的，所以这里除了根列表项数，还认得出 MDLN 的实际内容——
+        // 证明带正文的 Secondary 真的回出来了，而且带的是库里的值。
         StringAssert.Contains(onlineSml, "<L [2]");
+        StringAssert.Contains(onlineSml, "'QODERSECS'");
 
         using var establish = new SecsMessage(1, 13, replyExpected: true);
         using var ack = await peer.SendAsync(establish);
@@ -231,6 +234,72 @@ public sealed class HsmsLinkLoopbackTests
             outbound.Select(record => record.MessageText).ToList());
         Assert.AreEqual(inbound[0].SystemBytes, outbound[0].SystemBytes);
         Assert.AreEqual(inbound[1].SystemBytes, outbound[1].SystemBytes);
+    }
+
+    /// <summary>
+    /// 两份样本库都填成即用。这里拿新的 rich-set 走一遍新增和改过的命令：
+    /// S2F41 三条、S12F5/6、S14F1/2，验证结构真能发出去、应答按 SystemBytes 配上、
+    /// 应答码是填好的 00 而不是空。
+    /// </summary>
+    [TestMethod]
+    public async Task NewDefaultLibraryCommandsGoOutFilledAndPairWithTheirAcks()
+    {
+        var port = ReservePort();
+        await using var equipment = new HsmsLink { LibraryProvider = CommonCommands };
+        await using var host = new HsmsLink { LibraryProvider = CommonCommands };
+        equipment.Connect(Passive(port));
+        host.Connect(Active(port));
+        await WaitFor("两端就绪", () => equipment.Phase == LinkPhase.Online && host.Phase == LinkPhase.Online);
+
+        var library = CommonCommands();
+        (string Name, string Reply)[] round =
+        [
+            ("HostCommandStart", "S2F42"),
+            ("HostCommandStop", "S2F42"),
+            ("HostCommandPPSelect", "S2F42"),
+            ("MapTransmitInquire", "S12F6"),
+            ("MapDataRequest", "S12F16"),
+            ("GetAttrRequest", "S14F2"),
+        ];
+
+        foreach (var (name, reply) in round)
+        {
+            var entry = library.Messages.Single(message => message.Name == name);
+            Assert.IsTrue(SmlConverter.TryToMessage(entry, out var message, out var error), error);
+            using (message)
+            {
+                StringAssert.Contains(await host.SendAsync(message), reply);
+            }
+        }
+
+        var sent = host.Transcript.Records.Where(record => record.Direction == SecsDirection.Out).ToList();
+        await WaitFor(
+            "六条出站都收到回复",
+            () => sent.Count == 6 && sent.All(record => record.Status == RecordStatus.SecondaryReceived),
+            () => Describe(sent));
+
+        var received = host.Transcript.Records.Where(record => record.Direction == SecsDirection.In).ToList();
+        Assert.HasCount(6, received);
+        CollectionAssert.AreEqual(
+            round.Select(item => item.Reply).ToList(),
+            received.Select(record => record.Signature).ToList());
+        CollectionAssert.AreEqual(
+            sent.Select(record => record.SystemBytes).ToList(),
+            received.Select(record => record.SystemBytes).ToList());
+
+        // 应答码填的是 00，空着发出去对面解析不到结果。
+        foreach (var ack in received.Where(record => record.Signature is "S2F42" or "S12F6"))
+        {
+            StringAssert.Contains(ack.Sml!, "0x00");
+        }
+
+        // PP_SELECT 带参数，S14F1 要的是 MapData 属性，正文得真的上线。
+        var select = sent.Single(record => record.MessageText.Contains("HostCommandPPSelect"));
+        StringAssert.Contains(select.Sml!, "'PP_SELECT'");
+        StringAssert.Contains(select.Sml!, "'RECIPE01'");
+        var getAttr = sent.Single(record => record.MessageText.Contains("GetAttrRequest"));
+        StringAssert.Contains(getAttr.Sml!, "'StripMap'");
+        StringAssert.Contains(getAttr.Sml!, "'MapData'");
     }
 
     /// <summary>
@@ -988,8 +1057,166 @@ public sealed class HsmsLinkLoopbackTests
         StringAssert.Contains(error.Message, "端口");
     }
 
+    /// <summary>
+    /// DeviceId 自动跟随改的是 Secs4Net 只读属性的 backing field。换版本后这个字段可能没了，
+    /// 那条兼容路径会静默失效，所以单独盯一条：红了就去重看 SecsGem 的拒收逻辑。
+    /// </summary>
+    [TestMethod]
+    public void SecsGemExposesTheDeviceIdBackingFieldThatPeerFollowingWrites()
+    {
+        Assert.IsNotNull(
+            typeof(SecsGem).GetField("<DeviceId>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic),
+            "Secs4Net 换了版本，DeviceId 自动跟随依赖的 backing field 不在了。");
+    }
+
+    /// <summary>
+    /// 机台用自己的 DeviceId（现场那台是 32），本端配 0。Secs4Net 会拒收并回 S9F1，
+    /// 而且被拒的那条回复不交给等待中的发送——现场表现是每条都「收到回复」却只能点取消等待。
+    /// 本端要跟随对端：只许拒一次，之后两个方向的 W 请求都得正常落定。
+    /// </summary>
+    [TestMethod]
+    public async Task PeerDeviceIdIsFollowedSoBothDirectionsStopBeingRejected()
+    {
+        var directory = NewSessionDirectory();
+        try
+        {
+            var port = ReservePort();
+            await using var equipment = new HsmsLink
+            {
+                LibraryProvider = SampleLibrary,
+                SessionDirectoryFactory = _ => directory
+            };
+            equipment.Connect(Passive(port) with { T3Seconds = 5 });
+
+            await using var peer = await SecsPeer.ConnectAsync("127.0.0.1", PortOf(equipment), deviceId: 32);
+            peer.StartReplying();
+            await WaitFor("本端就绪", () => equipment.Phase == LinkPhase.Online);
+
+            // 第一条对端报文触发那次拒收，本端从 S9F1 正文里读出 32 并跟随。
+            await peer.SendAsync(new SecsMessage(6, 11, replyExpected: false) { SecsItem = Item.U4(1) });
+            var followed = false;
+            for (var i = 0; i < 100 && !followed; i++)
+            {
+                followed = (await ReadDetailLogAsync(directory)).Contains("已跟随对端", StringComparison.Ordinal);
+                if (!followed)
+                {
+                    await Task.Delay(50);
+                }
+            }
+
+            Assert.IsTrue(followed, "本端没有跟随对端 DeviceId。");
+
+            // 本端当 Host 发 W：对端是严格校验的 Secs4Net，外发不跟随就会被它回 S9F1。
+            using (var request = new SecsMessage(1, 1, replyExpected: true))
+            {
+                StringAssert.Contains(await equipment.SendAsync(request), "收到 S1F2");
+            }
+
+            // 对端当 Host 发 W：本端入站不再被拒，自动回复要真的回出去。
+            using (var request = new SecsMessage(1, 1, replyExpected: true))
+            {
+                using var reply = await peer.SendAsync(request);
+                Assert.AreEqual((byte)2, reply.F);
+            }
+
+            var detail = await ReadDetailLogAsync(directory);
+            StringAssert.Contains(detail, "对端 DeviceId=32");
+            Assert.HasCount(1, equipment.Transcript.Records.Where(record => record.Signature == "S9F1").ToList());
+
+            await WaitFor(
+                "两条 S1F2 都发出去了",
+                () => equipment.Transcript.Records.Count(record => record.Signature == "S1F2") == 2,
+                () => Describe(equipment.Transcript.Records));
+            Assert.IsTrue(
+                equipment.Transcript.Records
+                    .Where(record => record.Direction == SecsDirection.Out && record.Signature == "S1F1W")
+                    .All(record => record.Status == RecordStatus.SecondaryReceived),
+                "本端那条 W 请求要落到收到回复，不能停在等待回复。");
+            Assert.AreEqual(LinkPhase.Online, equipment.Phase);
+        }
+        finally
+        {
+            DeleteQuietly(directory);
+        }
+    }
+
     private static int PortOf(HsmsLink link) =>
         link.Profile is null ? throw new InvalidOperationException("尚未连接") : link.Profile.Port;
+
+    /// <summary>
+    /// 两端都是本程序、DeviceId 各填各的。
+    /// Secs4Net 3.1.0 的校验写成 `S != 9 &amp;&amp; F != 1`，把所有 F=1 都豁免了，
+    /// 所以 S1F1 请求不会被拒、被拒的是本端回出去的那条 S1F2——发 S9 的是收回复那一端，不是 Host。
+    /// 那条回复被上游丢掉、不交给等待中的发送，所以首发不能挂满 T3，要立刻说明原因。
+    /// </summary>
+    [TestMethod]
+    public async Task DiscardedReplyEndsTheWaitAtOnceAndEffectiveDeviceIdIsReported()
+    {
+        var hostDirectory = NewSessionDirectory();
+        var equipmentDirectory = NewSessionDirectory();
+        try
+        {
+            var port = ReservePort();
+            await using var host = new HsmsLink
+            {
+                LibraryProvider = SampleLibrary,
+                SessionDirectoryFactory = _ => hostDirectory
+            };
+            await using var equipment = new HsmsLink
+            {
+                LibraryProvider = SampleLibrary,
+                SessionDirectoryFactory = _ => equipmentDirectory
+            };
+            host.Connect(Active(port) with { DeviceId = 11, T3Seconds = 30 });
+            equipment.Connect(Passive(port) with { DeviceId = 22, T3Seconds = 30 });
+            await WaitFor("两端就绪", () => host.Phase == LinkPhase.Online && equipment.Phase == LinkPhase.Online);
+
+            var stopwatch = Stopwatch.StartNew();
+            string outcome;
+            using (var request = new SecsMessage(1, 1, replyExpected: true))
+            {
+                outcome = await equipment.SendAsync(request);
+            }
+
+            stopwatch.Stop();
+            StringAssert.Contains(outcome, "回复被协议层丢弃");
+            StringAssert.Contains(outcome, "请重发");
+            Assert.IsLessThan(
+                10_000, stopwatch.ElapsedMilliseconds,
+                $"首发挂了 {stopwatch.ElapsedMilliseconds} ms，T3 是 30 秒，说明还在空等。");
+
+            var sent = equipment.Transcript.Records.Single(
+                record => record.Direction == SecsDirection.Out && record.Signature == "S1F1W");
+            Assert.AreEqual(
+                RecordStatus.ReplyDiscarded, sent.Status,
+                "回复被丢弃了，记录不能停在「收到回复」。");
+
+            // 配置里填的那个不动，实际在用的单独报一份，界面两个都要显示。
+            Assert.AreEqual(22, equipment.Profile!.DeviceId);
+            Assert.AreEqual(11, equipment.EffectiveDeviceId);
+            Assert.IsNull(host.EffectiveDeviceId, "Host 没拒过谁，不该报跟随。");
+
+            // 发 S9 的是收回复那一端。Host 只收到，不发出。
+            Assert.HasCount(1, equipment.Transcript.Records.Where(
+                record => record.Direction == SecsDirection.Out && record.Signature == "S9F1").ToList());
+            Assert.HasCount(0, host.Transcript.Records.Where(
+                record => record.Direction == SecsDirection.Out && record.Signature == "S9F1").ToList());
+
+            // 跟随之后重发就落定，不再出现 S9。
+            using (var retry = new SecsMessage(1, 1, replyExpected: true))
+            {
+                StringAssert.Contains(await equipment.SendAsync(retry), "收到 S1F2");
+            }
+
+            Assert.HasCount(1, equipment.Transcript.Records.Where(record => record.Signature == "S9F1").ToList());
+            StringAssert.Contains(await ReadDetailLogAsync(equipmentDirectory), "回复被丢弃 S1F1W");
+        }
+        finally
+        {
+            DeleteQuietly(hostDirectory);
+            DeleteQuietly(equipmentDirectory);
+        }
+    }
 
     /// <summary>样例库里 S1F1 配了 AutoReply 指向 S1F2_OnlineData，其余消息都没配。</summary>
     private static MessageLibrary SampleLibrary() => MessageLibrary.Load(
@@ -1230,13 +1457,13 @@ public sealed class HsmsLinkLoopbackTests
             _gem = gem;
         }
 
-        public static async Task<SecsPeer> ConnectAsync(string ip, int port)
+        public static async Task<SecsPeer> ConnectAsync(string ip, int port, ushort deviceId = 0)
         {
             var holder = Options.Create(new SecsGemOptions
             {
                 IpAddress = ip,
                 Port = port,
-                DeviceId = 0,
+                DeviceId = deviceId,
                 IsActive = true,
                 T3 = 1000,
                 T5 = 1000,

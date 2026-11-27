@@ -79,6 +79,36 @@ public sealed class SecsSession
     public event EventHandler<LinkPhase>? PhaseChanged;
 
     /// <summary>
+    /// 线路上实际在用的 DeviceId，跟随对端后才有值。配置里填的那个不动，
+    /// 界面两个都要看得到，所以单独报一份而不是改 Profile。没跟随时为 null。
+    /// </summary>
+    public int? EffectiveDeviceId
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _effectiveDeviceId;
+            }
+        }
+    }
+
+    private int? _effectiveDeviceId;
+
+    /// <summary>跟随对端 DeviceId 后通知界面。参数是跟随后的值。</summary>
+    public event EventHandler<int>? DeviceIdFollowed;
+
+    internal void ReportDeviceIdFollowed(int deviceId)
+    {
+        lock (_gate)
+        {
+            _effectiveDeviceId = deviceId;
+        }
+
+        DeviceIdFollowed?.Invoke(this, deviceId);
+    }
+
+    /// <summary>
     /// 开一次会话：清掉上一条会话的记录，建目录、开两个日志、抄一份实际生效的配置。
     /// 各传输方式只要交一句自己的会话说明（地址或串口参数），其余口径在这里统一。
     /// </summary>
@@ -108,6 +138,7 @@ public sealed class SecsSession
             SessionDirectory = sessionDirectory;
             LastSessionDirectory = sessionDirectory;
             Log = log;
+            _effectiveDeviceId = null;
             _inboundRequests.Clear();
         }
 
@@ -145,6 +176,8 @@ public sealed class SecsSession
         lock (_gate)
         {
             _inboundRequests.Clear();
+            // 断开后没有「实际在用」这回事了，留着会让参数面板一直挂着上一次跟随的值。
+            _effectiveDeviceId = null;
         }
 
         Transcript.ClearPending();

@@ -10,9 +10,8 @@ namespace QoderSecs.Tests;
 /// SecsExpress 打不开样本，等于发布件是坏的——上一版就是这么翻车的，
 /// 真因是缺 <c>&lt;DataDictionary&gt;</c> 那一段，单变量对照件的实测结论记在 MessageLibrary 里。
 ///
-/// rich-set 是骨架，数值一律空着（「留结构不填数据」的口径由 SampleLibraryTests 盯）；
-/// raw-set 只有最常见的五对（S1F1/2、S1F13/14、S2F41/42、S5F1/2、S6F11/12），
-/// 变量带默认值，导入就能直接发。
+/// 两份都填成即用：rich-set 是全量 GEM 常用命令，raw-set 是较小的子集
+/// （S1F1/2、S1F13/14、S2F41/42 三条命令、S5F1/2、S6F11/12），变量都带能直接发出去的默认值。
 /// S12 上下图那套带正文的素材留在 TestData/wafer-map.sxml，由 WaferMapTests 和回环测试盯，
 /// 不再随 exe 发出去。
 /// </summary>
@@ -101,7 +100,7 @@ public sealed class ShippedSampleTests
     }
 
     [TestMethod]
-    public void TheRawSampleIsTheAgreedFivePairs()
+    public void TheRawSampleIsTheAgreedSubset()
     {
         var raw = Sample(AppDataPaths.RawSampleFileName);
 
@@ -109,54 +108,58 @@ public sealed class ShippedSampleTests
             new[]
             {
                 "S1F1", "S1F2", "S1F13", "S1F14",
-                "S2F41", "S2F42", "S5F1", "S5F2", "S6F11", "S6F12",
+                "S2F41", "S2F41", "S2F41", "S2F42", "S2F42", "S2F42",
+                "S5F1", "S5F2", "S6F11", "S6F12",
             },
             raw.Library.Messages.Select(entry => entry.Signature).ToList(),
-            "raw-set 只该有这十条。");
+            "raw-set 只该有这十四条。");
 
         Assert.AreEqual("OnlineData", AutoReplyResolver.FindTarget(raw.Library, 1, 1)?.Name);
         Assert.AreEqual("EstablishCommsAck", AutoReplyResolver.FindTarget(raw.Library, 1, 13)?.Name);
-        Assert.AreEqual("HostCommandAck", AutoReplyResolver.FindTarget(raw.Library, 2, 41)?.Name);
         Assert.AreEqual("AlarmReportAck", AutoReplyResolver.FindTarget(raw.Library, 5, 1)?.Name);
         Assert.AreEqual("EventReportAck", AutoReplyResolver.FindTarget(raw.Library, 6, 11)?.Name);
+        // 同一个 SxFy 有多条时取第一条配了 AutoReply 的，口径在 AutoReplyResolver 里。
+        Assert.AreEqual("HostCommandStartAck", AutoReplyResolver.FindTarget(raw.Library, 2, 41)?.Name);
     }
 
-    /// <summary>raw-set 和 rich-set 的唯一区别就在这儿：变量带着能直接发出去的默认值。</summary>
+    /// <summary>两份库的分工只剩条目多少，默认值都得填好——导入后只改编号，不改结构。</summary>
     [TestMethod]
-    public void TheRawSampleCarriesDefaultValues()
+    public void BothSamplesCarryDefaultValues()
     {
-        var raw = Sample(AppDataPaths.RawSampleFileName);
-
-        AssertValue(raw.Library, 1, 2, "MDLN", "QODERSECS");
-        AssertValue(raw.Library, 1, 2, "SOFTREV", "1.0");
-        AssertValue(raw.Library, 1, 14, "COMMACK", "00");
-        AssertValue(raw.Library, 2, 41, "RCMD", "START");
-        AssertValue(raw.Library, 2, 42, "HCACK", "00");
-        AssertValue(raw.Library, 5, 1, "ALCD", "81");
-        AssertValue(raw.Library, 5, 1, "ALID", "1");
-        AssertValue(raw.Library, 5, 1, "ALTX", "ALARM");
-        AssertValue(raw.Library, 5, 2, "ACK", "00");
-        AssertValue(raw.Library, 6, 11, "DATAID", "0");
-        AssertValue(raw.Library, 6, 11, "CEID", "1");
-        AssertValue(raw.Library, 6, 11, "RPTID", "1");
-        AssertValue(raw.Library, 6, 12, "ACK", "00");
+        foreach (var sample in Samples())
+        {
+            AssertValue(sample.Library, "OnlineData", "MDLN", "QODERSECS");
+            AssertValue(sample.Library, "OnlineData", "SOFTREV", "1.0");
+            AssertValue(sample.Library, "EstablishCommsAck", "COMMACK", "00");
+            AssertValue(sample.Library, "HostCommandStart", "RCMD", "START");
+            AssertValue(sample.Library, "HostCommandStop", "RCMD", "STOP");
+            AssertValue(sample.Library, "HostCommandPPSelect", "RCMD", "PP_SELECT");
+            AssertValue(sample.Library, "HostCommandStartAck", "HCACK", "00");
+            AssertValue(sample.Library, "AlarmReport", "ALCD", "81");
+            AssertValue(sample.Library, "AlarmReport", "ALID", "1");
+            AssertValue(sample.Library, "AlarmReport", "ALTX", "ALARM");
+            AssertValue(sample.Library, "AlarmReportAck", "ACKC5", "00");
+            AssertValue(sample.Library, "EventReport", "DATAID", "0");
+            AssertValue(sample.Library, "EventReport", "CEID", "1");
+            AssertValue(sample.Library, "EventReport", "RPTID", "1");
+            AssertValue(sample.Library, "EventReportAck", "ACKC6", "00");
+        }
     }
 
     private static void AssertValue(
         MessageLibrary library,
-        int stream,
-        int function,
+        string message,
         string name,
         string expected)
     {
-        var entry = library.Messages.Single(message => message.Stream == stream && message.Function == function);
+        var entry = library.Messages.Single(candidate => candidate.Name == message);
         var element = entry.Structure!.Descendants()
             .Single(node => node.Attribute("Name")?.Value == name);
 
         Assert.AreEqual(
             expected,
             element.Element("Value")?.Value,
-            $"{entry.Signature} 的 {name} 默认值不对。");
+            $"{entry.Name} 的 {name} 默认值不对。");
     }
 
     /// <summary>比对排版前先统一两种写法：自闭合的空元素和行尾，理由同 MessageLibraryTests.Normalize。</summary>

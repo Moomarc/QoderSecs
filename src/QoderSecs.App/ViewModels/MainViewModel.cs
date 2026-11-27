@@ -174,6 +174,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _recordsView = new ListCollectionView(Records);
         RecordsView = _recordsView;
         _link.PhaseChanged += OnLinkPhaseChanged;
+        _link.DeviceIdFollowed += OnDeviceIdFollowed;
         _link.Transcript.RecordAdded += OnRecordAdded;
         _link.Transcript.RecordRemoved += OnRecordRemoved;
 
@@ -692,7 +693,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public int DeviceId
     {
         get => _deviceId;
-        set => SetEditorProperty(ref _deviceId, value);
+        set
+        {
+            if (SetEditorProperty(ref _deviceId, value))
+            {
+                        OnPropertyChanged(nameof(DeviceIdFollowNote));
+            }
+        }
     }
 
     public int T1Seconds
@@ -757,8 +764,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>顶栏上一眼能看到当前要连哪儿；详细参数在「连接参数」面板里改。</summary>
     public string ConfigurationSummary => _transport == TransportKind.Secs1
-        ? $"{Role} · SECS-I {SerialPortName} {BaudRate} · Dev {DeviceId} · T3 {T3Seconds}s"
-        : $"{Role} · HSMS {Mode} · {IpAddress}:{Port} · Dev {DeviceId} · T3 {T3Seconds}s";
+        ? $"{Role} · SECS-I {SerialPortName} {BaudRate} · Dev {DeviceIdInUseText} · T3 {T3Seconds}s"
+        : $"{Role} · HSMS {Mode} · {IpAddress}:{Port} · Dev {DeviceIdInUseText} · T3 {T3Seconds}s";
+
+    /// <summary>
+    /// 顶栏摘要报线路上实际在用的 DeviceId。跟随对端后它和参数框里填的那个不一样，
+    /// 摘要必须报实际值，否则界面说的和线上跑的是两回事。
+    /// </summary>
+    private string DeviceIdInUseText => _link.EffectiveDeviceId is { } followed
+        ? $"{followed}(跟随)"
+        : DeviceId.ToString();
+
+    /// <summary>
+    /// 参数框旁边那行说明。框里始终是用户填的值，跟随后的实际值在这里说清楚，
+    /// 两个数都看得到，也不悄悄改持久化配置。没跟随时不占地方。
+    /// </summary>
+    public string DeviceIdFollowNote => _link.EffectiveDeviceId is { } followed
+        ? $"实际在用 {followed}（已跟随对端）。上面填的 {DeviceId} 不变，下次连接仍按它起。"
+        : string.Empty;
+
+    public Visibility DeviceIdFollowNoteVisibility => _link.EffectiveDeviceId is null
+        ? Visibility.Collapsed
+        : Visibility.Visible;
 
     public string StatusMessage
     {
@@ -784,6 +811,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// 只能在 InitializeAsync 之后调，否则会被初始化那条状态盖掉。
     /// </summary>
     public void ShowStartupNotice(string notice) => StatusMessage = notice;
+
+    /// <summary>
+    /// 大值整段替换后的回执。粘贴、拖放、按钮三条路共用这一句，
+    /// 各写一份就会有的报有的不报。
+    /// </summary>
+    public void ShowValueReplaced(string typeLabel, string source, int characterCount) =>
+        StatusMessage = $"已整段替换 {typeLabel} 节点的值（{source}，{characterCount:N0} 个字符）。";
 
     /// <summary>
     /// 关窗口时程序要落盘再断开，这期间整窗是禁用的。
@@ -1088,6 +1122,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnUiThread(() =>
         {
             Phase = phase;
+            RefreshDeviceIdInUse();
 
             // 刚报过错就别盖掉：连接状态胶囊自己会用颜色和文字说清楚现在是什么阶段，
             // 状态栏留着那句失败原因更有用，否则用户只看到一句无关的话，错在哪查不到。
@@ -1108,6 +1143,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _ => StatusMessage
             };
         });
+    }
+
+    private void OnDeviceIdFollowed(object? sender, int deviceId) => OnUiThread(RefreshDeviceIdInUse);
+
+    /// <summary>参数框旁边那行说明和顶栏摘要都读实际值，跟随和断开都要重报一次。</summary>
+    private void RefreshDeviceIdInUse()
+    {
+        OnPropertyChanged(nameof(DeviceIdFollowNote));
+        OnPropertyChanged(nameof(DeviceIdFollowNoteVisibility));
+        OnPropertyChanged(nameof(ConfigurationSummary));
     }
 
     private bool CanSend =>

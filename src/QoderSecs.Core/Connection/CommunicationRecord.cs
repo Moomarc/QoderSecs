@@ -78,6 +78,8 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
             _status = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(StatusText));
+            OnPropertyChanged(nameof(StatusColumnText));
+            OnPropertyChanged(nameof(RowTooltip));
         }
     }
 
@@ -130,11 +132,20 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
         RecordStatus.OrphanSecondary => "无人等待的回复",
         RecordStatus.LinkClosed => "连接已断开",
         RecordStatus.WaitAbandoned => "已取消等待",
+        RecordStatus.ReplyDiscarded => "回复被丢弃",
         _ => _status.ToString()
     };
 
     /// <summary>只给格子里填数字，单位在表头「耗时(ms)」上，列宽才收得下来。</summary>
     public string ElapsedText => ElapsedMilliseconds is { } ms ? ms.ToString() : string.Empty;
+
+    /// <summary>状态列只留有信息量的那几种：方向箭头和耗时已经说完的四种留空，全词仍在行提示里。</summary>
+    public string StatusColumnText => _status switch
+    {
+        RecordStatus.Sent or RecordStatus.Received
+            or RecordStatus.PairedSecondary or RecordStatus.SecondaryReceived => string.Empty,
+        _ => StatusText
+    };
 
     public string Signature => Header.Signature;
 
@@ -145,11 +156,17 @@ public sealed class CommunicationRecord : INotifyPropertyChanged
 
     public string DirectionText => Direction == SecsDirection.Out ? "发出" : "收到";
 
+    /// <summary>方向列的箭头：右＝发出，左＝收到。文字留给日志和行提示。</summary>
+    public string DirectionGlyph => Direction == SecsDirection.Out ? "→" : "←";
+
     public string SystemBytesText => SystemBytes.ToString("X8");
 
     /// <summary>行提示的完整文本。SystemBytes 不再占列，但值还得能查到；
     /// 不在 XAML 里用 StringFormat 拼，那个写法在标记扩展里会被吞掉只剩裸值。</summary>
     public string SystemBytesTooltip => $"SystemBytes {SystemBytesText}";
+
+    /// <summary>状态列留空的那几种，全词只能在这里看到。</summary>
+    public string RowTooltip => $"{SystemBytesTooltip}  {StatusText}";
 
     public string TimeText => Timestamp.ToLocalTime().ToString("HH:mm:ss.fff");
 

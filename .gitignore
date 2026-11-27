@@ -485,3 +485,9 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# QoderSecs local notes
+交接.md
+
+# Local request archives
+QoderSECS修改建议.zip

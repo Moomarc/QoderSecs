@@ -179,7 +179,62 @@ public sealed class TranscriptCorrelatorTests
 
         CollectionAssert.Contains(changes, nameof(CommunicationRecord.Status));
         CollectionAssert.Contains(changes, nameof(CommunicationRecord.StatusText));
+        CollectionAssert.Contains(changes, nameof(CommunicationRecord.StatusColumnText));
         CollectionAssert.Contains(changes, nameof(CommunicationRecord.ElapsedText));
+    }
+
+    /// <summary>
+    /// 方向改箭头后，「已发送／已收到／配对回复」在列里是冗余的，留空；
+    /// 有信息量的那几种照旧显示，留空的全词必须还能在行提示里查到。
+    /// </summary>
+    [TestMethod]
+    public void OnlyInformativeStatusesOccupyTheColumnAndTheRestStayInTheRowTooltip()
+    {
+        var correlator = new TranscriptCorrelator();
+        var sent = correlator.RecordOutbound(Header(2, 41, false), 0x30, "S2F41", T0);
+        var received = correlator.RecordInbound(Header(6, 11, false), 0x31, "S6F11", T0);
+        var request = correlator.RecordOutbound(Header(1, 1, true), 0x32, "S1F1", T0);
+        var waiting = correlator.RecordInbound(Header(1, 1, true), 0x33, "S1F1", T0);
+        var orphan = correlator.RecordInbound(Header(1, 2, false), 0x34, "S1F2", T0);
+
+        Assert.AreEqual(string.Empty, sent.StatusColumnText);
+        Assert.AreEqual(string.Empty, received.StatusColumnText);
+        Assert.AreEqual("等待回复", request.StatusColumnText);
+        Assert.AreEqual("待本端回复", waiting.StatusColumnText);
+        Assert.AreEqual("无人等待的回复", orphan.StatusColumnText);
+
+        correlator.RecordInbound(Header(1, 2, false), 0x32, "S1F2", T0.AddMilliseconds(8));
+
+        Assert.AreEqual(string.Empty, request.StatusColumnText);
+        Assert.AreEqual("收到回复", request.StatusText);
+        StringAssert.Contains(request.RowTooltip, "收到回复");
+        StringAssert.Contains(request.RowTooltip, "SystemBytes 00000032");
+        Assert.AreEqual("→", sent.DirectionGlyph);
+        Assert.AreEqual("←", received.DirectionGlyph);
+    }
+
+    /// <summary>
+    /// 回复被协议层丢弃时，配对已经发生过、待等表里没这条了，所以改的是那条发出记录本身。
+    /// 列里要看得见「回复被丢弃」，不能停在留空的「收到回复」。
+    /// </summary>
+    [TestMethod]
+    public void DiscardedReplyOverwritesThePairedStatusOnTheOutboundRecord()
+    {
+        var correlator = new TranscriptCorrelator();
+        var request = correlator.RecordOutbound(Header(1, 1, true), 0x40, "S1F1", T0);
+        correlator.RecordInbound(Header(1, 2, false), 0x40, "S1F2", T0.AddMilliseconds(12));
+        Assert.AreEqual(RecordStatus.SecondaryReceived, request.Status);
+
+        correlator.MarkReplyDiscarded(0x40);
+
+        Assert.AreEqual(RecordStatus.ReplyDiscarded, request.Status);
+        Assert.AreEqual("回复被丢弃", request.StatusColumnText);
+        StringAssert.Contains(request.RowTooltip, "回复被丢弃");
+
+        // 别的记录不受影响，SystemBytes 对不上时什么都不改。
+        var other = correlator.RecordOutbound(Header(1, 1, true), 0x41, "S1F1", T0);
+        correlator.MarkReplyDiscarded(0x99);
+        Assert.AreEqual(RecordStatus.AwaitingSecondary, other.Status);
     }
 
     [TestMethod]
